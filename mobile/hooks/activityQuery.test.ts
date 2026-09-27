@@ -42,3 +42,33 @@ Deno.test("prefetched activity mounts and loads older pages alongside legacy cac
     client.clear();
   }
 });
+
+Deno.test("activity infinite query keeps paging while has_more is true", async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+  const page = (offset: number, hasMore: boolean): ActivityFeedResponse => ({
+    activities: Array.from({ length: 50 }, (_, i) => ({
+      id: String(offset + i),
+    } as ActivityItem)),
+    total: 150,
+    has_more: hasMore,
+  });
+  const offsets: number[] = [];
+  const options = activityQueryOptions("group-uncapped", async (_groupId, offset) => {
+    offsets.push(offset);
+    return page(offset, offset < 100);
+  });
+
+  try {
+    await client.prefetchInfiniteQuery(options);
+    const observer = new InfiniteQueryObserver(client, options);
+    while (observer.getCurrentResult().hasNextPage) {
+      await observer.fetchNextPage();
+    }
+    const pages = observer.getCurrentResult().data?.pages ?? [];
+    assert(pages.length === 3, `expected 3 pages, got ${pages.length}`);
+    assert(JSON.stringify(offsets) === "[0,50,100]", "should page through the full history");
+    observer.destroy();
+  } finally {
+    client.clear();
+  }
+});

@@ -6,6 +6,7 @@ import { supabase } from "../supabase";
 import { queryKeys } from "./queryKeys";
 import type { TransactionsPageResponse } from "./useTransactions";
 import { log } from "../utils/logger";
+import { recordSentryRealtimeChannel } from "../utils/sentryTelemetry";
 
 interface UseRealtimeGroupSyncOptions {
   enabled?: boolean;
@@ -93,6 +94,7 @@ export function useRealtimeGroupSync(
     };
 
     const channelName = `group-sync:${groupId}`;
+    recordSentryRealtimeChannel("subscribe", groupId);
     const channel = supabase
       .channel(channelName, {
         config: {
@@ -192,6 +194,7 @@ export function useRealtimeGroupSync(
         clearTimeout(debounceTimerRef.current);
       }
       appStateSub.remove();
+      recordSentryRealtimeChannel("unsubscribe", groupId);
       void supabase.removeChannel(channel);
     };
   }, [groupId, enabled, queryClient]);
