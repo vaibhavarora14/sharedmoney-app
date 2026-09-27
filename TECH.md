@@ -223,9 +223,14 @@ Canonical product event names for project `563625` (see
 | --- | --- |
 | `auth_succeeded` | Signed-in identity established (`$identify` just before) |
 | `group_created` | User creates a group |
-| `group_joined` | User joins via invite / share link |
+| `group_joined` | User joins via invite link redeem (`join_method=invite_link`) or email invite accepted at signup (`join_method=email_invite`) |
 | `expense_created` | User creates an expense (**not** `expense_added`) |
 | `settlement_recorded` | User records a settlement |
+| `invite_link_created` | Shareable group invite link is minted |
+| `invite_link_shared` | User shares/copies the invite link |
+| `member_invited` | Email invite sent via participants invite API (no raw invitee email in props) |
+
+Activation sequence: `auth_succeeded` → (`group_created` OR `group_joined`) → `expense_created` → `settlement_recorded`. Do not invent `signup_completed`.
 
 Activation captures run only after the PostHog distinct_id matches the Supabase
 auth user id. Local seed/E2E auth users (`supabase/seed.sql`) never identify

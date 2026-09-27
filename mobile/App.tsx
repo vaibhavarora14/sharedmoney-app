@@ -55,7 +55,11 @@ import {
 import { fetchActivityPage } from "./hooks/useActivity";
 import { activityQueryOptions } from "./hooks/activityQuery";
 import { fetchBalances } from "./hooks/useBalances";
-import { redeemGroupInviteLinkRPC } from "./hooks/useGroupInvitations";
+import {
+  fetchInvitationsForEmail,
+  redeemGroupInviteLinkRPC,
+} from "./hooks/useGroupInvitations";
+import { supabase } from "./supabase";
 import {
   useAddMember,
   useCreateGroup,
@@ -119,6 +123,11 @@ import {
 } from "./utils/notificationGroupNavigation";
 import { resolveNotificationRoute } from "./utils/notificationRouting";
 import {
+  buildGroupJoinedProperties,
+  selectRecentEmailInviteJoins,
+  shouldCaptureGroupJoinedFromRedeem,
+} from "./utils/groupJoinedAnalytics";
+import {
   captureIdentifiedAnalyticsEvent,
   captureScreenView,
   initializePostHog,
@@ -151,6 +160,7 @@ function captureSentrySourceMapDiagnostic(): void {
 }
 
 const PENDING_INVITE_TOKEN_KEY = "pending_invite_token";
+const REPORTED_EMAIL_INVITE_JOINS_KEY = "reported_email_invite_group_joins";
 const PENDING_GROUP_DEEP_LINK_KEY = "pending_group_deep_link";
 
 if (Platform.OS === "web") {
@@ -248,6 +258,23 @@ function AppContent() {
   const redeemingTokenRef = React.useRef<string | null>(null);
   const openingGroupDeepLinkRef = React.useRef<string | null>(null);
   const openingNotificationGroupRef = React.useRef(false);
+  const emailInviteJoinsReportedForUserRef = React.useRef<string | null>(null);
+  /** Always-current auth user id for async redeem / invite analytics (avoids stale closure). */
+  const authUserIdRef = React.useRef<string | null>(session?.user?.id ?? user?.id ?? null);
+  authUserIdRef.current = session?.user?.id ?? user?.id ?? null;
+
+  const resolveAnalyticsUserId = React.useCallback(async (): Promise<string | null> => {
+    if (authUserIdRef.current) return authUserIdRef.current;
+    try {
+      const { data } = await supabase.auth.getSession();
+      const id = data.session?.user?.id ?? null;
+      if (id) authUserIdRef.current = id;
+      return id;
+    } catch {
+      return null;
+    }
+  }, []);
+
   const prefetchGroupData = React.useCallback(
     async (groupId: string) => {
       await Promise.all([
@@ -315,16 +342,20 @@ function AppContent() {
           type: "error",
           message: "This invite link has expired. Ask for a new one.",
         });
-      } else if (result.status === "joined") {
+      } else if (shouldCaptureGroupJoinedFromRedeem(result.status)) {
         // Activation: join path users never fire group_created; emit group_joined
         // so funnels can attribute invite/share entry separately from create.
+        // Resolve auth id at capture time (ref + session fallback) — do not rely
+        // on a possibly-stale `user?.id` closure; captureIdentifiedAnalyticsEvent
+        // silently no-ops when userId is null.
+        const analyticsUserId = await resolveAnalyticsUserId();
         captureIdentifiedAnalyticsEvent(
-          user?.id,
+          analyticsUserId,
           ANALYTICS_EVENTS.GROUP_JOINED,
-          {
-            group_id: result.group_id,
-            join_method: "invite_link",
-          },
+          buildGroupJoinedProperties({
+            groupId: result.group_id,
+            joinMethod: "invite_link",
+          }),
         );
       }
       // 'already_member' stays quiet: the group is already in their list.
@@ -338,7 +369,7 @@ function AppContent() {
       await AsyncStorage.removeItem(PENDING_INVITE_TOKEN_KEY).catch(() => {});
       clearJoinPathFromWebUrl();
     }
-  }, [user?.id]);
+  }, [resolveAnalyticsUserId]);
 
   const openGroupDeepLink = React.useCallback(async (
     groupId: string,
@@ -647,6 +678,86 @@ function AppContent() {
       cancelled = true;
     };
   }, [session?.user?.id, hasAcceptedCurrentTerms, redeemInviteToken]);
+
+  // Email invites are accepted server-side in handle_new_user() with no client
+  // callback. After auth, attribute recent accepted email invitations once.
+  useEffect(() => {
+    const userId = session?.user?.id;
+    const userEmail = session?.user?.email ?? user?.email;
+    if (!userId || !userEmail || !hasAcceptedCurrentTerms) return;
+    if (emailInviteJoinsReportedForUserRef.current === userId) return;
+
+    let cancelled = false;
+    emailInviteJoinsReportedForUserRef.current = userId;
+
+    (async () => {
+      try {
+        const [invitations, reportedRaw] = await Promise.all([
+          fetchInvitationsForEmail(userEmail),
+          AsyncStorage.getItem(REPORTED_EMAIL_INVITE_JOINS_KEY).catch(() => null),
+        ]);
+        if (cancelled) return;
+
+        let reportedIds = new Set<string>();
+        if (reportedRaw) {
+          try {
+            const parsed = JSON.parse(reportedRaw) as unknown;
+            if (Array.isArray(parsed)) {
+              reportedIds = new Set(
+                parsed.filter((id): id is string => typeof id === "string"),
+              );
+            }
+          } catch {
+            reportedIds = new Set();
+          }
+        }
+
+        const joins = selectRecentEmailInviteJoins(invitations, {
+          userEmail,
+          alreadyReportedIds: reportedIds,
+        });
+        if (joins.length === 0) return;
+
+        const analyticsUserId = await resolveAnalyticsUserId();
+        if (cancelled || !analyticsUserId) return;
+
+        for (const invitation of joins) {
+          captureIdentifiedAnalyticsEvent(
+            analyticsUserId,
+            ANALYTICS_EVENTS.GROUP_JOINED,
+            buildGroupJoinedProperties({
+              groupId: invitation.group_id,
+              joinMethod: "email_invite",
+            }),
+          );
+          reportedIds.add(invitation.id);
+        }
+
+        // Cap stored ids so the key cannot grow without bound across years.
+        const trimmed = Array.from(reportedIds).slice(-100);
+        await AsyncStorage.setItem(
+          REPORTED_EMAIL_INVITE_JOINS_KEY,
+          JSON.stringify(trimmed),
+        ).catch(() => {});
+      } catch (err) {
+        // Allow a retry on the next mount if this pass failed.
+        if (emailInviteJoinsReportedForUserRef.current === userId) {
+          emailInviteJoinsReportedForUserRef.current = null;
+        }
+        logError(err, { context: "email invite group_joined attribution" });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    session?.user?.id,
+    session?.user?.email,
+    user?.email,
+    hasAcceptedCurrentTerms,
+    resolveAnalyticsUserId,
+  ]);
 
   // After authentication and onboarding, open any saved group deep link.
   useEffect(() => {
