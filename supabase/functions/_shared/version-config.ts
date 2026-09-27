@@ -12,7 +12,7 @@ export const VERSION_CONFIG = {
   MIN_SUPPORTED_VERSION: "2.5.0",
 
   // Current latest version (informational)
-  LATEST_VERSION: "2.31.1",
+  LATEST_VERSION: "2.31.0",
 
   // Message shown to users who need to update
   UPDATE_MESSAGE: "Please update your app to continue using SharedMoney.",
