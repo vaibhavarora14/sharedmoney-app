@@ -33,6 +33,8 @@ import {
   existingPersonLabel,
   filterAndSortExistingPeople,
 } from "../utils/peoplePicker";
+import { captureIdentifiedAnalyticsEvent } from "../utils/posthogAnalytics";
+import { ANALYTICS_EVENTS } from "../utils/posthogEvents";
 
 interface AddMemberScreenProps {
   visible: boolean;
@@ -66,7 +68,7 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const screenHeight = Dimensions.get("window").height;
-  const { signOut } = useAuth();
+  const { signOut, user } = useAuth();
   const createShareLink = useCreateGroupShareLink();
   const useNativeDriver = Platform.OS !== "web";
   const { data: existingPeople, isLoading: existingPeopleLoading } =
@@ -107,6 +109,16 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
     });
     const url = getInviteLinkUrl(token);
     setInviteLink(url);
+    captureIdentifiedAnalyticsEvent(
+      user?.id,
+      ANALYTICS_EVENTS.INVITE_LINK_CREATED,
+      {
+        group_id: groupId,
+        invite_type: "share_link",
+        max_uses: LINK_MAX_USES,
+        valid_days: LINK_VALID_DAYS,
+      },
+    );
     return url;
   };
 
@@ -114,6 +126,7 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
     setLoading(true);
     try {
       const url = await generateInviteLink();
+      let shared = false;
       if (Platform.OS === "web") {
         if (typeof navigator !== "undefined" && navigator.share) {
           await navigator.share({
@@ -121,18 +134,32 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
             text: `Join my group on SharedMoney! ${url}`,
             url,
           });
+          shared = true;
         } else if (typeof navigator !== "undefined" && navigator.clipboard) {
           await navigator.clipboard.writeText(url);
           Alert.alert(
             "Invite link copied",
             "Share it with the people you want to invite.",
           );
+          shared = true;
         }
       } else {
         await Share.share({
           message: `Join my group on SharedMoney! ${url}`,
           url,
         });
+        shared = true;
+      }
+      if (shared) {
+        captureIdentifiedAnalyticsEvent(
+          user?.id,
+          ANALYTICS_EVENTS.INVITE_LINK_SHARED,
+          {
+            group_id: groupId,
+            invite_type: "share_link",
+            share_channel: Platform.OS === "web" ? "web" : Platform.OS,
+          },
+        );
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "";

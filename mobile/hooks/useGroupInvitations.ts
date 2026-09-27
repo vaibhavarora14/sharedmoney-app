@@ -3,6 +3,10 @@ import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../supabase";
 import { GroupInvitation } from "../types";
 import { fetchWithAuth } from "../utils/api";
+import {
+  normalizeRedeemInviteLinkResult,
+  type RedeemInviteLinkResult,
+} from "../utils/groupJoinedAnalytics";
 import { queryKeys } from "./queryKeys";
 
 export interface CreateShareLinkOptions {
@@ -35,12 +39,7 @@ export async function createGroupShareLinkRPC({
 // Note: the anon-safe `get_group_invite_preview` RPC still exists server-side
 // (harmless, usable by tooling); the app no longer shows a preview screen.
 
-export interface RedeemInviteLinkResult {
-  status: "joined" | "already_member" | "expired";
-  group_id: string;
-  group_name: string | null;
-  remaining_uses?: number;
-}
+export type { RedeemInviteLinkResult };
 
 /**
  * Atomically redeems a single-use invite link for the signed-in user.
@@ -53,7 +52,23 @@ export async function redeemGroupInviteLinkRPC(
     p_token: token,
   });
   if (error) throw error;
-  return data as RedeemInviteLinkResult;
+  return normalizeRedeemInviteLinkResult(data);
+}
+
+/**
+ * List invitations addressed to the signed-in user's email (all statuses).
+ * Used to attribute email-invite joins that were accepted server-side at signup.
+ */
+export async function fetchInvitationsForEmail(
+  email: string,
+): Promise<GroupInvitation[]> {
+  const response = await fetchWithAuth(
+    `/invitations?email=${encodeURIComponent(email.trim().toLowerCase())}`,
+  );
+  if (!response.ok) {
+    throw new Error(`Failed to fetch invitations: ${response.status}`);
+  }
+  return response.json();
 }
 
 export function useCreateGroupShareLink() {

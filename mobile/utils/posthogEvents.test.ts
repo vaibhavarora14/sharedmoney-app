@@ -9,6 +9,12 @@ Deno.test("activation funnel event names stay stable for project 563625", () => 
   assertEquals(ANALYTICS_EVENTS.SETTLEMENT_RECORDED, "settlement_recorded");
 });
 
+Deno.test("invite growth loop event names stay stable", () => {
+  assertEquals(ANALYTICS_EVENTS.INVITE_LINK_CREATED, "invite_link_created");
+  assertEquals(ANALYTICS_EVENTS.INVITE_LINK_SHARED, "invite_link_shared");
+  assertEquals(ANALYTICS_EVENTS.MEMBER_INVITED, "member_invited");
+});
+
 Deno.test("expense event is expense_created, not expense_added", () => {
   assertEquals(ANALYTICS_EVENTS.EXPENSE_CREATED.includes("added"), false);
   assertEquals(ANALYTICS_EVENTS.EXPENSE_CREATED, "expense_created");

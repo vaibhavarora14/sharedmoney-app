@@ -4,6 +4,8 @@ import { useAuth } from "../contexts/AuthContext";
 import { Participant } from "../types";
 import { fetchWithAuth } from "../utils/api";
 import { ExistingPerson } from "../utils/peoplePicker";
+import { captureIdentifiedAnalyticsEvent } from "../utils/posthogAnalytics";
+import { ANALYTICS_EVENTS } from "../utils/posthogEvents";
 import { queryKeys } from "./queryKeys";
 
 export async function fetchParticipants(
@@ -87,6 +89,7 @@ function invalidateParticipantAdjacents(
 
 export function useInviteParticipant(onSuccess?: () => void) {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   const mutation = useMutation({
     mutationFn: async (
@@ -111,10 +114,25 @@ export function useInviteParticipant(onSuccess?: () => void) {
         throw new Error(errorData.error || "Failed to invite person");
       }
 
-      return response.json();
+      return response.json() as Promise<{
+        invitation?: boolean;
+        invitation_id?: string | null;
+        message?: string;
+      }>;
     },
-    onSuccess: (_data, variables) => {
+    onSuccess: (data, variables) => {
       invalidateParticipantAdjacents(queryClient, variables.groupId);
+      // Inviter-side growth event; never attach raw invitee email (person identify has it).
+      if (data?.invitation_id) {
+        captureIdentifiedAnalyticsEvent(
+          user?.id,
+          ANALYTICS_EVENTS.MEMBER_INVITED,
+          {
+            group_id: variables.groupId,
+            invite_type: "email_invite",
+          },
+        );
+      }
       onSuccess?.();
     },
   });
