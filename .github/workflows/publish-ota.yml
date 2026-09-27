@@ -94,6 +94,8 @@ jobs:
           EXPO_PUBLIC_APP_URL: ${{ secrets.EXPO_PUBLIC_APP_URL }}
           EXPO_PUBLIC_DEFAULT_CURRENCY: ${{ secrets.EXPO_PUBLIC_DEFAULT_CURRENCY }}
           EXPO_PUBLIC_SENTRY_DSN: ${{ secrets.EXPO_PUBLIC_SENTRY_DSN }}
+          SENTRY_ORG: jobappagent
+          SENTRY_PROJECT: react-native
           OTA_CHANNEL: ${{ github.event.inputs.channel }}
           OTA_MESSAGE: ${{ github.event.inputs.message }}
         run: |
