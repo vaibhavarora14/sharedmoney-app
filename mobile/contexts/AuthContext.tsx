@@ -11,6 +11,7 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { Platform } from "react-native";
@@ -19,6 +20,10 @@ import { unregisterCurrentPushToken } from "../services/pushNotifications";
 import { supabase } from "../supabase";
 import { getConfiguredWebAppPath } from "../utils/inviteLinks";
 import { log, logError } from "../utils/logger";
+import {
+  recordSentryAuthSessionTransition,
+} from "../utils/sentryTelemetry";
+import { resolveAuthSessionTransition } from "../utils/sentryTriagePolicy";
 import { performLocalLogout } from "../utils/logoutFlow";
 import { syncAnalyticsAuth } from "../utils/posthogAnalytics";
 import { resolveAuthDisplayName } from "../utils/posthogIdentity";
@@ -267,10 +272,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const previousAuthUserIdRef = useRef<string | null | undefined>(undefined);
 
   // Helper to update auth state and sync with Sentry
   // Wrapped in useCallback to maintain stable reference for useEffect dependency
   const updateAuthState = useCallback((nextSession: Session | null) => {
+    const previousUserId = previousAuthUserIdRef.current;
+    const nextUserId = nextSession?.user?.id ?? null;
+    // Skip the very first undefined→value bootstrap crumb flood; still tag later transitions.
+    if (previousUserId !== undefined) {
+      const transition = resolveAuthSessionTransition(previousUserId, nextUserId);
+      if (transition) {
+        recordSentryAuthSessionTransition(transition);
+      }
+    }
+    previousAuthUserIdRef.current = nextUserId;
+
     setSession(nextSession);
     setUser(nextSession?.user ?? null);
     setLoading(false);

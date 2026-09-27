@@ -128,6 +128,12 @@ import {
   getSentryRuntimeTags,
   isSentryDiagnosticUrl,
 } from "./utils/sentryDiagnostics";
+import {
+  applySentryDeviceTriageContext,
+  setSentryAppStateTag,
+  setSentryRouteTag,
+} from "./utils/sentryTelemetry";
+import { resolveSentryReplaySampleRates } from "./utils/sentryTriagePolicy";
 
 const SENTRY_DIAGNOSTICS_ENABLED =
   process.env.EXPO_PUBLIC_ENABLE_SENTRY_DIAGNOSTICS === "true";
@@ -681,7 +687,20 @@ function AppContent() {
 
     // Use debug level so these show up as low-priority breadcrumbs.
     log("[AppContent] State", JSON.parse(snapshot), "debug");
+    setSentryRouteTag(currentRoute);
   }, [currentRoute, session, loading, profileLoading, profile]);
+
+  // Persist AppState transitions for next-launch WatchdogTermination triage.
+  useEffect(() => {
+    setSentryAppStateTag(AppState.currentState);
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      setSentryAppStateTag(nextState);
+      if (nextState === "active") {
+        applySentryDeviceTriageContext();
+      }
+    });
+    return () => subscription.remove();
+  }, []);
 
   // Detect if auth is stuck in loading state for 15+ seconds
   useEffect(() => {
@@ -1379,6 +1398,11 @@ if (!process.env.EXPO_PUBLIC_SENTRY_DSN) {
     );
   }
 } else {
+  const replayRates = resolveSentryReplaySampleRates({
+    platform: Platform.OS,
+    env: process.env as Record<string, string | undefined>,
+  });
+
   Sentry.init({
     dsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
 
@@ -1391,6 +1415,9 @@ if (!process.env.EXPO_PUBLIC_SENTRY_DSN) {
     enableAutoSessionTracking: true,
     enableNative: true,
     enableNativeCrashHandling: true,
+    // Explicit: Cocoa persists breadcrumbs for next-launch watchdog reports.
+    // Volatile free-memory native contexts are still omitted by the SDK by design.
+    enableWatchdogTerminationTracking: true,
 
     // Performance
     tracesSampleRate: Number(
@@ -1405,14 +1432,10 @@ if (!process.env.EXPO_PUBLIC_SENTRY_DSN) {
       }) as any,
     ],
 
-    // Session Replay
-    // Capture a portion of sessions and 100% of sessions with an error.
-    replaysSessionSampleRate: Number(
-      process.env.EXPO_PUBLIC_SENTRY_REPLAYS_SESSION_SAMPLE_RATE ?? "0.1"
-    ),
-    replaysOnErrorSampleRate: Number(
-      process.env.EXPO_PUBLIC_SENTRY_REPLAYS_ON_ERROR_SAMPLE_RATE ?? "1.0"
-    ),
+    // Session Replay — keep 100% of error sessions; lower always-on sampling
+    // (especially iOS) to reduce RAM / quota pressure vs the prior 10% default.
+    replaysSessionSampleRate: replayRates.replaysSessionSampleRate,
+    replaysOnErrorSampleRate: replayRates.replaysOnErrorSampleRate,
   });
 
   const buildNumber =
@@ -1429,6 +1452,9 @@ if (!process.env.EXPO_PUBLIC_SENTRY_DSN) {
       platform: Platform.OS,
     }),
   );
+
+  applySentryDeviceTriageContext();
+  setSentryAppStateTag(AppState.currentState);
 }
 
 // Initialize PostHog once at startup. Guard against a missing project key so

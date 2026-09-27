@@ -89,6 +89,7 @@ import {
   REMOVE_FROM_LISTS_CONFIRM_MESSAGE,
   buildLeaveGroupConfirmMessage,
 } from "../utils/leaveBalanceCopy";
+import { recordSentryListCounts } from "../utils/sentryTelemetry";
 import { GroupStatsMode } from "./GroupStatsScreen";
 import { SettlementFormScreen } from "./SettlementFormScreen";
 
@@ -479,6 +480,27 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     () => buildTransactionsLedger(transactions, settlements, transactionsFilter),
     [transactions, settlements, transactionsFilter],
   );
+
+  useEffect(() => {
+    if (listMode !== "transactions" || txLoading) return;
+    recordSentryListCounts("ledger", {
+      itemCount: ledgerItems.length,
+      hasNextPage: Boolean(txHasNextPage),
+    });
+  }, [listMode, txLoading, ledgerItems.length, txHasNextPage]);
+
+  useEffect(() => {
+    if (listMode !== "activity" || activityLoading) return;
+    recordSentryListCounts("activity", {
+      itemCount: activityData?.activities?.length ?? 0,
+      hasNextPage: Boolean(activityHasNextPage),
+    });
+  }, [
+    listMode,
+    activityLoading,
+    activityData?.activities?.length,
+    activityHasNextPage,
+  ]);
 
   useEffect(() => {
     if (!highlightedTransactionId || listMode !== "transactions") return;

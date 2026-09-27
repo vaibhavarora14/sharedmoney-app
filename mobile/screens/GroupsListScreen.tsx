@@ -35,6 +35,7 @@ import { shouldShowNotificationPrimer } from "../utils/notificationPermission";
 import { logError } from "../utils/logger";
 import { getSeenGroupIds, markGroupSeen } from "../utils/seenGroups";
 import { partitionGroupsBySection } from "../utils/groupListSections";
+import { recordSentryListCounts } from "../utils/sentryTelemetry";
 import { CreateGroupScreen } from "./CreateGroupScreen";
 
 interface GroupsListScreenProps {
@@ -141,6 +142,13 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
     activeGroups.length > 0 ||
     archivedGroups.length > 0 ||
     formerGroups.length > 0;
+
+  useEffect(() => {
+    if (loading) return;
+    recordSentryListCounts("groups", {
+      itemCount: groups.length,
+    });
+  }, [loading, groups.length]);
 
   // Helper function to render a group item
   const renderGroupItem = (group: Group) => {

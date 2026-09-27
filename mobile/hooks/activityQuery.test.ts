@@ -2,6 +2,7 @@ import { InfiniteQueryObserver, QueryClient } from "@tanstack/react-query";
 import type { ActivityFeedResponse, ActivityItem } from "../types.ts";
 import { activityQueryOptions } from "./activityQuery.ts";
 import { queryKeys } from "./queryKeys.ts";
+import { ACTIVITY_MAX_PAGES } from "../utils/sentryTriagePolicy.ts";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -37,6 +38,36 @@ Deno.test("prefetched activity mounts and loads older pages alongside legacy cac
     assert(JSON.stringify(offsets) === "[0,50]", "prefetch should be reused and next offset should be 50");
     await client.invalidateQueries({ queryKey: queryKeys.activity("group-a") });
     assert(client.getQueryState(options.queryKey)?.isInvalidated, "group invalidation missed infinite feed");
+    observer.destroy();
+  } finally {
+    client.clear();
+  }
+});
+
+Deno.test("activity infinite query stops at the soft page cap", async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+  const page = (offset: number): ActivityFeedResponse => ({
+    activities: Array.from({ length: 50 }, (_, i) => ({
+      id: String(offset + i),
+    } as ActivityItem)),
+    total: 10_000,
+    has_more: true,
+  });
+  const offsets: number[] = [];
+  const options = activityQueryOptions("group-cap", async (_groupId, offset) => {
+    offsets.push(offset);
+    return page(offset);
+  });
+
+  try {
+    await client.prefetchInfiniteQuery(options);
+    const observer = new InfiniteQueryObserver(client, options);
+    while (observer.getCurrentResult().hasNextPage) {
+      await observer.fetchNextPage();
+    }
+    const pages = observer.getCurrentResult().data?.pages ?? [];
+    assert(pages.length === ACTIVITY_MAX_PAGES, `expected ${ACTIVITY_MAX_PAGES} pages, got ${pages.length}`);
+    assert(offsets.length === ACTIVITY_MAX_PAGES, "should not request beyond the soft cap");
     observer.destroy();
   } finally {
     client.clear();

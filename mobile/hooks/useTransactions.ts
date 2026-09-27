@@ -20,6 +20,10 @@ import {
   replaceOptimisticTransactionInFeed,
   resolveCreatedTransaction,
 } from "../utils/transactionOptimisticCache";
+import {
+  TRANSACTIONS_MAX_PAGES,
+  nextPageParamWithinCap,
+} from "../utils/sentryTriagePolicy";
 import { queryKeys } from "./queryKeys";
 
 export interface TransactionsCursor {
@@ -220,9 +224,12 @@ export function useTransactions(groupId?: string | null) {
     queryFn: ({ pageParam }: { pageParam: TransactionsCursor | null }) =>
       fetchTransactionsPage({ groupId, cursor: pageParam }),
     initialPageParam: null as TransactionsCursor | null,
-    getNextPageParam: (lastPage) => (
-      lastPage?.has_more && lastPage?.next_cursor ? lastPage.next_cursor : null
-    ),
+    getNextPageParam: (lastPage, allPages) =>
+      nextPageParamWithinCap(
+        lastPage?.has_more && lastPage?.next_cursor ? lastPage.next_cursor : null,
+        allPages.length,
+        TRANSACTIONS_MAX_PAGES,
+      ),
     enabled: !!user?.id && (!!groupId || groupId === null || groupId === undefined),
     staleTime: 30_000,
   });
