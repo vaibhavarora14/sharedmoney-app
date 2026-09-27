@@ -4,6 +4,8 @@ import {
   Alert,
   BackHandler,
   FlatList,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   Platform,
   RefreshControl,
   ScrollView,
@@ -106,6 +108,15 @@ import {
   buildLeaveGroupConfirmMessage,
 } from "../utils/leaveBalanceCopy";
 import { recordSentryListCounts } from "../utils/sentryTelemetry";
+import {
+  estimateActivityPageCount,
+  estimateTransactionsPageCount,
+} from "../utils/groupListPerf";
+import {
+  GroupListScrollPerfMonitor,
+  recordGroupListScrollTelemetry,
+  withGroupListFetchNextPageTelemetry,
+} from "../utils/groupListPerfTelemetry";
 import { GroupStatsMode } from "./GroupStatsScreen";
 import { SettlementFormScreen } from "./SettlementFormScreen";
 
@@ -177,6 +188,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const [safetyAction, setSafetyAction] = useState<SafetyAction | null>(null);
   const [safetyTarget, setSafetyTarget] = useState<SafetyTarget | null>(null);
   const mainListRef = React.useRef<FlatList<GroupDetailsListRow>>(null);
+  const scrollPerfRef = React.useRef(new GroupListScrollPerfMonitor());
   const [listRefreshing, setListRefreshing] = useState(false);
   const [visibleHighlightedTransactionId, setVisibleHighlightedTransactionId] = useState<number | null>(
     highlightedTransactionId,
@@ -614,8 +626,57 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
 
   const handleLoadMoreTransactions = React.useCallback(() => {
     if (!txHasNextPage || txIsFetchingNextPage) return;
-    void fetchNextTransactionsPage();
-  }, [txHasNextPage, txIsFetchingNextPage, fetchNextTransactionsPage]);
+    void withGroupListFetchNextPageTelemetry({
+      userId: session?.user?.id,
+      tab: "transactions",
+      itemCountBefore: transactions.length,
+      pageCountBefore: estimateTransactionsPageCount(transactions.length),
+      fetch: () => fetchNextTransactionsPage(),
+      resolveCounts: (result) => {
+        const pages = result.data?.pages ?? [];
+        const itemCount = pages.reduce(
+          (sum, page) =>
+            sum + (Array.isArray(page?.items) ? page.items.length : 0),
+          0,
+        );
+        return { itemCount, pageCount: pages.length };
+      },
+    });
+  }, [
+    txHasNextPage,
+    txIsFetchingNextPage,
+    fetchNextTransactionsPage,
+    session?.user?.id,
+    transactions.length,
+  ]);
+
+  const handleLoadMoreActivity = React.useCallback(() => {
+    if (!activityHasNextPage || activityFetchingNextPage) return;
+    void withGroupListFetchNextPageTelemetry({
+      userId: session?.user?.id,
+      tab: "activity",
+      itemCountBefore: activityData?.activities?.length ?? 0,
+      pageCountBefore: estimateActivityPageCount(
+        activityData?.activities?.length ?? 0,
+      ),
+      fetch: () => fetchNextActivityPage(),
+      resolveCounts: (result) => {
+        const pages = result.data?.pages ?? [];
+        const itemCount = pages.reduce(
+          (sum, page) =>
+            sum + (Array.isArray(page?.activities) ? page.activities.length : 0),
+          0,
+        );
+        return { itemCount, pageCount: pages.length };
+      },
+    });
+  }, [
+    activityHasNextPage,
+    activityFetchingNextPage,
+    fetchNextActivityPage,
+    session?.user?.id,
+    activityData?.activities?.length,
+  ]);
 
   const clearVisibleTransactionHighlight = React.useCallback((transactionId: number) => {
     if (visibleHighlightedTransactionId !== transactionId) return;
@@ -629,7 +690,39 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     }
   }, [onHighlightedTransactionShown, visibleHighlightedTransactionId]);
 
+  const finishScrollPerfSample = React.useCallback(() => {
+    const sample = scrollPerfRef.current.stop();
+    if (!sample) return;
+
+    const itemCount =
+      listMode === "transactions"
+        ? ledgerItems.length
+        : activityData?.activities?.length ?? 0;
+    const pageCount =
+      listMode === "transactions"
+        ? estimateTransactionsPageCount(transactions.length)
+        : estimateActivityPageCount(activityData?.activities?.length ?? 0);
+
+    recordGroupListScrollTelemetry({
+      userId: session?.user?.id,
+      tab: listMode,
+      itemCount,
+      pageCount,
+      durationMs: sample.durationMs,
+      frameCount: sample.frameCount,
+      maxFrameGapMs: sample.maxFrameGapMs,
+      approxFps: sample.approxFps,
+    });
+  }, [
+    activityData?.activities?.length,
+    ledgerItems.length,
+    listMode,
+    session?.user?.id,
+    transactions.length,
+  ]);
+
   const handleMainScrollBeginDrag = React.useCallback(() => {
+    scrollPerfRef.current.start();
     if (
       visibleHighlightedTransactionId === null ||
       !shouldClearTransactionHighlightOnScroll(visibleHighlightedTransactionId)
@@ -639,21 +732,33 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     clearVisibleTransactionHighlight(visibleHighlightedTransactionId);
   }, [clearVisibleTransactionHighlight, visibleHighlightedTransactionId]);
 
+  const handleScrollEndDrag = React.useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const velocityY = event.nativeEvent.velocity?.y ?? 0;
+      if (Math.abs(velocityY) < 0.02) {
+        finishScrollPerfSample();
+      }
+    },
+    [finishScrollPerfSample],
+  );
+
+  const handleMomentumScrollEnd = React.useCallback(() => {
+    finishScrollPerfSample();
+  }, [finishScrollPerfSample]);
+
   const handleEndReached = React.useCallback(() => {
     if (listMode === "transactions" && transactionsFilter !== "payments") {
       handleLoadMoreTransactions();
       return;
     }
-    if (listMode === "activity" && activityHasNextPage && !activityFetchingNextPage) {
-      void fetchNextActivityPage();
+    if (listMode === "activity") {
+      handleLoadMoreActivity();
     }
   }, [
     listMode,
     transactionsFilter,
     handleLoadMoreTransactions,
-    activityHasNextPage,
-    activityFetchingNextPage,
-    fetchNextActivityPage,
+    handleLoadMoreActivity,
   ]);
 
   const handlePullToRefresh = React.useCallback(async () => {
@@ -1480,6 +1585,8 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           keyExtractor={(row) => row.key}
           showsVerticalScrollIndicator={false}
           onScrollBeginDrag={handleMainScrollBeginDrag}
+          onScrollEndDrag={handleScrollEndDrag}
+          onMomentumScrollEnd={handleMomentumScrollEnd}
           onEndReached={handleEndReached}
           onEndReachedThreshold={0.4}
           onScrollToIndexFailed={handleScrollToIndexFailed}

@@ -13,3 +13,8 @@ Deno.test("expense event is expense_created, not expense_added", () => {
   assertEquals(ANALYTICS_EVENTS.EXPENSE_CREATED.includes("added"), false);
   assertEquals(ANALYTICS_EVENTS.EXPENSE_CREATED, "expense_created");
 });
+
+Deno.test("group list perf event names are stable and PII-safe keys", () => {
+  assertEquals(ANALYTICS_EVENTS.GROUP_LIST_SCROLL, "group_list_scroll");
+  assertEquals(ANALYTICS_EVENTS.GROUP_LIST_PAGE_LOADED, "group_list_page_loaded");
+});
