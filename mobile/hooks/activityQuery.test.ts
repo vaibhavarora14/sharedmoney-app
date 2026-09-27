@@ -2,7 +2,6 @@ import { InfiniteQueryObserver, QueryClient } from "@tanstack/react-query";
 import type { ActivityFeedResponse, ActivityItem } from "../types.ts";
 import { activityQueryOptions } from "./activityQuery.ts";
 import { queryKeys } from "./queryKeys.ts";
-import { ACTIVITY_MAX_PAGES } from "../utils/sentryTriagePolicy.ts";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -44,19 +43,19 @@ Deno.test("prefetched activity mounts and loads older pages alongside legacy cac
   }
 });
 
-Deno.test("activity infinite query stops at the soft page cap", async () => {
+Deno.test("activity infinite query keeps paging while has_more is true", async () => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
-  const page = (offset: number): ActivityFeedResponse => ({
+  const page = (offset: number, hasMore: boolean): ActivityFeedResponse => ({
     activities: Array.from({ length: 50 }, (_, i) => ({
       id: String(offset + i),
     } as ActivityItem)),
-    total: 10_000,
-    has_more: true,
+    total: 150,
+    has_more: hasMore,
   });
   const offsets: number[] = [];
-  const options = activityQueryOptions("group-cap", async (_groupId, offset) => {
+  const options = activityQueryOptions("group-uncapped", async (_groupId, offset) => {
     offsets.push(offset);
-    return page(offset);
+    return page(offset, offset < 100);
   });
 
   try {
@@ -66,8 +65,8 @@ Deno.test("activity infinite query stops at the soft page cap", async () => {
       await observer.fetchNextPage();
     }
     const pages = observer.getCurrentResult().data?.pages ?? [];
-    assert(pages.length === ACTIVITY_MAX_PAGES, `expected ${ACTIVITY_MAX_PAGES} pages, got ${pages.length}`);
-    assert(offsets.length === ACTIVITY_MAX_PAGES, "should not request beyond the soft cap");
+    assert(pages.length === 3, `expected 3 pages, got ${pages.length}`);
+    assert(JSON.stringify(offsets) === "[0,50,100]", "should page through the full history");
     observer.destroy();
   } finally {
     client.clear();

@@ -1,9 +1,3 @@
-/** Soft cap for ledger pages kept in memory (~30 items each). */
-export const TRANSACTIONS_MAX_PAGES = 5;
-
-/** Soft cap for activity pages kept in memory (~50 items each). */
-export const ACTIVITY_MAX_PAGES = 4;
-
 export type AuthSessionTransition = "signed_in" | "signed_out" | "session_refresh";
 
 export function resolveAuthSessionTransition(
@@ -40,17 +34,4 @@ export function resolveSentryReplaySampleRates(input: {
       env.EXPO_PUBLIC_SENTRY_REPLAYS_ON_ERROR_SAMPLE_RATE ?? "1.0",
     ),
   };
-}
-
-/**
- * Cap infinite-query growth without a sliding window (avoids needing
- * getPreviousPageParam). Returns null when the soft page cap is hit.
- */
-export function nextPageParamWithinCap<T>(
-  nextParam: T | null | undefined,
-  pageCount: number,
-  maxPages: number,
-): T | null | undefined {
-  if (pageCount >= maxPages) return null;
-  return nextParam;
 }

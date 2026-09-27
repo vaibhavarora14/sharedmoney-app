@@ -1,9 +1,5 @@
 import { infiniteQueryOptions } from "@tanstack/react-query";
 import type { ActivityFeedResponse } from "../types";
-import {
-  ACTIVITY_MAX_PAGES,
-  nextPageParamWithinCap,
-} from "../utils/sentryTriagePolicy";
 import { queryKeys } from "./queryKeys";
 
 export const ACTIVITY_PAGE_SIZE = 50;
@@ -18,13 +14,9 @@ export function activityQueryOptions(
     queryFn: ({ pageParam }) => fetchPage(groupId, pageParam, ACTIVITY_PAGE_SIZE),
     initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) =>
-      nextPageParamWithinCap(
-        lastPage.has_more
-          ? allPages.reduce((count, page) => count + page.activities.length, 0)
-          : undefined,
-        allPages.length,
-        ACTIVITY_MAX_PAGES,
-      ) ?? undefined,
+      lastPage.has_more
+        ? allPages.reduce((count, page) => count + page.activities.length, 0)
+        : undefined,
     staleTime: 60_000,
   });
 }

@@ -1,5 +1,15 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Alert, BackHandler, LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent, Platform, ScrollView, StyleSheet, View } from "react-native";
+import {
+  ActivityIndicator as RNActivityIndicator,
+  Alert,
+  BackHandler,
+  FlatList,
+  Platform,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  View,
+} from "react-native";
 import {
   ActivityIndicator,
   Appbar,
@@ -15,13 +25,20 @@ import {
   TextInput,
   useTheme
 } from "react-native-paper";
-import { ActivityFeed } from "../components/ActivityFeed";
+import {
+  ActivityDateHeader,
+  ActivityFeedEmptyState,
+  ActivityFeedRow,
+} from "../components/ActivityFeed";
 import { GroupDashboard } from "../components/GroupDashboard";
 import { SettlementCurrencySheet } from "../components/SettlementCurrencySheet";
 import { InvitationsList } from "../components/InvitationsList";
 import { MembersList } from "../components/MembersList";
 import { SafetyAction, SafetyActionModal } from "../components/SafetyActionModal";
-import { TransactionsSection } from "../components/TransactionsSection";
+import {
+  LedgerRow,
+  TransactionsEmptyState,
+} from "../components/TransactionsSection";
 import { useAuth } from "../contexts/AuthContext";
 import { useActivity } from "../hooks/useActivity";
 import { useBalances, useGroupStats } from "../hooks/useBalances";
@@ -70,16 +87,15 @@ import {
 } from "../utils/errorMessages";
 import {
   createTransactionHighlightTimer,
-  getCachedTransactionHighlightRowY,
   shouldClearTransactionHighlightOnScroll,
-  shouldConsumeTransactionHighlight,
   type TransactionHighlightTimer,
-  type TransactionHighlightRowLayout,
 } from "../utils/transactionHighlight";
 import {
   buildTransactionsLedger,
   type LedgerFilter,
+  type LedgerItem,
 } from "../utils/transactionsLedger";
+import { buildActivityFeedEntries, type ActivityFeedEntry } from "../utils/activityFeedRows";
 import {
   countActiveMembers,
   shouldPreferAddPeopleFab,
@@ -92,6 +108,10 @@ import {
 import { recordSentryListCounts } from "../utils/sentryTelemetry";
 import { GroupStatsMode } from "./GroupStatsScreen";
 import { SettlementFormScreen } from "./SettlementFormScreen";
+
+type GroupDetailsListRow =
+  | { kind: "ledger"; key: string; item: LedgerItem }
+  | { kind: "activity"; key: string; entry: ActivityFeedEntry };
 
 interface GroupDetailsScreenProps {
   group: GroupWithMembers;
@@ -156,15 +176,13 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const [activityFilterParticipantId, setActivityFilterParticipantId] = useState<string>("all");
   const [safetyAction, setSafetyAction] = useState<SafetyAction | null>(null);
   const [safetyTarget, setSafetyTarget] = useState<SafetyTarget | null>(null);
-  const mainScrollRef = React.useRef<ScrollView>(null);
-  const [transactionsSectionY, setTransactionsSectionY] = useState<number | null>(null);
-  const [highlightedRowY, setHighlightedRowY] = useState<number | null>(null);
+  const mainListRef = React.useRef<FlatList<GroupDetailsListRow>>(null);
+  const [listRefreshing, setListRefreshing] = useState(false);
   const [visibleHighlightedTransactionId, setVisibleHighlightedTransactionId] = useState<number | null>(
     highlightedTransactionId,
   );
   const highlightConsumedRef = React.useRef(false);
   const highlightTimerRef = React.useRef<TransactionHighlightTimer | null>(null);
-  const highlightedRowLayoutRef = React.useRef<TransactionHighlightRowLayout | null>(null);
   
   // Web-compatible confirmation dialog state
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -481,6 +499,26 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     [transactions, settlements, transactionsFilter],
   );
 
+  const activityEntries = useMemo(
+    () => buildActivityFeedEntries(filteredActivities),
+    [filteredActivities],
+  );
+
+  const listRows = useMemo<GroupDetailsListRow[]>(() => {
+    if (listMode === "transactions") {
+      return ledgerItems.map((item) => ({
+        kind: "ledger" as const,
+        key: item.key,
+        item,
+      }));
+    }
+    return activityEntries.map((entry) => ({
+      kind: "activity" as const,
+      key: entry.key,
+      entry,
+    }));
+  }, [listMode, ledgerItems, activityEntries]);
+
   useEffect(() => {
     if (listMode !== "transactions" || txLoading) return;
     recordSentryListCounts("ledger", {
@@ -525,14 +563,9 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
       setVisibleHighlightedTransactionId((currentTransactionId) =>
         currentTransactionId === highlightedTransactionId ? null : currentTransactionId
       );
-      setHighlightedRowY(null);
     });
     highlightConsumedRef.current = false;
     setVisibleHighlightedTransactionId(highlightedTransactionId);
-    setHighlightedRowY(getCachedTransactionHighlightRowY(
-      highlightedTransactionId,
-      highlightedRowLayoutRef.current,
-    ));
   }, [highlightedTransactionId]);
 
   useEffect(() => () => {
@@ -540,45 +573,44 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   }, []);
 
   useEffect(() => {
-    if (transactionsSectionY === null || highlightedRowY === null) return;
-    if (!shouldConsumeTransactionHighlight(
-      highlightedTransactionId,
-      visibleHighlightedTransactionId,
-      highlightedRowY,
-      transactionsSectionY,
-      highlightConsumedRef.current,
-    )) {
+    if (
+      highlightConsumedRef.current ||
+      visibleHighlightedTransactionId === null ||
+      listMode !== "transactions"
+    ) {
       return;
     }
 
-    mainScrollRef.current?.scrollTo({
-      y: Math.max(0, transactionsSectionY + highlightedRowY - 88),
-      animated: false,
+    const index = listRows.findIndex(
+      (row) =>
+        row.kind === "ledger" &&
+        row.item.kind === "expense" &&
+        row.item.transaction.id === visibleHighlightedTransactionId,
+    );
+    if (index < 0) return;
+
+    const frame = requestAnimationFrame(() => {
+      try {
+        mainListRef.current?.scrollToIndex({
+          index,
+          animated: false,
+          viewPosition: 0.15,
+        });
+      } catch {
+        // FlatList may not be ready yet; onScrollToIndexFailed retries below.
+      }
+      highlightConsumedRef.current = true;
+      onHighlightedTransactionShown?.(visibleHighlightedTransactionId);
+      highlightTimerRef.current?.start();
     });
-    highlightConsumedRef.current = true;
-    onHighlightedTransactionShown?.(visibleHighlightedTransactionId!);
-    highlightTimerRef.current?.start();
+
+    return () => cancelAnimationFrame(frame);
   }, [
-    highlightedRowY,
-    highlightedTransactionId,
+    listMode,
+    listRows,
     onHighlightedTransactionShown,
-    transactionsSectionY,
     visibleHighlightedTransactionId,
   ]);
-
-  const handleTransactionsSectionLayout = React.useCallback((event: LayoutChangeEvent) => {
-    setTransactionsSectionY(event.nativeEvent.layout.y);
-  }, []);
-
-  const handleHighlightedRowLayout = React.useCallback((y: number) => {
-    if (visibleHighlightedTransactionId === null) return;
-
-    highlightedRowLayoutRef.current = {
-      transactionId: visibleHighlightedTransactionId,
-      y,
-    };
-    setHighlightedRowY(y);
-  }, [visibleHighlightedTransactionId]);
 
   const handleLoadMoreTransactions = React.useCallback(() => {
     if (!txHasNextPage || txIsFetchingNextPage) return;
@@ -590,7 +622,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
 
     highlightTimerRef.current?.cancel();
     setVisibleHighlightedTransactionId(null);
-    setHighlightedRowY(null);
 
     if (!highlightConsumedRef.current) {
       highlightConsumedRef.current = true;
@@ -608,27 +639,66 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     clearVisibleTransactionHighlight(visibleHighlightedTransactionId);
   }, [clearVisibleTransactionHighlight, visibleHighlightedTransactionId]);
 
-  const handleMainScroll = React.useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
-    const distanceFromBottom = contentSize.height - (contentOffset.y + layoutMeasurement.height);
-
-    if (distanceFromBottom >= 220) return;
-
-    if (listMode === "transactions" && transactionsFilter !== "payments" && txHasNextPage && !txIsFetchingNextPage) {
-      void fetchNextTransactionsPage();
-    } else if (listMode === "activity" && activityHasNextPage && !activityFetchingNextPage) {
+  const handleEndReached = React.useCallback(() => {
+    if (listMode === "transactions" && transactionsFilter !== "payments") {
+      handleLoadMoreTransactions();
+      return;
+    }
+    if (listMode === "activity" && activityHasNextPage && !activityFetchingNextPage) {
       void fetchNextActivityPage();
     }
   }, [
     listMode,
     transactionsFilter,
-    txHasNextPage,
-    txIsFetchingNextPage,
-    fetchNextTransactionsPage,
+    handleLoadMoreTransactions,
     activityHasNextPage,
     activityFetchingNextPage,
     fetchNextActivityPage,
   ]);
+
+  const handlePullToRefresh = React.useCallback(async () => {
+    setListRefreshing(true);
+    try {
+      await Promise.all([
+        refetchGroup(),
+        refetchTx(),
+        refetchSettlements(),
+        refetchActivity(),
+        refetchBalances(),
+        refetchGroupStats(),
+        refetchParticipants(),
+        refetchInvites(),
+      ]);
+    } finally {
+      setListRefreshing(false);
+    }
+  }, [
+    refetchActivity,
+    refetchBalances,
+    refetchGroup,
+    refetchGroupStats,
+    refetchInvites,
+    refetchParticipants,
+    refetchSettlements,
+    refetchTx,
+  ]);
+
+  const handleScrollToIndexFailed = React.useCallback(
+    (info: { index: number; averageItemLength: number }) => {
+      mainListRef.current?.scrollToOffset({
+        offset: Math.max(0, info.averageItemLength * info.index),
+        animated: false,
+      });
+      requestAnimationFrame(() => {
+        mainListRef.current?.scrollToIndex({
+          index: info.index,
+          animated: false,
+          viewPosition: 0.15,
+        });
+      });
+    },
+    [],
+  );
 
   // Refresh invitations when refreshTrigger changes (e.g., after adding a member)
   useEffect(() => {
@@ -1360,17 +1430,12 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           </View>
       )}
 
-      <ScrollView
-        ref={mainScrollRef}
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        onScroll={handleMainScroll}
-        onScrollBeginDrag={handleMainScrollBeginDrag}
-        scrollEventThrottle={16}
-      >
-        {showMembers ? (
-          // PEOPLE VIEW
+      {showMembers ? (
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
           <View style={styles.sectionContent}>
             <MembersList
               people={participants}
@@ -1386,7 +1451,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
             {participants.length > 0 &&
               invitations.length > 0 && <View style={{ height: 16 }} />}
             <InvitationsList
-              invitations={invitations.filter((i) => i.status === 'pending')}
+              invitations={invitations.filter((i) => i.status === "pending")}
               loading={invitationsLoading}
               canManageInvites={canManageInvites}
               cancellingInvitationId={cancellingInvitationId}
@@ -1404,69 +1469,94 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
               </Button>
             )}
           </View>
-        ) : (
-          // DASHBOARD & LIST VIEW
-          <>
-            <GroupDashboard
-              groupId={group.id}
-              balances={balancesData?.group_balances?.[0]?.balances || []}
-              groupStats={groupStats}
-              currentUserId={session?.user?.id}
-              currentUserParticipantId={participants.find(p => p.user_id === session?.user?.id)?.id}
-              loading={balancesLoading}
-              statsLoading={groupStatsLoading}
-              defaultCurrency={getDefaultCurrency()}
-              activeMemberCount={activeMemberCount}
-              balanceError={!!balancesError}
-              onSettlePress={isActiveMember && !balancesError ? handleSettleUp : undefined}
-              onMyCostsPress={() => handleStatNavigation("my-costs")}
-              onTotalCostsPress={() => handleStatNavigation("total-costs")}
-              onOpenCurrencySettings={() => setShowCurrencySettings(true)}
-            />
-
-            <View
-              style={{
-                paddingHorizontal: 16,
-                marginTop: 8,
-                marginBottom: 4,
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "space-between",
+          <View style={{ height: 80 }} />
+        </ScrollView>
+      ) : (
+        <FlatList
+          ref={mainListRef}
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          data={listRows}
+          keyExtractor={(row) => row.key}
+          showsVerticalScrollIndicator={false}
+          onScrollBeginDrag={handleMainScrollBeginDrag}
+          onEndReached={handleEndReached}
+          onEndReachedThreshold={0.4}
+          onScrollToIndexFailed={handleScrollToIndexFailed}
+          ItemSeparatorComponent={
+            listMode === "transactions"
+              ? () => <View style={{ height: 8 }} />
+              : undefined
+          }
+          refreshControl={
+            <RefreshControl
+              refreshing={listRefreshing}
+              onRefresh={() => {
+                void handlePullToRefresh();
               }}
-            >
-              <Text variant="titleMedium" style={{ fontWeight: "700", color: theme.colors.onSurface }}>
-                Recent expenses
-              </Text>
-            </View>
-            <View style={{ paddingHorizontal: 16, marginBottom: 0 }}>
-              <SegmentedButtons
-                value={listMode}
-                onValueChange={(val: string) =>
-                  setListMode(val as "transactions" | "activity")
-                }
-                theme={{
-                  colors: {
-                    secondaryContainer: theme.colors.primaryContainer,
-                    onSecondaryContainer: theme.colors.onPrimaryContainer,
-                  },
-                }}
-                buttons={[
-                  {
-                    value: "transactions",
-                    label: "Transactions",
-                    icon: "format-list-bulleted",
-                  },
-                  {
-                    value: "activity",
-                    label: "Activity",
-                    icon: "history",
-                  },
-                ]}
+            />
+          }
+          ListHeaderComponent={
+            <View>
+              <GroupDashboard
+                groupId={group.id}
+                balances={balancesData?.group_balances?.[0]?.balances || []}
+                groupStats={groupStats}
+                currentUserId={session?.user?.id}
+                currentUserParticipantId={participants.find((p) => p.user_id === session?.user?.id)?.id}
+                loading={balancesLoading}
+                statsLoading={groupStatsLoading}
+                defaultCurrency={getDefaultCurrency()}
+                activeMemberCount={activeMemberCount}
+                balanceError={!!balancesError}
+                onSettlePress={isActiveMember && !balancesError ? handleSettleUp : undefined}
+                onMyCostsPress={() => handleStatNavigation("my-costs")}
+                onTotalCostsPress={() => handleStatNavigation("total-costs")}
+                onOpenCurrencySettings={() => setShowCurrencySettings(true)}
               />
-            </View>
 
-            {listMode === "transactions" ? (
-              <View onLayout={handleTransactionsSectionLayout}>
+              <View
+                style={{
+                  paddingHorizontal: 16,
+                  marginTop: 8,
+                  marginBottom: 4,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}
+              >
+                <Text variant="titleMedium" style={{ fontWeight: "700", color: theme.colors.onSurface }}>
+                  Recent expenses
+                </Text>
+              </View>
+              <View style={{ paddingHorizontal: 16, marginBottom: 0 }}>
+                <SegmentedButtons
+                  value={listMode}
+                  onValueChange={(val: string) =>
+                    setListMode(val as "transactions" | "activity")
+                  }
+                  theme={{
+                    colors: {
+                      secondaryContainer: theme.colors.primaryContainer,
+                      onSecondaryContainer: theme.colors.onPrimaryContainer,
+                    },
+                  }}
+                  buttons={[
+                    {
+                      value: "transactions",
+                      label: "Transactions",
+                      icon: "format-list-bulleted",
+                    },
+                    {
+                      value: "activity",
+                      label: "Activity",
+                      icon: "history",
+                    },
+                  ]}
+                />
+              </View>
+
+              {listMode === "transactions" ? (
                 <View style={styles.transactionsFilterRow}>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                     <Chip
@@ -1518,115 +1608,194 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                     </Chip>
                   </ScrollView>
                 </View>
-                <TransactionsSection
-                  items={ledgerItems}
-                  loading={txLoading || settlementsLoading}
-                  hasNextPage={!!txHasNextPage}
-                  isFetchingNextPage={txIsFetchingNextPage}
-                  onLoadMore={handleLoadMoreTransactions}
-                  onEditExpense={isActiveMember ? onEditTransaction : () => {}}
-                  onEditPayment={
-                    isActiveMember
-                      ? (settlement) => handleEditSettlement(settlement)
-                      : undefined
-                  }
-                  members={group.members || []}
-                  participants={participants}
-                  highlightedTransactionId={visibleHighlightedTransactionId}
-                  onHighlightedLayout={handleHighlightedRowLayout}
-                  onHighlightedInteraction={clearVisibleTransactionHighlight}
-                  filter={transactionsFilter}
-                  canAct={isActiveMember}
-                  onAddPeople={onAddMember}
-                  onAddExpense={onAddTransaction}
-                />
-              </View>
-            ) : (
-              <View style={[styles.sectionContent, styles.activitySection]}>
-
-                <View style={{ flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginBottom: 0, paddingHorizontal: 4, marginTop: -8 }}>
-                   <Button 
-                     mode={showActivityFilters ? "contained-tonal" : "text"}
-                     onPress={() => setShowActivityFilters(!showActivityFilters)} 
-                     icon={showActivityFilters ? "filter-variant-remove" : "filter-variant"}
-                     compact
-                     style={{ borderRadius: 20 }}
-                     contentStyle={{ flexDirection: 'row-reverse' }}
-                   >
-                     Filters {(activityFilterType !== "all" || activityFilterParticipantId !== "all") && "•"}
-                   </Button>
-                </View>
-
-                {showActivityFilters && (
-                  <View style={styles.filterContainer}>
-                    <Text variant="labelLarge" style={styles.filterLabel}>Filter by Type</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow}>
-                      <Chip 
-                        selected={activityFilterType === "all"} 
-                        onPress={() => setActivityFilterType("all")}
-                        style={[styles.filterChip, activityFilterType === "all" && { backgroundColor: theme.colors.primaryContainer }]}
-                        showSelectedCheck={true}
-                        mode={activityFilterType === "all" ? "flat" : "outlined"}
-                      >
-                        All Types
-                      </Chip>
-                      <Chip 
-                        selected={activityFilterType === "expenses"} 
-                        onPress={() => setActivityFilterType("expenses")}
-                        style={[styles.filterChip, activityFilterType === "expenses" && { backgroundColor: theme.colors.primaryContainer }]}
-                        showSelectedCheck={true}
-                        icon="format-list-bulleted"
-                        mode={activityFilterType === "expenses" ? "flat" : "outlined"}
-                      >
-                        Expenses
-                      </Chip>
-                      <Chip 
-                        selected={activityFilterType === "settlements"} 
-                        onPress={() => setActivityFilterType("settlements")}
-                        style={[styles.filterChip, activityFilterType === "settlements" && { backgroundColor: theme.colors.primaryContainer }]}
-                        showSelectedCheck={true}
-                        icon="hand-coin"
-                        mode={activityFilterType === "settlements" ? "flat" : "outlined"}
-                      >
-                        Settlements
-                      </Chip>
-                    </ScrollView>
-
-                    <Text variant="labelLarge" style={[styles.filterLabel, { marginTop: 4 }]}>Filter by Person</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow}>
-                      <Chip 
-                        selected={activityFilterParticipantId === "all"} 
-                        onPress={() => setActivityFilterParticipantId("all")}
-                        style={[styles.filterChip, activityFilterParticipantId === "all" && { backgroundColor: theme.colors.primaryContainer }]}
-                        showSelectedCheck={true}
-                        mode={activityFilterParticipantId === "all" ? "flat" : "outlined"}
-                      >
-                        Everyone
-                      </Chip>
-                      {participants.map(participant => (
-                        <Chip
-                          key={participant.id}
-                          selected={activityFilterParticipantId === participant.id}
-                          onPress={() => setActivityFilterParticipantId(participant.id)}
-                          style={[styles.filterChip, activityFilterParticipantId === participant.id && { backgroundColor: theme.colors.primaryContainer }]}
-                          showSelectedCheck={true}
-                          avatar={participant.avatar_url ? <Avatar.Image size={24} source={{ uri: participant.avatar_url }} /> : undefined}
-                          mode={activityFilterParticipantId === participant.id ? "flat" : "outlined"}
-                        >
-                          {participant.full_name || participant.email?.split('@')[0] || "User"}
-                        </Chip>
-                      ))}
-                    </ScrollView>
+              ) : (
+                <View style={[styles.sectionContent, styles.activitySection]}>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      justifyContent: "flex-end",
+                      alignItems: "center",
+                      marginBottom: 0,
+                      paddingHorizontal: 4,
+                      marginTop: -8,
+                    }}
+                  >
+                    <Button
+                      mode={showActivityFilters ? "contained-tonal" : "text"}
+                      onPress={() => setShowActivityFilters(!showActivityFilters)}
+                      icon={showActivityFilters ? "filter-variant-remove" : "filter-variant"}
+                      compact
+                      style={{ borderRadius: 20 }}
+                      contentStyle={{ flexDirection: "row-reverse" }}
+                    >
+                      Filters{" "}
+                      {(activityFilterType !== "all" ||
+                        activityFilterParticipantId !== "all") &&
+                        "•"}
+                    </Button>
                   </View>
-                )}
 
-                <ActivityFeed
-                  items={filteredActivities}
-                  loading={activityLoading}
-                  hasNextPage={activityHasNextPage}
-                  isFetchingNextPage={activityFetchingNextPage}
-                  onLoadMore={fetchNextActivityPage}
-                  isFiltered={activityFilterType !== "all" || activityFilterParticipantId !== "all"}
+                  {showActivityFilters && (
+                    <View style={styles.filterContainer}>
+                      <Text variant="labelLarge" style={styles.filterLabel}>
+                        Filter by Type
+                      </Text>
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        style={styles.filterRow}
+                      >
+                        <Chip
+                          selected={activityFilterType === "all"}
+                          onPress={() => setActivityFilterType("all")}
+                          style={[
+                            styles.filterChip,
+                            activityFilterType === "all" && {
+                              backgroundColor: theme.colors.primaryContainer,
+                            },
+                          ]}
+                          showSelectedCheck={true}
+                          mode={activityFilterType === "all" ? "flat" : "outlined"}
+                        >
+                          All Types
+                        </Chip>
+                        <Chip
+                          selected={activityFilterType === "expenses"}
+                          onPress={() => setActivityFilterType("expenses")}
+                          style={[
+                            styles.filterChip,
+                            activityFilterType === "expenses" && {
+                              backgroundColor: theme.colors.primaryContainer,
+                            },
+                          ]}
+                          showSelectedCheck={true}
+                          icon="format-list-bulleted"
+                          mode={activityFilterType === "expenses" ? "flat" : "outlined"}
+                        >
+                          Expenses
+                        </Chip>
+                        <Chip
+                          selected={activityFilterType === "settlements"}
+                          onPress={() => setActivityFilterType("settlements")}
+                          style={[
+                            styles.filterChip,
+                            activityFilterType === "settlements" && {
+                              backgroundColor: theme.colors.primaryContainer,
+                            },
+                          ]}
+                          showSelectedCheck={true}
+                          icon="hand-coin"
+                          mode={
+                            activityFilterType === "settlements" ? "flat" : "outlined"
+                          }
+                        >
+                          Settlements
+                        </Chip>
+                      </ScrollView>
+
+                      <Text
+                        variant="labelLarge"
+                        style={[styles.filterLabel, { marginTop: 4 }]}
+                      >
+                        Filter by Person
+                      </Text>
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        style={styles.filterRow}
+                      >
+                        <Chip
+                          selected={activityFilterParticipantId === "all"}
+                          onPress={() => setActivityFilterParticipantId("all")}
+                          style={[
+                            styles.filterChip,
+                            activityFilterParticipantId === "all" && {
+                              backgroundColor: theme.colors.primaryContainer,
+                            },
+                          ]}
+                          showSelectedCheck={true}
+                          mode={
+                            activityFilterParticipantId === "all" ? "flat" : "outlined"
+                          }
+                        >
+                          Everyone
+                        </Chip>
+                        {participants.map((participant) => (
+                          <Chip
+                            key={participant.id}
+                            selected={activityFilterParticipantId === participant.id}
+                            onPress={() =>
+                              setActivityFilterParticipantId(participant.id)
+                            }
+                            style={[
+                              styles.filterChip,
+                              activityFilterParticipantId === participant.id && {
+                                backgroundColor: theme.colors.primaryContainer,
+                              },
+                            ]}
+                            showSelectedCheck={true}
+                            avatar={
+                              participant.avatar_url ? (
+                                <Avatar.Image
+                                  size={24}
+                                  source={{ uri: participant.avatar_url }}
+                                />
+                              ) : undefined
+                            }
+                            mode={
+                              activityFilterParticipantId === participant.id
+                                ? "flat"
+                                : "outlined"
+                            }
+                          >
+                            {participant.full_name ||
+                              participant.email?.split("@")[0] ||
+                              "User"}
+                          </Chip>
+                        ))}
+                      </ScrollView>
+                    </View>
+                  )}
+                </View>
+              )}
+            </View>
+          }
+          renderItem={({ item: row, index }) => {
+            if (row.kind === "ledger") {
+              return (
+                <View style={{ paddingTop: index === 0 ? 8 : 0 }}>
+                  <LedgerRow
+                    item={row.item}
+                    members={group.members || []}
+                    participants={participants}
+                    highlightedTransactionId={visibleHighlightedTransactionId}
+                    onHighlightedInteraction={clearVisibleTransactionHighlight}
+                    onEditExpense={isActiveMember ? onEditTransaction : () => {}}
+                    onEditPayment={
+                      isActiveMember
+                        ? (settlement) => handleEditSettlement(settlement)
+                        : undefined
+                    }
+                  />
+                </View>
+              );
+            }
+
+            if (row.entry.kind === "header") {
+              const isFirstHeader = !listRows
+                .slice(0, index)
+                .some((prior) => prior.kind === "activity" && prior.entry.kind === "header");
+              return (
+                <View style={{ paddingHorizontal: 16 }}>
+                  <ActivityDateHeader title={row.entry.title} isFirst={isFirstHeader} />
+                </View>
+              );
+            }
+
+            return (
+              <View style={{ paddingHorizontal: 16 }}>
+                <ActivityFeedRow
+                  activity={row.entry.activity}
                   onReport={(activity) => openActivitySafetyAction("report", activity)}
                   onBlock={(activity) => openActivitySafetyAction("block", activity)}
                   onPressSettlement={
@@ -1636,13 +1805,47 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                   }
                 />
               </View>
-            )}
-          </>
-        )}
-
-        {/* Bottom padding for FAB */}
-        <View style={{ height: 80 }} />
-      </ScrollView>
+            );
+          }}
+          ListEmptyComponent={
+            listMode === "transactions" ? (
+              txLoading || settlementsLoading ? (
+                <ActivityIndicator size="small" style={{ marginVertical: 24 }} />
+              ) : (
+                <View style={{ paddingHorizontal: 16 }}>
+                  <TransactionsEmptyState
+                    filter={transactionsFilter}
+                    members={group.members || []}
+                    canAct={isActiveMember}
+                    onAddPeople={onAddMember}
+                    onAddExpense={onAddTransaction}
+                  />
+                </View>
+              )
+            ) : activityLoading ? (
+              <ActivityIndicator size="small" style={{ marginVertical: 16 }} />
+            ) : (
+              <View style={{ paddingHorizontal: 16 }}>
+                <ActivityFeedEmptyState
+                  isFiltered={
+                    activityFilterType !== "all" ||
+                    activityFilterParticipantId !== "all"
+                  }
+                />
+              </View>
+            )
+          }
+          ListFooterComponent={
+            <View style={{ alignItems: "center", paddingTop: 8, paddingBottom: 80 }}>
+              {(listMode === "transactions"
+                ? txIsFetchingNextPage
+                : activityFetchingNextPage) ? (
+                <RNActivityIndicator size="small" />
+              ) : null}
+            </View>
+          }
+        />
+      )}
 
       {!showMembers && isActiveMember && (
         <FAB
