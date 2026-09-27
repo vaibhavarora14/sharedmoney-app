@@ -95,7 +95,7 @@ module.exports = ({ config }) => {
     process.env.EXPO_PUBLIC_BUNDLE_IDENTIFIER || "com.vaibhavarora.sharemoney";
   const androidPackage =
     process.env.EXPO_PUBLIC_ANDROID_PACKAGE || "com.vaibhavarora.sharemoney";
-  const sentryOrg = process.env.SENTRY_ORG || "sharemoney";
+  const sentryOrg = process.env.SENTRY_ORG || "jobappagent";
   const sentryProject = process.env.SENTRY_PROJECT || "react-native";
 
   return {
