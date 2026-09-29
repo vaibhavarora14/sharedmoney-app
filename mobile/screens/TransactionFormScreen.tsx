@@ -422,22 +422,11 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     return Number.isFinite(value) && value > 0 ? value : null;
   }, [amount]);
 
-  // Older expenses can have a subset of the current group. Blank fields for
-  // people outside that original split stay excluded on edit, but any entered
-  // value must validate. Never drop an original participant's invalid edit.
-  const excludedAmountIds = useMemo(() => {
-    if (!transaction || splitMode !== "unequal") return [];
-    const originalIds = new Set(transaction.splits?.length
-      ? transaction.splits.map((split) => split.participant_id)
-      : transaction.split_among_participant_ids || []);
-    return allParticipantIds.filter((id) =>
-      !originalIds.has(id) && !(splitAmounts[id] ?? "").trim());
-  }, [transaction, splitMode, allParticipantIds, splitAmounts]);
-  // Equal alone owns selection chips. All other fields remain visible; the
-  // amount IDs used for validation and serialization exclude only those blanks.
-  const effectiveSplitIds = splitMode === "equal"
-    ? splitAmong
-    : allParticipantIds.filter((id) => !excludedAmountIds.includes(id));
+  // Inclusion is owned by shared selection chips (splitAmong) in every mode.
+  // Older subset edits load only original participants into splitAmong; adding
+  // someone is a chip toggle, not a blank amount field among the full group.
+  const excludedAmountIds: string[] = [];
+  const effectiveSplitIds = splitAmong;
 
   const handleToggleSplitMember = (participantId: string) => {
     const uniquePrev = [...new Set(splitAmong)];
@@ -454,20 +443,21 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
 
   const handleSplitModeChange = (mode: SplitMode) => {
     setSplitMode(mode);
-    if (mode === "unequal" && parsedTotalAmount && allParticipantIds.length > 0) {
+    const selectedIds = [...new Set(splitAmong)];
+    if (mode === "unequal" && parsedTotalAmount && selectedIds.length > 0) {
       setSplitAmounts((current) => {
-        const hasAny = allParticipantIds.some((id) => (current[id] || "").length > 0);
+        const hasAny = selectedIds.some((id) => (current[id] || "").length > 0);
         if (hasAny) return current;
         if (splitMode === "shares") {
-          return amountsFromShares(parsedTotalAmount, allParticipantIds, splitShares);
+          return amountsFromShares(parsedTotalAmount, selectedIds, splitShares);
         }
-        return equalSplitAmountMap(parsedTotalAmount, allParticipantIds);
+        return equalSplitAmountMap(parsedTotalAmount, selectedIds);
       });
     }
-    if (mode === "shares" && allParticipantIds.length > 0) {
+    if (mode === "shares" && selectedIds.length > 0) {
       setSplitShares((current) => {
-        const missing = allParticipantIds.some((id) => current[id] == null);
-        return missing ? { ...defaultShareMap(allParticipantIds), ...current } : current;
+        const missing = selectedIds.some((id) => current[id] == null);
+        return missing ? { ...defaultShareMap(selectedIds), ...current } : current;
       });
     }
     if (splitAmongError) setSplitAmongError("");
@@ -484,9 +474,10 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
   };
 
   const handleSplitRemaining = () => {
-    if (!parsedTotalAmount || allParticipantIds.length === 0) return;
+    const selectedIds = [...new Set(splitAmong)];
+    if (!parsedTotalAmount || selectedIds.length === 0) return;
     setSplitAmounts((current) =>
-      distributeRemaining(current, allParticipantIds, parsedTotalAmount),
+      distributeRemaining(current, selectedIds, parsedTotalAmount),
     );
     if (splitAmongError) setSplitAmongError("");
   };
