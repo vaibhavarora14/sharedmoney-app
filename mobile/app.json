@@ -7,7 +7,7 @@
       "sharedmoney",
       "owewho"
     ],
-    "version": "2.31.4",
+    "version": "2.31.5",
     "_comment_version": "This is superseded by app.config.js which reads from version.json",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -19,7 +19,7 @@
         "sharedmoney",
         "owewho"
       ],
-      "buildNumber": "115",
+      "buildNumber": "116",
       "usesAppleSignIn": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
