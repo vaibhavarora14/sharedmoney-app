@@ -2,6 +2,7 @@ import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import React from "react";
 import { Linking, Platform, StyleSheet, View } from "react-native";
 import { Button, Modal, Portal, Text, useTheme } from "react-native-paper";
+import { STORE_URL_ANDROID, STORE_URL_IOS } from "../constants/storeUrls";
 
 interface ForceUpdateModalProps {
   visible: boolean;
@@ -10,15 +11,11 @@ interface ForceUpdateModalProps {
   storeUrlAndroid?: string;
 }
 
-const DEFAULT_STORE_URL_ANDROID =
-  "https://play.google.com/store/apps/details?id=com.vaibhavarora.sharemoney";
-const DEFAULT_STORE_URL_IOS = "https://apps.apple.com/app/id6755923591";
-
 export const ForceUpdateModal: React.FC<ForceUpdateModalProps> = ({
   visible,
   message = "Please update your app to continue using SharedMoney.",
-  storeUrlIos = DEFAULT_STORE_URL_IOS,
-  storeUrlAndroid = DEFAULT_STORE_URL_ANDROID,
+  storeUrlIos = STORE_URL_IOS,
+  storeUrlAndroid = STORE_URL_ANDROID,
 }) => {
   const theme = useTheme();
 
