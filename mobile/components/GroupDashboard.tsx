@@ -33,7 +33,7 @@ interface GroupDashboardProps {
   currentUserParticipantId?: string;
   loading: boolean;
   statsLoading?: boolean;
-  /** When true with loading, reserve settlement space without "Updating…" copy (shell loader lives elsewhere). */
+  /** When true with loading, hide settlement + insight chrome (list shell spinner is the only loader). */
   quietLoading?: boolean;
   balanceError?: boolean;
   defaultCurrency?: string;
@@ -200,6 +200,10 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
     && settlementRows.length === 0
     && !(unifyEnabled && myUnified && myUnified.missing.length > 0);
 
+  // While GroupDetails ListEmpty spinner is up, hide settlement + insight chrome
+  // entirely so an empty Surface / "..." does not stack with the spinner.
+  const deferChromeToShell = quietLoading && (dashboardLoading || !currentUserId);
+
   const renderSettlementRows = () => {
     if (balanceError) {
       return (
@@ -211,11 +215,6 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
       );
     }
     if (dashboardLoading || !currentUserId) {
-      // Quiet placeholder while GroupDetails shows the list shell spinner —
-      // product rule: one loading chrome at a time.
-      if (quietLoading) {
-        return <View style={styles.settlementStatus} />;
-      }
       return (
         <View style={styles.settlementStatus}>
           <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
@@ -356,7 +355,7 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
 
   return (
     <View style={styles.container}>
-      {hasMultipleCurrencies && !unifyEnabled && !balanceError && !dashboardLoading ? (
+      {hasMultipleCurrencies && !unifyEnabled && !balanceError && !dashboardLoading && !deferChromeToShell ? (
         <UnifyPromptCard
           currencies={usedCurrencies}
           suggestedCurrency={settlementCurrency}
@@ -374,7 +373,7 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
         />
       ) : null}
 
-      {unifyEnabled && !balanceError && !dashboardLoading && activeMemberCount > 1 ? (
+      {unifyEnabled && !balanceError && !dashboardLoading && activeMemberCount > 1 && !deferChromeToShell ? (
         <View style={styles.unifiedSubhead}>
           <Text variant="labelMedium" style={{ color: theme.colors.onSurfaceVariant }}>
             {`In one currency · ${settlementCurrency}`}
@@ -394,7 +393,7 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
         </View>
       ) : null}
 
-      {balanceError || dashboardLoading || activeMemberCount > 1 ? isSettled ? (
+      {!deferChromeToShell && (balanceError || dashboardLoading || activeMemberCount > 1) ? isSettled ? (
         <View testID="group-settlement-rows">{renderSettlementRows()}</View>
       ) : (
         <Surface
@@ -406,7 +405,7 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
         </Surface>
       ) : null}
 
-      {unifyEnabled && !balanceError && !dashboardLoading && activeMemberCount > 1 && myUnified && myUnified.missing.length > 0 && settlementRows.length > 0 ? (
+      {!deferChromeToShell && unifyEnabled && !balanceError && !dashboardLoading && activeMemberCount > 1 && myUnified && myUnified.missing.length > 0 && settlementRows.length > 0 ? (
         <Text
           variant="labelSmall"
           style={{ color: theme.colors.error, marginTop: -8, marginHorizontal: 4 }}
@@ -418,7 +417,7 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
         </Text>
       ) : null}
 
-      {renderCompactInsights()}
+      {deferChromeToShell ? null : renderCompactInsights()}
     </View>
   );
 };
