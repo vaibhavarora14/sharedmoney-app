@@ -265,6 +265,16 @@ test("dashboard loading shows updating copy without settlement rows", () => {
   assert.doesNotMatch(text(tree), /Alice owes you|You owe Alice|\$50/);
 });
 
+test("dashboard quietLoading suppresses Updating copy while shell loader is elsewhere", () => {
+  const tree = dashboard([balance("me", 50), balance("Alice", -50)], {
+    loading: true,
+    quietLoading: true,
+  });
+  assert.equal(settlementRows(tree).length, 0);
+  assert.doesNotMatch(text(tree), /Updating balances\.\.\./);
+  assert.doesNotMatch(text(tree), /Alice owes you|You owe Alice|\$50/);
+});
+
 test("balance summary adds only matching currencies on both sides", () => {
   const { BalancesSection } = components();
   const balances = [balance("Alice", 100), balance("Bob", 100, "INR"), balance("Cara", 20), balance("Dan", -40), balance("Eve", -60, "EUR"), balance("Frank", -10, "EUR")];
@@ -424,4 +434,11 @@ test("GroupDetailsScreen wires balanceError and gates onSettlePress for active m
   assert.match(source, /balanceError=\{\!\!balancesError\}/);
   assert.match(source, /onSettlePress=\{isActiveMember && !balancesError \? handleSettleUp : undefined\}/);
   assert.match(source, /if\s*\(\s*!isActiveMember\s*\|\|\s*balancesError\s*\)\s*return/);
+});
+
+test("GroupDetailsScreen quiets dashboard Updating copy while list shell is loading", () => {
+  const source = readFileSync(path.join(__dirname, "../screens/GroupDetailsScreen.tsx"), "utf8");
+  assert.match(source, /quietLoading=\{/);
+  assert.match(source, /txLoading \|\| settlementsLoading/);
+  assert.match(source, /activityLoading/);
 });

@@ -1109,7 +1109,10 @@ function AppContent() {
     );
   }
 
-  if (loading) {
+  // One full-screen bootstrap spinner until auth is resolved and, when signed
+  // in, profile has finished loading. Avoid stacking auth then profile gates.
+  const bootstrapping = loading || (!!session && profileLoading);
+  if (bootstrapping) {
     return (
       <View
         style={[
@@ -1134,20 +1137,6 @@ function AppContent() {
         />
         <StatusBar style={theme.dark ? "light" : "dark"} />
       </>
-    );
-  }
-
-  if (profileLoading) {
-    return (
-      <View
-        style={[
-          styles.centerContainer,
-          { backgroundColor: theme.colors.background },
-        ]}
-      >
-        <ActivityIndicator size="large" />
-        <StatusBar style={theme.dark ? "light" : "dark"} />
-      </View>
     );
   }
 
