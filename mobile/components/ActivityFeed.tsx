@@ -9,7 +9,7 @@ import {
   Text,
   useTheme,
 } from "react-native-paper";
-import { ACTIVITY_FEED_UI, ACTIVITY_ICONS } from "../constants/activityFeed";
+import { ACTIVITY_ICONS } from "../constants/activityFeed";
 import { useAuth } from "../contexts/AuthContext";
 import { ActivityItem, Settlement } from "../types";
 import {
