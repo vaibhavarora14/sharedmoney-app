@@ -82,13 +82,13 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
       onSecondaryContainer: theme.colors.onPrimaryContainer,
     },
   };
-  // Equal owns selection chips. Amounts/Shares always display every row;
-  // excluded blank Amounts contribute nothing and are labeled below.
-  const effectiveIds = useMemo(
-    () => mode === "equal" ? selectedIds : participants.map((participant) => participant.id),
-    [mode, participants, selectedIds],
-  );
+  // Shared selection across Equal / Amounts / Shares — never re-expand to the full group.
+  const effectiveIds = useMemo(() => selectedIds, [selectedIds]);
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const selectedParticipants = useMemo(
+    () => participants.filter((participant) => selectedSet.has(participant.id)),
+    [participants, selectedSet],
+  );
   const hasTotal = totalAmount !== null && totalAmount > 0;
 
   const assignedAmounts = useMemo(() => {
@@ -136,7 +136,7 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
       ? "Each person's split must round to an amount greater than 0. Increase the amount or select fewer people."
       : "Each person's share must round to an amount greater than 0. Increase the amount or adjust the shares."
     : undefined;
-  const selectionError = error || (mode === "equal" && selectedIds.length === 0
+  const selectionError = error || (selectedIds.length === 0
     ? "Select at least one person"
     : roundingError);
 
@@ -189,7 +189,7 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
               />
             ))}
           </Menu>
-          {mode === "equal" && !areAllSelected && participants.length > 0 ? (
+          {!areAllSelected && participants.length > 0 ? (
             <Button mode="text" compact onPress={onToggleAll} disabled={disabled} testID="split-select-all">
               Select all
             </Button>
@@ -203,7 +203,7 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
         </Text>
       ) : null}
 
-      {mode === "equal" ? <View style={styles.chipWrap}>
+      <View style={styles.chipWrap}>
         {participants.map((participant) => {
           const selected = selectedSet.has(participant.id);
           const isFormer = participant.type === "former";
@@ -227,7 +227,7 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
             </Chip>
           );
         })}
-      </View> : null}
+      </View>
 
       {mode === "equal" && hasTotal && selectedIds.length > 0 ? (
         <View style={[styles.summary, { backgroundColor: theme.colors.surfaceVariant }]}>
@@ -248,11 +248,12 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
 
       {mode !== "equal" ? (
         <View style={styles.detailList}>
-          {participants.map((participant) => {
+          {selectedParticipants.map((participant) => {
             const name = displayName(participant);
             const personAmount = assignedAmounts[participant.id] ?? 0;
             const percent = hasTotal ? sharePercent(personAmount, totalAmount) : 0;
             const shareCount = clampShareCount(shares[participant.id] ?? 1);
+            const isExcluded = mode === "unequal" && excludedAmountIds.includes(participant.id);
 
             return (
               <View key={participant.id} style={styles.detailRow}>
@@ -261,7 +262,7 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
                     {name}
                     {participant.type === "former" ? " (Former)" : ""}
                   </Text>
-                  {mode === "unequal" && excludedAmountIds.includes(participant.id) ? (
+                  {isExcluded ? (
                     <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
                       Not included
                     </Text>
@@ -277,7 +278,7 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
                     mode="outlined"
                     dense
                     value={amounts[participant.id] ?? ""}
-                    accessibilityLabel={`Amount for ${name}, ${currency}${excludedAmountIds.includes(participant.id) ? ", Not included" : ""}`}
+                    accessibilityLabel={`Amount for ${name}, ${currency}${isExcluded ? ", Not included" : ""}`}
                     onChangeText={(text) => {
                       const next = sanitizeAmountInput(text);
                       if (next === null) return;
