@@ -7,17 +7,11 @@
       "sharedmoney",
       "owewho"
     ],
-    "version": "2.30.8",
+    "version": "2.31.4",
     "_comment_version": "This is superseded by app.config.js which reads from version.json",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#F7F9FC"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.vaibhavarora.sharemoney",
@@ -25,7 +19,7 @@
         "sharedmoney",
         "owewho"
       ],
-      "buildNumber": "109",
+      "buildNumber": "115",
       "usesAppleSignIn": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
@@ -40,8 +34,7 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#F7F9FC"
-      },
-      "edgeToEdgeEnabled": true
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png",

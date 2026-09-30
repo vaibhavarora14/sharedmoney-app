@@ -554,7 +554,7 @@ function ChoiceCard({
 const styles = StyleSheet.create({
   modalOverlay: { flex: 1, width: "100%", justifyContent: "flex-end" },
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(0, 0, 0, 0.5)",
   },
   sheet: {
