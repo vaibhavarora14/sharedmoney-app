@@ -230,6 +230,57 @@ test("shares only allocate among selected people and keep stepper limits", () =>
   assert.equal(control(editor.render(), "More shares for Alice").props.disabled, true);
 });
 
+test("Shares minus at 1 share removes the person from the split", () => {
+  const editor = createEditor({
+    mode: "shares",
+    selectedIds: ["a", "b"],
+    areAllSelected: true,
+    shares: { a: 1, b: 2 },
+  });
+  const tree = editor.render();
+  const removeAlice = byId(tree, "split-share-minus-alice@example.com");
+  assert.equal(removeAlice.props.disabled, false);
+  assert.equal(removeAlice.props.icon, "close");
+  assert.equal(removeAlice.props.accessibilityLabel, "Remove Alice from split");
+  removeAlice.props.onPress();
+  assert.deepEqual(editor.calls, [["member", "a"]]);
+});
+
+test("Shares minus when shareCount > 1 still decrements shares", () => {
+  const editor = createEditor({
+    mode: "shares",
+    selectedIds: ["a", "b"],
+    areAllSelected: true,
+    shares: { a: 1, b: 3 },
+  });
+  const tree = editor.render();
+  const fewerBob = byId(tree, "split-share-minus-bob@example.com");
+  assert.equal(fewerBob.props.icon, "minus");
+  assert.equal(fewerBob.props.accessibilityLabel, "Fewer shares for Bob");
+  assert.equal(fewerBob.props.disabled, false);
+  fewerBob.props.onPress();
+  assert.deepEqual(editor.calls, [["share", "b", 2]]);
+});
+
+test("Shares and Amounts detail rows expose a trailing remove control", () => {
+  for (const mode of ["shares", "unequal"]) {
+    const editor = createEditor({
+      mode,
+      selectedIds: ["a", "b"],
+      amounts: { a: "60", b: "40" },
+      shares: { a: 1, b: 1 },
+    });
+    const tree = editor.render();
+    const removeBob = byId(tree, "split-remove-bob@example.com");
+    assert.equal(removeBob.props.icon, "account-remove");
+    assert.equal(removeBob.props.accessibilityLabel, "Remove Bob from split");
+    removeBob.props.onPress();
+    assert.deepEqual(editor.calls.at(-1), ["member", "b"]);
+  }
+  const equal = createEditor({ mode: "equal" }).render();
+  assert.equal(nodes(equal).some((node) => node.props.testID?.startsWith("split-remove-")), false);
+});
+
 test("empty selection hides Amounts fields and shows shared guidance", () => {
   const editor = createEditor({ selectedIds: [], mode: "unequal", areAllSelected: false });
   const tree = editor.render();
