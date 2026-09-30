@@ -44,7 +44,7 @@ import {
 import { useAuth } from "../contexts/AuthContext";
 import { SCREEN_TRANSITION_MS } from "../constants/layout";
 import { useActivity } from "../hooks/useActivity";
-import { useBalances, useGroupStats } from "../hooks/useBalances";
+import { useBalances } from "../hooks/useBalances";
 import {
   useCancelInvitation,
   useGroupInvitations,
@@ -118,6 +118,8 @@ import {
   recordGroupListScrollTelemetry,
   withGroupListFetchNextPageTelemetry,
 } from "../utils/groupListPerfTelemetry";
+import { captureIdentifiedAnalyticsEvent } from "../utils/posthogAnalytics";
+import { ANALYTICS_EVENTS } from "../utils/posthogEvents";
 import { GroupStatsMode } from "./GroupStatsScreen";
 import { SettlementFormScreen } from "./SettlementFormScreen";
 
@@ -254,22 +256,20 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     data: invitations = [] as GroupInvitation[],
     isLoading: invitationsLoading,
     refetch: refetchInvites,
-  } = useGroupInvitations(initialGroup.id);
+  } = useGroupInvitations(initialGroup.id, { enabled: showMembers });
   const {
     data: participants = [],
     refetch: refetchParticipants,
   } = useParticipants(initialGroup.id);
+  // Single /balances?include_stats=true — avoids duplicate balances+stats fan-out
   const {
     data: balancesData,
+    groupStats,
     isLoading: balancesLoading,
     error: balancesError,
     refetch: refetchBalances,
-  } = useBalances(initialGroup.id);
-  const {
-    data: groupStats,
-    isLoading: groupStatsLoading,
-    refetch: refetchGroupStats,
-  } = useGroupStats(initialGroup.id);
+  } = useBalances(initialGroup.id, { includeStats: true });
+  const groupStatsLoading = balancesLoading;
   const {
     data: settlementsData,
     isLoading: settlementsLoading,
@@ -282,7 +282,9 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     hasNextPage: activityHasNextPage,
     fetchNextPage: fetchNextActivityPage,
     refetch: refetchActivity,
-  } = useActivity(initialGroup.id);
+  } = useActivity(initialGroup.id, {
+    enabled: listMode === "activity",
+  });
   const {
     report: reportContent,
     block: blockUser,
@@ -303,6 +305,34 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     clearGroupRate,
   } = useCurrencyPreferences(initialGroup.id);
 
+  // Critical-path ready telemetry (details + balances/stats)
+  const groupOpenStartedAtRef = React.useRef(Date.now());
+  const groupDetailsReadyLoggedRef = React.useRef(false);
+  useEffect(() => {
+    groupOpenStartedAtRef.current = Date.now();
+    groupDetailsReadyLoggedRef.current = false;
+  }, [initialGroup.id]);
+  useEffect(() => {
+    if (groupDetailsReadyLoggedRef.current) return;
+    if (groupLoading || balancesLoading) return;
+    if (groupError || balancesError) return;
+    groupDetailsReadyLoggedRef.current = true;
+    captureIdentifiedAnalyticsEvent(
+      session?.user?.id,
+      ANALYTICS_EVENTS.GROUP_DETAILS_READY,
+      {
+        group_id: initialGroup.id,
+        duration_ms: Date.now() - groupOpenStartedAtRef.current,
+      }
+    );
+  }, [
+    groupLoading,
+    balancesLoading,
+    groupError,
+    balancesError,
+    initialGroup.id,
+    session?.user?.id,
+  ]);
 
   // Map user_id to participant_id for involvement filtering
   const userIdToParticipantId = useMemo(() => {
@@ -447,7 +477,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     refetchTx();
     refetchActivity();
     refetchBalances();
-    refetchGroupStats();
     refetchSettlements();
   };
 
@@ -771,7 +800,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
         refetchSettlements(),
         refetchActivity(),
         refetchBalances(),
-        refetchGroupStats(),
         refetchParticipants(),
         refetchInvites(),
       ]);
@@ -782,7 +810,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     refetchActivity,
     refetchBalances,
     refetchGroup,
-    refetchGroupStats,
     refetchInvites,
     refetchParticipants,
     refetchSettlements,

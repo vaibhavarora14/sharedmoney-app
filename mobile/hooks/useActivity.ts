@@ -18,12 +18,21 @@ export async function fetchActivityPage(
   return response.json();
 }
 
-export function useActivity(groupId?: string | null) {
+export type UseActivityOptions = {
+  /** When false, skip the network until the Activity tab is focused. Default true. */
+  enabled?: boolean;
+};
+
+export function useActivity(
+  groupId?: string | null,
+  options?: UseActivityOptions
+) {
   const { user } = useAuth();
+  const enabledOption = options?.enabled;
 
   const query = useInfiniteQuery({
     ...activityQueryOptions(groupId ?? "", fetchActivityPage),
-    enabled: !!user?.id && !!groupId,
+    enabled: !!user?.id && !!groupId && enabledOption !== false,
   });
 
   const pages = query.data?.pages || [];

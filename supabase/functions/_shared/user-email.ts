@@ -1,3 +1,4 @@
+import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from './env.ts';
 import { log } from './logger.ts';
 
@@ -10,7 +11,8 @@ interface UserResponse {
 }
 
 /**
- * Fetches email for a single user ID using Supabase Admin API
+ * Fetches email for a single user ID using Supabase Admin API.
+ * Fallback when the batch RPC is unavailable.
  */
 async function fetchUserEmail(
   userId: string,
@@ -56,8 +58,8 @@ async function fetchUserEmail(
 }
 
 /**
- * Batch fetches emails for multiple user IDs
- * Optimized to reduce N+1 query problem by batching requests
+ * Batch fetches emails for multiple user IDs via get_user_emails_by_ids RPC.
+ * Falls back to per-user Admin GETs only if the RPC fails.
  */
 export async function fetchUserEmails(
   userIds: string[],
@@ -97,8 +99,43 @@ export async function fetchUserEmails(
   }
 
   try {
-    // Fetch users in parallel batches to optimize performance
-    const batchSize = 50; // Process in batches to avoid overwhelming the API
+    const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+    });
+
+    const { data, error } = await adminClient.rpc('get_user_emails_by_ids', {
+      p_ids: userIdsToFetch,
+    });
+
+    if (!error && Array.isArray(data)) {
+      for (const row of data as Array<{ id: string; email: string | null }>) {
+        if (row?.id && row?.email) {
+          emailMap.set(row.id, row.email);
+        }
+      }
+      return emailMap;
+    }
+
+    if (error) {
+      log.warn('get_user_emails_by_ids RPC failed; falling back to Admin GETs', 'user-email', {
+        error: error.message,
+        userIdCount: userIdsToFetch.length,
+      });
+    }
+  } catch (err) {
+    log.warn('get_user_emails_by_ids threw; falling back to Admin GETs', 'user-email', {
+      error: err instanceof Error ? err.message : String(err),
+      userIdCount: userIdsToFetch.length,
+    });
+  }
+
+  // Fallback: parallel Admin GETs in batches (pre-migration / RPC unavailable)
+  try {
+    const batchSize = 50;
     for (let i = 0; i < userIdsToFetch.length; i += batchSize) {
       const batch = userIdsToFetch.slice(i, i + batchSize);
       
@@ -115,7 +152,7 @@ export async function fetchUserEmails(
       });
     }
   } catch (err) {
-    log.error('Error in batchFetchUserEmails', 'user-email', {
+    log.error('Error in batchFetchUserEmails fallback', 'user-email', {
       error: err instanceof Error ? err.message : String(err),
       userIdCount: userIdsToFetch.length,
     });

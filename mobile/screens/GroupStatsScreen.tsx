@@ -15,7 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { BalancesSection } from "../components/BalancesSection";
 import { useAuth } from "../contexts/AuthContext";
 import { useCurrencyPreferences } from "../hooks/useCurrencyPreferences";
-import { useBalances, useGroupStats } from "../hooks/useBalances";
+import { useBalances } from "../hooks/useBalances";
 import { useGroupDetails } from "../hooks/useGroups";
 import { useParticipants } from "../hooks/useParticipants";
 import { useCreateSettlement } from "../hooks/useSettlements";
@@ -118,16 +118,13 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
   const { data: groupData } = useGroupDetails(groupId);
   const {
     data: balancesData,
+    groupStats,
     isLoading: balancesLoading,
     refetch: refetchBalances,
-  } = useBalances(groupId);
-  const {
-    data: groupStats,
-    isLoading: groupStatsLoading,
-    refetch: refetchGroupStats,
-  } = useGroupStats(groupId);
+  } = useBalances(groupId, { includeStats: true });
+  const groupStatsLoading = balancesLoading;
   const createSettlement = useCreateSettlement(async () => {
-    await Promise.all([refetchBalances(), refetchGroupStats()]);
+    await refetchBalances();
   });
 
   // Handle Android hardware back button
