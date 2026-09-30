@@ -32,7 +32,6 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { BottomNavBar } from "./components/BottomNavBar";
 import { ForceUpdateModal } from "./components/ForceUpdateModal";
 import { BannerNotice, InAppBanner } from "./components/InAppBanner";
-import { OtaUpdateBanner } from "./components/OtaUpdateBanner";
 import { NotificationsPanel } from "./components/NotificationsPanel";
 import { AUTH_TIMEOUTS } from "./constants/auth";
 import {
@@ -1644,7 +1643,6 @@ function AppFrame() {
       ]}
     >
       <AppContent />
-      <OtaUpdateBanner />
       <ForceUpdateOverlay />
     </View>
   );
