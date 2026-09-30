@@ -37,6 +37,9 @@ function harness(fontScale = 1) {
     '../utils/errorMessages': {},
     '../utils/logger': {},
     '../utils/notificationPermission': {},
+    '../utils/groupListSections': { partitionGroupsBySection: (groups) => ({ activeGroups: groups, archivedGroups: [], formerGroups: [] }) },
+    '../utils/sentryTelemetry': { recordSentryListCounts: () => {} },
+    '../utils/groupListPerfTelemetry': {},
     '../components/NotificationBell': { NotificationBell: 'NotificationBell' },
     '../components/GroupBalanceBadge': { GroupBalanceBadge: 'GroupBalanceBadge' },
     './CreateGroupScreen': { CreateGroupScreen: 'CreateGroupScreen' },
@@ -53,7 +56,7 @@ function harness(fontScale = 1) {
         if (!(index in state)) state[index] = initial;
         return [state[index], value => { state[index] = typeof value === 'function' ? value(state[index]) : value; }];
       }};
-      if (id === 'react-native') return { View: 'View', ScrollView: 'ScrollView', TouchableOpacity: 'TouchableOpacity', Platform: { OS: 'android' }, useWindowDimensions: () => ({ width: 393, height: 851, fontScale }), StyleSheet: { create: x => x, flatten } };
+      if (id === 'react-native') return { View: 'View', ScrollView: 'ScrollView', TouchableOpacity: 'TouchableOpacity', Platform: { OS: 'android' }, useWindowDimensions: () => ({ width: 393, height: 851, fontScale }), StyleSheet: { create: x => x, flatten, hairlineWidth: 1 } };
       if (id === 'react-native-paper') return paper;
       if (id in overrides) return overrides[id];
       if (id.startsWith('.')) {
@@ -140,7 +143,7 @@ test('bottom navigation grows with its labels and notification badge instead of 
   assert.equal(flatten(badge.props.style).minHeight, 16);
 });
 
-test('group cards retain compact normal layout and reflow enlarged title, description and status', () => {
+test('group rows retain compact normal layout and reflow enlarged title, description and status', () => {
   for (const fontScale of [1, 2]) {
     const app = harness(fontScale);
     const tree = app.render('screens/GroupsListScreen.tsx', 'GroupsListScreen');
@@ -150,13 +153,7 @@ test('group cards retain compact normal layout and reflow enlarged title, descri
     assert.equal(flatten(card.props.style).flexDirection, fontScale === 1 ? 'row' : 'column');
     assert.equal(title.props.numberOfLines, fontScale === 1 ? 1 : undefined);
     assert.equal(description.props.numberOfLines, fontScale === 1 ? 1 : undefined);
-    const avatar = nodes(card).find(n => n.type === 'Surface');
-    const style = flatten(avatar.props.style);
-    assert.equal(style.height, undefined, 'initial must not be trapped in a 48dp box');
-    assert.equal(style.width, undefined);
-    assert.equal(style.minHeight, 48);
-    assert.equal(style.minWidth, 48);
-    for (const node of [title, description, ...nodes(avatar).filter(n => n.type === 'Text')]) {
+    for (const node of [title, description]) {
       assert.notEqual(node.props.allowFontScaling, false);
       assert.equal(node.props.maxFontSizeMultiplier, undefined);
     }
@@ -173,6 +170,10 @@ test('group cards retain compact normal layout and reflow enlarged title, descri
         assert.equal(node.props.maxFontSizeMultiplier, undefined);
       }
       assert.ok(text(renderedBadge).length > 0);
+      if (balances.length === 0) {
+        assert.match(text(renderedBadge), /Even/);
+        assert.doesNotMatch(text(renderedBadge), /Settled/i);
+      }
     }
   }
 });

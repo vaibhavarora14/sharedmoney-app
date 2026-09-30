@@ -14,6 +14,9 @@ export const WEB_DESKTOP_BREAKPOINT = 1024;
 /** Auth switches to its full-width, two-pane web layout at this width. */
 export const WEB_AUTH_DESKTOP_BREAKPOINT = 960;
 
+/** Shared screen / overlay motion — calm fade, no bounce (#320). */
+export const SCREEN_TRANSITION_MS = 250;
+
 export const isDesktopWebViewport = (platform: string, width: number) =>
   platform === "web" && width >= WEB_DESKTOP_BREAKPOINT;
 

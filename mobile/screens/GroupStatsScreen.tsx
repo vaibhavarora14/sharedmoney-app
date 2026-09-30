@@ -405,7 +405,9 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
                                   userBals.map((bal, i) => (
                                       <View key={`${bal.currency}-${i}`} style={{ alignItems: "flex-end" }}>
                                         <Text variant="titleMedium" style={{ 
-                                            color: bal.amount >= 0 ? theme.colors.tertiary : theme.colors.error, 
+                                            color: bal.amount >= 0
+                                              ? theme.colors.onTertiaryContainer
+                                              : theme.colors.onSecondaryContainer, 
                                             fontWeight: 'bold' 
                                         }}>
                                             {bal.amount >= 0 ? "+" : ""}{formatCurrency(bal.amount, bal.currency)}
@@ -425,11 +427,15 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
   
                               <Text variant="labelSmall" style={{ 
                                   fontWeight: 'bold',
-                                  color: status === "overpaid" ? theme.colors.tertiary : status === "underpaid" ? theme.colors.error : theme.colors.onSurfaceVariant,
+                                  color: status === "overpaid"
+                                    ? theme.colors.onTertiaryContainer
+                                    : status === "underpaid"
+                                      ? theme.colors.onSecondaryContainer
+                                      : theme.colors.onSurfaceVariant,
                                   opacity: status === "settled" ? 0.3 : 1,
                                   marginTop: 2
                               }}>
-                                  {status === "overpaid" ? "GETS BACK" : status === "underpaid" ? "OWES" : "SETTLED"}
+                                  {status === "overpaid" ? "GETS BACK" : status === "underpaid" ? "OWES" : "EVEN"}
                               </Text>
                             </>
                         );
@@ -458,7 +464,7 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
 
             {settled.length > 0 && (
                 <View style={{ gap: 8 }}>
-                    <Text variant="labelLarge" style={{ opacity: 0.5, marginLeft: 4 }}>Settled</Text>
+                    <Text variant="labelLarge" style={{ opacity: 0.5, marginLeft: 4 }}>Even</Text>
                     {settled.map(renderEntry)}
                 </View>
             )}
@@ -568,7 +574,11 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
                 const isToMe = edge.toUser.user_id === currentUserId;
                 const isInvolved = isFromMe || isToMe;
 
-                const amountColor = isToMe ? theme.colors.tertiary : isFromMe ? theme.colors.error : theme.colors.onSurface;
+                const amountColor = isToMe
+                  ? theme.colors.onTertiaryContainer
+                  : isFromMe
+                    ? theme.colors.onSecondaryContainer
+                    : theme.colors.onSurface;
 
                 const fromName = isFromMe ? "You" : (edge.fromUser.full_name || edge.fromUser.email?.split("@")[0] || "User");
                 const toName = isToMe ? "You" : (edge.toUser.full_name || edge.toUser.email?.split("@")[0] || "User");
@@ -630,12 +640,12 @@ export const GroupStatsScreen: React.FC<GroupStatsScreenProps> = ({
                                     ) : null}
                                     <View style={[
                                         styles.actionChip, 
-                                        { backgroundColor: isToMe ? theme.colors.tertiaryContainer : isFromMe ? theme.colors.errorContainer : theme.colors.surfaceVariant } 
+                                        { backgroundColor: isToMe ? theme.colors.surfaceVariant : isFromMe ? theme.colors.surfaceVariant : theme.colors.surfaceVariant } 
                                     ]}>
                                         <Text 
                                             variant="labelSmall" 
                                             style={{ 
-                                                color: isToMe ? theme.colors.onTertiaryContainer : isFromMe ? theme.colors.onErrorContainer : theme.colors.onSurfaceVariant,
+                                                color: isToMe ? theme.colors.onTertiaryContainer : isFromMe ? theme.colors.onSecondaryContainer : theme.colors.onSurfaceVariant,
                                                 fontWeight: '700',
                                                 fontSize: 10,
                                                 letterSpacing: 0.5

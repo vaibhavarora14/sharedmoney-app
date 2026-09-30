@@ -242,7 +242,9 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
       const name = personShort(balance);
       const rowKey =
         balance.participant_id || balance.user_id || `${name}-${balance.currency}`;
-      const amountColor = isOwed ? theme.colors.tertiary : theme.colors.secondary;
+      const amountColor = isOwed
+        ? theme.colors.onTertiaryContainer
+        : theme.colors.onSecondaryContainer;
       const isConverted = !unifyEnabled || balance.currency.toUpperCase() === settlementCurrency.toUpperCase();
       const Row = onSettlePress ? TouchableRipple : View;
       return (
@@ -303,12 +305,12 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
       <Surface style={[styles.compactStat, { backgroundColor: theme.colors.surface, borderColor: theme.colors.outlineVariant }]} elevation={0}>
         <TouchableRipple onPress={onMyCostsPress} style={{ flex: 1 }}>
           <View style={styles.compactStatContent}>
-            <View style={[styles.miniIcon, { backgroundColor: theme.colors.secondaryContainer }]}>
-              <MaterialCommunityIcons name="wallet" size={18} color={theme.colors.onSecondaryContainer} />
+            <View style={[styles.miniIcon, { backgroundColor: theme.colors.surfaceVariant }]}>
+              <MaterialCommunityIcons name="wallet" size={18} color={theme.colors.onSurfaceVariant} />
             </View>
             <View style={{ flex: 1 }}>
                 <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>My spending</Text>
-                <Text variant="labelMedium" style={{ color: theme.colors.onSurface, fontWeight: '700' }}>
+                <Text variant="titleSmall" style={{ color: theme.colors.onSurface, fontWeight: '600' }}>
                     {dashboardLoading ? "..." : myCostDisplay.headline}
                 </Text>
                 {!dashboardLoading && myCostDisplay.breakdown ? (
@@ -324,12 +326,12 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
       <Surface style={[styles.compactStat, { backgroundColor: theme.colors.surface, borderColor: theme.colors.outlineVariant }]} elevation={0}>
         <TouchableRipple onPress={onTotalCostsPress} style={{ flex: 1 }}>
           <View style={styles.compactStatContent}>
-             <View style={[styles.miniIcon, { backgroundColor: theme.colors.tertiaryContainer }]}>
-              <MaterialCommunityIcons name="chart-pie" size={18} color={theme.colors.onTertiaryContainer} />
+             <View style={[styles.miniIcon, { backgroundColor: theme.colors.surfaceVariant }]}>
+              <MaterialCommunityIcons name="chart-pie" size={18} color={theme.colors.onSurfaceVariant} />
             </View>
             <View style={{ flex: 1 }}>
                 <Text variant="labelSmall" style={{ color: theme.colors.onSurfaceVariant }}>Group summary</Text>
-                <Text variant="labelMedium" style={{ color: theme.colors.onSurface, fontWeight: '700' }}>
+                <Text variant="titleSmall" style={{ color: theme.colors.onSurface, fontWeight: '600' }}>
                     {dashboardLoading ? "..." : groupCostDisplay.headline}
                 </Text>
                 {!dashboardLoading && groupCostDisplay.breakdown ? (

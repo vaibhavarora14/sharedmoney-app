@@ -9,7 +9,7 @@ import {
   Text,
   useTheme,
 } from "react-native-paper";
-import { ACTIVITY_FEED_UI, ACTIVITY_ICONS } from "../constants/activityFeed";
+import { ACTIVITY_ICONS } from "../constants/activityFeed";
 import { useAuth } from "../contexts/AuthContext";
 import { ActivityItem, Settlement } from "../types";
 import {
@@ -242,32 +242,16 @@ export const ActivityFeedRow: React.FC<ActivityFeedRowProps> = ({
 export function ActivityFeedEmptyState({ isFiltered }: { isFiltered?: boolean }) {
   const theme = useTheme();
   return (
-    <Card style={styles.emptyStateCard} mode="outlined">
-      <Card.Content style={styles.emptyStateContent}>
-        <MaterialCommunityIcons
-          name={isFiltered ? "filter-variant-remove" : ACTIVITY_ICONS.EMPTY_STATE}
-          size={ACTIVITY_FEED_UI.EMPTY_STATE_ICON_SIZE}
-          color={theme.colors.onSurfaceVariant}
-        />
-        <Text
-          variant="titleMedium"
-          style={[styles.emptyStateTitle, { color: theme.colors.onSurface }]}
-        >
-          {isFiltered ? "No matching activity" : "No Activity Yet"}
-        </Text>
-        <Text
-          variant="bodyMedium"
-          style={[
-            styles.emptyStateMessage,
-            { color: theme.colors.onSurfaceVariant },
-          ]}
-        >
-          {isFiltered
-            ? "Try adjusting your filters to see more activity."
-            : "Activity feed will show all transaction changes made in this group."}
-        </Text>
-      </Card.Content>
-    </Card>
+    <View style={styles.emptyStateContent} testID="activity-empty-state">
+      <Text
+        variant="bodyLarge"
+        style={[styles.emptyStateMessage, { color: theme.colors.onSurfaceVariant }]}
+      >
+        {isFiltered
+          ? "No matching activity for these filters."
+          : "Activity will show expense and payment changes here."}
+      </Text>
+    </View>
   );
 }
 

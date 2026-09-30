@@ -79,13 +79,14 @@ export const styles = StyleSheet.create({
   // Empty State
   emptyStateCard: {
     marginTop: SPACING.lg,
-    backgroundColor: 'transparent', // Flat
+    backgroundColor: 'transparent',
     borderWidth: 0,
     elevation: 0,
   },
   emptyStateContent: {
     alignItems: "center",
     paddingVertical: SPACING.xxl,
+    paddingHorizontal: SPACING.lg,
   },
   emptyStateIcon: {
     fontSize: 48,
@@ -98,6 +99,6 @@ export const styles = StyleSheet.create({
   },
   emptyStateMessage: {
     textAlign: "center",
-    paddingHorizontal: SPACING.lg,
+    maxWidth: 280,
   },
 });

@@ -2,12 +2,10 @@ import React from "react";
 import { Pressable, View } from "react-native";
 import {
   ActivityIndicator,
-  Avatar,
   Button,
   Icon,
   Surface,
   Text,
-  TouchableRipple,
   useTheme,
 } from "react-native-paper";
 import { useAuth } from "../contexts/AuthContext";
@@ -362,74 +360,55 @@ export const TransactionsEmptyState: React.FC<TransactionsEmptyStateProps> = ({
     emptyCopy.primaryAction === "add_people"
   ) {
     return (
-      <Surface
-        style={[
-          styles.soloEmptyCard,
-          {
-            backgroundColor: theme.colors.surface,
-            borderColor: theme.colors.outlineVariant,
-          },
-        ]}
-        elevation={0}
-        testID="transactions-empty-state"
-      >
-        <View style={styles.soloEmptyTop}>
-          <Text
-            variant="titleMedium"
-            style={{ color: theme.colors.onSurface, fontWeight: "700", marginBottom: 6 }}
+      <View style={styles.emptyState} testID="transactions-empty-state">
+        <Text
+          variant="bodyLarge"
+          style={{
+            color: theme.colors.onSurfaceVariant,
+            textAlign: "center",
+            marginBottom: 20,
+            maxWidth: 280,
+          }}
+        >
+          {emptyCopy.body}
+        </Text>
+        {canAct && emptyCopy.primaryLabel ? (
+          <Button
+            mode="contained"
+            icon="account-plus"
+            onPress={() => runEmptyAction("add_people")}
+            testID="empty-add-people"
+            style={{ borderRadius: 8 }}
           >
-            {emptyCopy.title}
-          </Text>
-          <Text
-            variant="bodyMedium"
-            style={{ color: theme.colors.onSurfaceVariant, textAlign: "center", marginBottom: 16 }}
-          >
-            {emptyCopy.body}
-          </Text>
-          <Avatar.Icon
-            size={48}
-            icon="account-outline"
-            style={{ backgroundColor: theme.colors.surfaceVariant }}
-            color={theme.colors.onSurfaceVariant}
-          />
-        </View>
-
+            {emptyCopy.primaryLabel}
+          </Button>
+        ) : null}
         {canAct && emptyCopy.secondaryLabel ? (
-          <TouchableRipple
+          <Button
+            mode="text"
             onPress={() => runEmptyAction("add_expense")}
             testID="empty-add-expense-anyway"
             accessibilityRole="button"
             accessibilityLabel={emptyCopy.secondaryLabel}
-            style={styles.soloEmptySecondary}
+            style={styles.emptySecondaryButton}
+            labelStyle={{ color: theme.colors.onSurfaceVariant }}
           >
-            <View style={styles.soloEmptySecondaryRow}>
-              <Text
-                variant="bodyMedium"
-                style={{ color: theme.colors.tertiary, fontWeight: "600" }}
-              >
-                {emptyCopy.secondaryLabel}
-              </Text>
-            </View>
-          </TouchableRipple>
+            {emptyCopy.secondaryLabel}
+          </Button>
         ) : null}
-      </Surface>
+      </View>
     );
   }
 
   return (
-    <View
-      style={[styles.emptyState, { backgroundColor: theme.colors.surfaceVariant }]}
-      testID="transactions-empty-state"
-    >
+    <View style={styles.emptyState} testID="transactions-empty-state">
       <Text
-        variant="titleMedium"
-        style={{ color: theme.colors.onSurface, marginBottom: 8, fontWeight: "700" }}
-      >
-        {emptyCopy.title}
-      </Text>
-      <Text
-        variant="bodyMedium"
-        style={{ color: theme.colors.onSurfaceVariant, textAlign: "center" }}
+        variant="bodyLarge"
+        style={{
+          color: theme.colors.onSurfaceVariant,
+          textAlign: "center",
+          maxWidth: 280,
+        }}
       >
         {emptyCopy.body}
       </Text>

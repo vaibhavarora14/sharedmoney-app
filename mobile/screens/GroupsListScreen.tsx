@@ -6,7 +6,6 @@ import {
   Appbar,
   Button,
   Icon,
-  IconButton,
   List,
   Surface,
   Text,
@@ -161,16 +160,15 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
       ? notifications.data?.unread_by_group[group.id] ?? 0
       : 0;
     const hasUnreadActivity = unreadActivityCount > 0;
-    const description = group.description || "No description";
+    const description = group.description?.trim();
 
     return (
-    <Surface
+    <View
       key={group.id}
       style={[
         styles.groupItem,
-        { backgroundColor: theme.colors.surface },
+        { borderBottomColor: theme.colors.outlineVariant },
       ]}
-      elevation={1}
     >
       <TouchableOpacity
         testID={`group-card-${group.id}`}
@@ -180,32 +178,13 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
         accessibilityLabel={`${group.name}${isNew ? ", new group" : ""}${hasUnreadActivity ? `, ${unreadActivityCount} unread ${unreadActivityCount === 1 ? "notification" : "notifications"}` : ""}${group.archived_at ? ", archived" : ""}${group.user_status === "left" ? ", former member" : ""}`}
       >
         <View style={[styles.groupMainContent, expandedText && styles.groupMainContentExpanded]}>
-          <View style={styles.groupIconContainer}>
-            <Surface
-              style={[
-                styles.groupIcon,
-                { backgroundColor: theme.colors.primaryContainer },
-              ]}
-              elevation={0}
-            >
-              <Text
-                style={{
-                  fontSize: 20,
-                  fontWeight: "bold",
-                  color: theme.colors.onPrimaryContainer,
-                }}
-              >
-                {group.name.charAt(0).toUpperCase()}
-              </Text>
-            </Surface>
-          </View>
-
           <View style={styles.groupInfo}>
             <View style={styles.groupNameRow}>
               <Text
                 variant="titleMedium"
                 style={[
                   styles.groupName,
+                  { color: theme.colors.onSurface },
                   group.user_status === 'left' && { color: theme.colors.onSurfaceVariant }
                 ]}
                 numberOfLines={expandedText ? undefined : 1}
@@ -213,20 +192,13 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                 {group.name}
               </Text>
               {isNew && (
-                <View
-                  style={[
-                    styles.newBadge,
-                    { backgroundColor: theme.colors.primary },
-                  ]}
+                <Text
+                  variant="labelSmall"
+                  style={[styles.newBadgeText, { color: theme.colors.primary }]}
                   testID={`new-badge-${group.id}`}
                 >
-                  <Text
-                    variant="labelSmall"
-                    style={[styles.newBadgeText, { color: theme.colors.onPrimary }]}
-                  >
-                    NEW
-                  </Text>
-                </View>
+                  NEW
+                </Text>
               )}
               {hasUnreadActivity ? (
                 <View
@@ -236,28 +208,30 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                 />
               ) : null}
             </View>
-            <Text
-              variant="bodySmall"
-              style={[
-                styles.groupSubtitle,
-                { color: theme.colors.onSurfaceVariant },
-              ]}
-              numberOfLines={expandedText ? undefined : 1}
-              ellipsizeMode="tail"
-            >
-              {description}
-            </Text>
+            {description ? (
+              <Text
+                variant="bodySmall"
+                style={[
+                  styles.groupSubtitle,
+                  { color: theme.colors.onSurfaceVariant },
+                ]}
+                numberOfLines={expandedText ? undefined : 1}
+                ellipsizeMode="tail"
+              >
+                {description}
+              </Text>
+            ) : null}
           </View>
         </View>
 
-        {/* Balance Badge */}
+        {/* Balance status — color + label, no badge soup */}
         <GroupBalanceBadge 
           style={expandedText ? styles.balanceBadgeExpanded : undefined}
           balanceData={balancesData?.group_balances?.find(gb => gb.group_id === group.id)} 
           currentUserId={user?.id}
         />
       </TouchableOpacity>
-    </Surface>
+    </View>
     );
   };
 
@@ -399,37 +373,25 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
             </Surface>
           ) : null}
           {!hasAnyVisibleGroups ? (
-            <View style={styles.emptyContainer}>
-              <Surface style={styles.emptySurface} elevation={0}>
-                <IconButton
-                  icon="account-group-outline"
-                  size={48}
-                  iconColor={theme.colors.primary}
-                />
-                <Text
-                  variant="titleLarge"
-                  style={{ marginBottom: 8, fontWeight: "bold" }}
-                >
-                  No groups yet
-                </Text>
-                <Text
-                  variant="bodyMedium"
-                  style={{
-                    color: theme.colors.onSurfaceVariant,
-                    textAlign: "center",
-                    marginBottom: 24,
-                  }}
-                >
-                  Create a group to start sharing expenses with friends and
-                  family.
-                </Text>
-                <Button
-                  mode="contained"
-                  onPress={() => setShowCreateGroup(true)}
-                >
-                  Create your first group
-                </Button>
-              </Surface>
+            <View style={styles.emptyContainer} testID="groups-empty-state">
+              <Text
+                variant="bodyLarge"
+                style={{
+                  color: theme.colors.onSurfaceVariant,
+                  textAlign: "center",
+                  marginBottom: 20,
+                  maxWidth: 280,
+                }}
+              >
+                Create a group to start splitting expenses.
+              </Text>
+              <Button
+                mode="contained"
+                onPress={() => setShowCreateGroup(true)}
+                testID="groups-empty-create"
+              >
+                Create group
+              </Button>
             </View>
           ) : (
             <>
@@ -490,35 +452,40 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
             </>
           )}
 
-          {/* Bottom padding for FAB */}
-          <View testID="new-group-clearance" style={{ height: newGroupHeight + 24 }} />
+          {/* Bottom padding for FAB when present */}
+          <View
+            testID="new-group-clearance"
+            style={{ height: hasAnyVisibleGroups ? newGroupHeight + 24 : 24 }}
+          />
         </ScrollView>
       )}
 
-      {/* Paper's extended FAB fixes its inner height; let the label size this action. */}
-      <View style={styles.fab} pointerEvents="box-none">
-        <Surface
-          testID="new-group-surface"
-          style={[styles.fabSurface, { backgroundColor: theme.colors.primaryContainer }]}
-          elevation={3}
-          onLayout={({ nativeEvent }) => setNewGroupHeight(nativeEvent.layout.height)}
-        >
-          <TouchableRipple
-            testID="new-group-action"
-            style={styles.fabRipple}
-            onPress={() => setShowCreateGroup(true)}
-            accessibilityRole="button"
-            accessibilityLabel="New Group"
+      {/* Single primary CTA — solid action when groups exist; empty state owns Create group alone. */}
+      {hasAnyVisibleGroups ? (
+        <View style={styles.fab} pointerEvents="box-none">
+          <Surface
+            testID="new-group-surface"
+            style={[styles.fabSurface, { backgroundColor: theme.colors.primary }]}
+            elevation={2}
+            onLayout={({ nativeEvent }) => setNewGroupHeight(nativeEvent.layout.height)}
           >
-            <View style={styles.fabContent} pointerEvents="none">
-              <Icon source="plus" size={24} color={theme.colors.onPrimaryContainer} />
-              <Text variant="labelLarge" style={[styles.fabLabel, { color: theme.colors.onPrimaryContainer }]}>
-                New Group
-              </Text>
-            </View>
-          </TouchableRipple>
-        </Surface>
-      </View>
+            <TouchableRipple
+              testID="new-group-action"
+              style={styles.fabRipple}
+              onPress={() => setShowCreateGroup(true)}
+              accessibilityRole="button"
+              accessibilityLabel="New Group"
+            >
+              <View style={styles.fabContent} pointerEvents="none">
+                <Icon source="plus" size={24} color={theme.colors.onPrimary} />
+                <Text variant="labelLarge" style={[styles.fabLabel, { color: theme.colors.onPrimary }]}>
+                  New Group
+                </Text>
+              </View>
+            </TouchableRipple>
+          </Surface>
+        </View>
+      ) : null}
 
       <CreateGroupScreen
         visible={showCreateGroup}
@@ -549,35 +516,20 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   emptyContainer: {
-    paddingVertical: 40,
+    paddingVertical: 64,
     alignItems: "center",
-  },
-  emptySurface: {
-    padding: 32,
-    alignItems: "center",
-    borderRadius: 8,
-    width: "100%",
-    backgroundColor: "transparent",
+    justifyContent: "center",
   },
   groupItem: {
-    marginBottom: 12,
-    borderRadius: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     overflow: "hidden",
   },
   groupTouchable: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 16,
-  },
-  groupIconContainer: {
-    marginRight: 16,
-  },
-  groupIcon: {
-    minWidth: 48,
-    minHeight: 48,
-    borderRadius: 8,
-    justifyContent: "center",
-    alignItems: "center",
+    paddingVertical: 18,
+    paddingHorizontal: 4,
+    gap: 12,
   },
   groupContent: {
     flex: 1,
@@ -587,26 +539,21 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     flexWrap: "wrap",
-    gap: 4,
+    gap: 6,
   },
   groupName: {
-    fontWeight: "bold",
+    fontWeight: "700",
     flexShrink: 1,
-  },
-  newBadge: {
-    borderRadius: 8,
-    paddingHorizontal: 7,
-    paddingVertical: 1,
+    letterSpacing: -0.2,
   },
   newBadgeText: {
     fontWeight: "700",
-    letterSpacing: 0.5,
+    letterSpacing: 0.4,
   },
   activityDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    marginLeft: 3,
   },
   permissionCard: {
     borderRadius: 12,
