@@ -42,6 +42,7 @@ import {
   TransactionsEmptyState,
 } from "../components/TransactionsSection";
 import { useAuth } from "../contexts/AuthContext";
+import { SCREEN_TRANSITION_MS } from "../constants/layout";
 import { useActivity } from "../hooks/useActivity";
 import { useBalances, useGroupStats } from "../hooks/useBalances";
 import {
@@ -1964,7 +1965,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           ]}
           color={theme.colors.onPrimary}
           onPress={preferAddPeopleFab ? onAddMember : onAddTransaction}
-          label={preferAddPeopleFab ? "Add people" : undefined}
+          label={preferAddPeopleFab ? "Add people" : "Add expense"}
           accessibilityLabel={preferAddPeopleFab ? "Add people" : "Add expense"}
         />
       )}
@@ -2012,7 +2013,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           setTimeout(() => {
             setSettlingBalance(null);
             setEditingSettlement(null);
-          }, 250);
+          }, SCREEN_TRANSITION_MS);
         }}
       />
 

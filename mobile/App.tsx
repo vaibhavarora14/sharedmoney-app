@@ -30,6 +30,7 @@ import {
 } from "react-native-paper";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { BottomNavBar } from "./components/BottomNavBar";
+import { ExpenseFormOverlay } from "./components/ExpenseFormOverlay";
 import { ForceUpdateModal } from "./components/ForceUpdateModal";
 import { BannerNotice, InAppBanner } from "./components/InAppBanner";
 import { NotificationsPanel } from "./components/NotificationsPanel";
@@ -88,6 +89,7 @@ import { GroupsListScreen } from "./screens/GroupsListScreen";
 import { NotificationDetailScreen } from "./screens/NotificationDetailScreen";
 import { NotificationsScreen } from "./screens/NotificationsScreen";
 import { CurrencyMergePreviewScreen } from "./screens/CurrencyMergePreviewScreen";
+import { HomePolishPreviewScreen } from "./screens/HomePolishPreviewScreen";
 import { ProfileSetupScreen } from "./screens/ProfileSetupScreen";
 import { SplitwiseImportScreen } from "./screens/SplitwiseImportScreen";
 import { TermsAcceptanceScreen } from "./screens/TermsAcceptanceScreen";
@@ -1069,6 +1071,7 @@ function AppContent() {
   const showCurrencyMergePreview = previewParam === "currency-merge";
   const showPeopleSettlementsPreview = previewParam === "people-settlements";
   const showTodayRefinedPreview = previewParam === "today-refined";
+  const showHomePolishPreview = previewParam === "home-polish";
 
   if (showCurrencyMergePreview) {
     return (
@@ -1092,6 +1095,15 @@ function AppContent() {
     return (
       <>
         <TodayRefinedPreviewScreen />
+        <StatusBar style="dark" />
+      </>
+    );
+  }
+
+  if (showHomePolishPreview) {
+    return (
+      <>
+        <HomePolishPreviewScreen />
         <StatusBar style="dark" />
       </>
     );
@@ -1405,13 +1417,7 @@ function AppContent() {
             {desktopNotificationPanel}
           </View>
           {transactionFormVisible && (
-            <View
-              style={[
-                styles.transactionFormOverlay,
-                { backgroundColor: theme.colors.background },
-              ]}
-              accessibilityViewIsModal
-            >
+            <ExpenseFormOverlay backgroundColor={theme.colors.background}>
               <TransactionFormScreen
                 transaction={editingTransaction}
                 onSave={handleSaveTransaction}
@@ -1424,7 +1430,7 @@ function AppContent() {
                 defaultSplitAmong={transactionFormDefaultSplitAmong}
                 groupId={selectedGroup.id}
               />
-            </View>
+            </ExpenseFormOverlay>
           )}
         </View>
         <StatusBar style={theme.dark ? "light" : "dark"} />

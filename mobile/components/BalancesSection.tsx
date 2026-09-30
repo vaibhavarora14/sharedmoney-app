@@ -9,7 +9,7 @@ import {
     useTheme,
 } from "react-native-paper";
 import { Balance, GroupBalance, Participant } from "../types";
-import { balancePolarityLabel } from "../utils/balanceRowLabels";
+import { balanceAmountColor, balancePolarityLabel } from "../utils/balanceRowLabels";
 import { formatCurrency, getDefaultCurrency } from "../utils/currency";
 import { formatBreakdown } from "../utils/currencyMerge";
 import { styles } from "./BalancesSection.styles";
@@ -179,10 +179,10 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
           <View
             style={[
               styles.summaryIcon,
-              { backgroundColor: theme.colors.tertiaryContainer },
+              { backgroundColor: theme.colors.surfaceVariant },
             ]}
           >
-            <Text style={{ color: theme.colors.tertiary, fontSize: 16 }}>↓$</Text>
+            <Text style={{ color: theme.colors.onSurfaceVariant, fontSize: 16 }}>↓$</Text>
           </View>
           <Text
             variant="labelSmall"
@@ -196,7 +196,7 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
           </Text>
           <Text
             variant="headlineSmall"
-            style={{ color: theme.colors.tertiary, fontWeight: "700" }}
+            style={{ color: theme.colors.onTertiaryContainer, fontWeight: "700" }}
             testID="balances-summary-owed"
           >
             {owedTotal}
@@ -212,10 +212,10 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
           <View
             style={[
               styles.summaryIcon,
-              { backgroundColor: theme.colors.secondaryContainer },
+              { backgroundColor: theme.colors.surfaceVariant },
             ]}
           >
-            <Text style={{ color: theme.colors.secondary, fontSize: 16 }}>↑$</Text>
+            <Text style={{ color: theme.colors.onSurfaceVariant, fontSize: 16 }}>↑$</Text>
           </View>
           <Text
             variant="labelSmall"
@@ -229,7 +229,7 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
           </Text>
           <Text
             variant="headlineSmall"
-            style={{ color: theme.colors.secondary, fontWeight: "700" }}
+            style={{ color: theme.colors.onSecondaryContainer, fontWeight: "700" }}
             testID="balances-summary-owe"
           >
             {oweTotal}
@@ -261,12 +261,9 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
         {personRows.map((balance, index) => {
           const name = getUserDisplayName(balance);
           const polarity = balancePolarityLabel(balance.amount);
-          const amountColor =
-            polarity === "owed"
-              ? theme.colors.tertiary
-              : polarity === "you owe"
-                ? theme.dark ? theme.colors.secondary : theme.colors.onSecondaryContainer
-                : theme.colors.onSurfaceVariant;
+          const amountColor = balanceAmountColor(balance.amount, theme.colors, {
+            dark: theme.dark,
+          });
           const key =
             balance.participant_id ||
             balance.user_id ||

@@ -6,6 +6,7 @@ import {
   useCurrencyPreferences,
 } from '../hooks/useCurrencyPreferences';
 import { Balance } from '../types';
+import { balanceAmountColor, GROUP_LIST_EVEN_LABEL } from '../utils/balanceRowLabels';
 import { formatCurrency } from '../utils/currency';
 import { formatUnifiedHeadline, unifyBalances } from '../utils/currencyMerge';
 import { createPreviewRateBook } from '../utils/previewRates';
@@ -37,13 +38,21 @@ export const GroupBalanceBadge: React.FC<GroupBalanceBadgeProps> = ({
     ? createPreviewRateBook(previewSettings.customRates)
     : storedRateBook;
 
+  const renderEven = () => (
+    <View
+      style={[styles.balanceStatus, style]}
+      testID="group-balance-even"
+      accessibilityLabel={GROUP_LIST_EVEN_LABEL}
+    >
+      <Text style={[styles.balanceText, { color: theme.colors.onSurfaceVariant }]}>
+        {GROUP_LIST_EVEN_LABEL}
+      </Text>
+    </View>
+  );
+
   // Robust null checks
   if (!balanceData || !balanceData.balances || balanceData.balances.length === 0) {
-    return (
-      <View style={[styles.balanceBadge, { backgroundColor: theme.colors.surfaceVariant }, style]}>
-        <Text style={[styles.balanceText, { color: theme.colors.onSurfaceVariant }]}>Settled</Text>
-      </View>
-    );
+    return renderEven();
   }
 
   // Filter balances
@@ -58,11 +67,7 @@ export const GroupBalanceBadge: React.FC<GroupBalanceBadgeProps> = ({
   const nonZeroBalances = displayBalances.filter(b => Math.abs(b.amount) >= 0.01);
 
   if (nonZeroBalances.length === 0) {
-    return (
-      <View style={[styles.balanceBadge, { backgroundColor: theme.colors.surfaceVariant }, style]}>
-        <Text style={[styles.balanceText, { color: theme.colors.onSurfaceVariant }]}>Settled</Text>
-      </View>
-    );
+    return renderEven();
   }
 
   // Sum balances by currency (important if user has multiple residues, e.g. from invited state vs user state)
@@ -76,33 +81,26 @@ export const GroupBalanceBadge: React.FC<GroupBalanceBadgeProps> = ({
     .filter(b => Math.abs(b.amount) >= 0.01);
 
   if (netBalances.length === 0) {
-    return (
-      <View style={[styles.balanceBadge, { backgroundColor: theme.colors.surfaceVariant }, style]}>
-        <Text style={[styles.balanceText, { color: theme.colors.onSurfaceVariant }]}>Settled</Text>
-      </View>
-    );
+    return renderEven();
   }
 
   if (settings?.enabled && settings.settlementCurrency) {
     const unified = unifyBalances(nonZeroBalances, settings.settlementCurrency, rateBook);
     const leftover = unified.leftover.filter((part) => Math.abs(part.original) >= 0.01);
     if (Math.abs(unified.amount) < 0.01 && leftover.length === 0) {
-      return (
-        <View style={[styles.balanceBadge, { backgroundColor: theme.colors.surfaceVariant }, style]}>
-          <Text style={[styles.balanceText, { color: theme.colors.onSurfaceVariant }]}>Settled</Text>
-        </View>
-      );
+      return renderEven();
     }
 
-    const isPositive = Math.abs(unified.amount) >= 0.01
-      ? unified.amount > 0
-      : leftover.every((part) => part.original > 0);
-    const badgeColor = isPositive ? theme.colors.primaryContainer : theme.colors.errorContainer;
-    const textColor = isPositive ? theme.colors.onPrimaryContainer : theme.colors.onErrorContainer;
+    const signedAmount = Math.abs(unified.amount) >= 0.01
+      ? unified.amount
+      : leftover.every((part) => part.original > 0)
+        ? 1
+        : -1;
+    const textColor = balanceAmountColor(signedAmount, theme.colors, { dark: theme.dark });
     return (
-      <View style={[styles.balanceBadge, { backgroundColor: badgeColor }, style]}>
+      <View style={[styles.balanceStatus, style]} testID="group-balance-amount">
         <Text style={[styles.balanceText, { color: textColor, fontWeight: '700' }]}>
-          {isPositive ? '+' : ''}
+          {signedAmount > 0 ? '+' : ''}
           {formatUnifiedHeadline(unified)}
         </Text>
       </View>
@@ -114,15 +112,12 @@ export const GroupBalanceBadge: React.FC<GroupBalanceBadgeProps> = ({
 
   const mainBalance = netBalances[0];
   const isMultiCurrency = netBalances.length > 1;
-  const isPositive = mainBalance.amount > 0;
-  
-  const badgeColor = isPositive ? theme.colors.primaryContainer : theme.colors.errorContainer;
-  const textColor = isPositive ? theme.colors.onPrimaryContainer : theme.colors.onErrorContainer;
+  const textColor = balanceAmountColor(mainBalance.amount, theme.colors, { dark: theme.dark });
 
   return (
-    <View style={[styles.balanceBadge, { backgroundColor: badgeColor }, style]}>
+    <View style={[styles.balanceStatus, style]} testID="group-balance-amount">
       <Text style={[styles.balanceText, { color: textColor, fontWeight: '700' }]}>
-        {isPositive ? '+' : ''}
+        {mainBalance.amount > 0 ? '+' : ''}
         {formatCurrency(mainBalance.amount, mainBalance.currency)}
         {isMultiCurrency ? ' (+)' : ''}
       </Text>
@@ -131,16 +126,16 @@ export const GroupBalanceBadge: React.FC<GroupBalanceBadgeProps> = ({
 };
 
 const styles = StyleSheet.create({
-  balanceBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    minWidth: 60,
-    alignItems: 'center',
+  balanceStatus: {
+    paddingHorizontal: 2,
+    paddingVertical: 2,
+    minWidth: 48,
+    alignItems: 'flex-end',
     justifyContent: 'center',
   },
   balanceText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '500',
+    letterSpacing: -0.1,
   },
 });

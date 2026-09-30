@@ -6,10 +6,10 @@ export const styles = StyleSheet.create({
     paddingTop: 8,
   },
   list: {
-    gap: 8, // Spacing between items
+    gap: 4, // Tighter rows; whitespace comes from row padding, not card chrome
   },
   card: {
-    borderRadius: 8,
+    borderRadius: 0,
     backgroundColor: 'transparent',
     overflow: 'hidden',
   },
@@ -20,7 +20,7 @@ export const styles = StyleSheet.create({
   },
   pressable: {
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 14,
   },
   row: {
     flexDirection: "row",
@@ -85,17 +85,18 @@ export const styles = StyleSheet.create({
     textTransform: "uppercase",
     flexShrink: 0,
   },
-  // Empty State
+  // Empty State — alone-group discipline: one sentence + one primary CTA
   emptyState: {
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 48,
+    paddingVertical: 40,
     paddingHorizontal: 24,
-    borderRadius: 24,
-    marginTop: 16,
+    borderRadius: 0,
+    marginTop: 8,
+    backgroundColor: "transparent",
   },
   emptyActions: {
-    marginTop: 20,
+    marginTop: 16,
     alignItems: "center",
     gap: 4,
     width: "100%",
