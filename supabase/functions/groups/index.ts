@@ -147,24 +147,26 @@ Deno.serve(async (req: Request) => {
         return createErrorResponse(400, 'Invalid group_id format. Expected UUID.', 'VALIDATION_ERROR', undefined, req);
       }
 
-      // Get group details
-      const { data: group, error: groupError } = await supabase
-        .from('groups')
-        .select('id, name, description, created_by, created_at, updated_at, settlement_currency, unify_balances')
-        .eq('id', groupId)
-        .single();
+      // Fetch group + members in parallel (members query is cheap even if group 404s)
+      const [groupResult, membersResult] = await Promise.all([
+        supabase
+          .from('groups')
+          .select('id, name, description, created_by, created_at, updated_at, settlement_currency, unify_balances')
+          .eq('id', groupId)
+          .single(),
+        supabase
+          .from('group_members')
+          .select('id, group_id, user_id, role, joined_at, status, left_at, archived_at, hidden_at')
+          .eq('group_id', groupId)
+          .order('joined_at', { ascending: true }),
+      ]);
 
+      const { data: group, error: groupError } = groupResult;
       if (groupError || !group) {
         return createErrorResponse(404, 'Group not found', 'NOT_FOUND', undefined, req);
       }
 
-      // Get group members
-      const { data: members, error: membersError } = await supabase
-        .from('group_members')
-        .select('id, group_id, user_id, role, joined_at, status, left_at, archived_at, hidden_at')
-        .eq('group_id', groupId)
-        .order('joined_at', { ascending: true });
-
+      const { data: members, error: membersError } = membersResult;
       if (membersError) {
         return handleError(membersError, 'fetching group members', req);
       }

@@ -87,14 +87,23 @@ export async function fetchGroupInvitations(
   return response.json();
 }
 
-export function useGroupInvitations(groupId: string | null) {
+export type UseGroupInvitationsOptions = {
+  /** When false, defer until the People/members surface is open. Default true. */
+  enabled?: boolean;
+};
+
+export function useGroupInvitations(
+  groupId: string | null,
+  options?: UseGroupInvitationsOptions
+) {
   const { user } = useAuth();
+  const enabledOption = options?.enabled;
 
   const query = useQuery<GroupInvitation[], Error>({
     // Guarded by `enabled`, so groupId is always non-null inside queryFn
     queryKey: groupId ? queryKeys.invitations(groupId) : queryKeys.invitations(""),
     queryFn: () => fetchGroupInvitations(groupId as string),
-    enabled: !!user?.id && !!groupId,
+    enabled: !!user?.id && !!groupId && enabledOption !== false,
     // Use placeholderData so initial load still reports isLoading=true
     placeholderData: [],
     staleTime: 60_000,
