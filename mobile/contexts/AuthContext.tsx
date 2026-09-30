@@ -318,7 +318,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   useEffect(() => {
     let mounted = true;
     let resolved = false;
-    let timeoutId: NodeJS.Timeout | null = null;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
     const oauthTokens = getWebOAuthTokensFromCurrentUrl();
     const initialSessionPromise = oauthTokens
       ? supabase.auth.setSession(oauthTokens).finally(clearWebOAuthHash)

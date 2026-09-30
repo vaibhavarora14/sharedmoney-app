@@ -270,7 +270,7 @@ function AppContent() {
   const prevSessionRef = React.useRef<Session | null>(null);
   const groupsListRefetchRef = React.useRef<(() => void) | null>(null);
   const lastLoggedStateRef = React.useRef<string | null>(null);
-  const stuckTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+  const stuckTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const initialUrlHandledRef = React.useRef(false);
   const initialNotificationHandledRef = React.useRef(false);
   const pushRegistrationSyncedUserRef = React.useRef<string | null>(null);
