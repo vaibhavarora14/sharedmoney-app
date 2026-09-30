@@ -19,6 +19,7 @@ import {
   planPersonRemoval,
 } from "../_shared/remove-person.ts";
 import {
+  EMAIL_FORMAT_ERROR,
   isValidEmail,
   isValidUUID,
   validateBodySize,
@@ -545,7 +546,7 @@ Deno.serve(async (req: Request) => {
         if (email && !isValidEmail(email)) {
           return createErrorResponse(
             400,
-            "Invalid email address format",
+            EMAIL_FORMAT_ERROR,
             "VALIDATION_ERROR",
             undefined,
             req,
@@ -827,7 +828,7 @@ Deno.serve(async (req: Request) => {
         if (email && !isValidEmail(email)) {
           return createErrorResponse(
             400,
-            "Invalid email address format",
+            EMAIL_FORMAT_ERROR,
             "VALIDATION_ERROR",
             undefined,
             req,
@@ -893,10 +894,20 @@ Deno.serve(async (req: Request) => {
         );
         const email = emailFromBody || participant.email;
 
-        if (!email || !isValidEmail(email)) {
+        if (!email) {
           return createErrorResponse(
             400,
-            "A valid email address is required",
+            "Add an email address before inviting.",
+            "VALIDATION_ERROR",
+            undefined,
+            req,
+          );
+        }
+
+        if (!isValidEmail(email)) {
+          return createErrorResponse(
+            400,
+            EMAIL_FORMAT_ERROR,
             "VALIDATION_ERROR",
             undefined,
             req,
