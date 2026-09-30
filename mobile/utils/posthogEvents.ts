@@ -24,7 +24,8 @@
  * Supporting: `mobile_app_opened`, `mobile_screen_viewed`, `group_archived`,
  * `group_unarchived`, `group_hidden_from_lists`, `group_updated`,
  * `group_list_scroll` (sampled FlatList perf), `group_list_page_loaded`,
- * `group_details_ready` (open latency; props: group_id, duration_ms).
+ * `group_details_ready` (open latency; props: group_id, duration_ms),
+ * `groups_home_loaded` (home list ready; props: duration_ms, group_count).
  */
 export const ANALYTICS_EVENTS = {
   AUTH_SUCCEEDED: "auth_succeeded",
@@ -47,6 +48,8 @@ export const ANALYTICS_EVENTS = {
   GROUP_LIST_PAGE_LOADED: "group_list_page_loaded",
   /** Group details critical path ready (details + balances/stats). */
   GROUP_DETAILS_READY: "group_details_ready",
+  /** Groups home list ready (after cold/warm paint). */
+  GROUPS_HOME_LOADED: "groups_home_loaded",
 } as const;
 
 export type AnalyticsEventName =

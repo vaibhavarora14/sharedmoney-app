@@ -7,7 +7,7 @@ import { queryKeys } from "./queryKeys";
 export type UseBalancesOptions = {
   /** When true and groupId is set, fetch include_stats=true (single round-trip). */
   includeStats?: boolean;
-  /** Defaults to true when user is signed in. */
+  /** Defaults to true when the user is signed in. */
   enabled?: boolean;
 };
 
