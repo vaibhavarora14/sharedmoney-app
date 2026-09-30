@@ -20,13 +20,23 @@ export type PersonSettlementView = PersonSettlement & {
   headline: PersonSettlementHeadline;
 };
 
-export function usePeopleSettlements() {
+export type UsePeopleSettlementsOptions = {
+  /**
+   * When false, skip the heavy global /balances fetch (and rate fan-out).
+   * Home defers this until after first paint; Settlements tab enables immediately.
+   */
+  enabled?: boolean;
+};
+
+export function usePeopleSettlements(options?: UsePeopleSettlementsOptions) {
   const { user } = useAuth();
+  const enabled = options?.enabled !== false;
   const groupsQuery = useGroups();
-  const balancesQuery = useBalances();
+  const balancesQuery = useBalances(undefined, { enabled });
   const currency = useCurrencyPreferences();
 
   const unifyGroupIds = useMemo(() => {
+    if (!enabled) return [] as string[];
     const fallback = currency.preferredCurrency || getDefaultCurrency();
     const groupById = new Map(groupsQuery.data.map((group) => [group.id, group]));
     const ids: string[] = [];
@@ -38,6 +48,7 @@ export function usePeopleSettlements() {
     }
     return ids;
   }, [
+    enabled,
     balancesQuery.data.group_balances,
     groupsQuery.data,
     currency.prefs.groups,
@@ -48,7 +59,7 @@ export function usePeopleSettlements() {
     queries: unifyGroupIds.map((groupId) => ({
       queryKey: queryKeys.groupRates(groupId),
       queryFn: () => fetchRates(groupId),
-      enabled: !!user?.id,
+      enabled: !!user?.id && enabled,
       staleTime: 5 * 60 * 1000,
     })),
   });
@@ -87,7 +98,7 @@ export function usePeopleSettlements() {
   });
 
   const people = useMemo(() => {
-    if (!user?.id) return [] as PersonSettlementView[];
+    if (!enabled || !user?.id) return [] as PersonSettlementView[];
     const contexts = groupContextsFromBalances({
       groupBalances: balancesQuery.data.group_balances,
       groups: groupsQuery.data,
@@ -106,6 +117,7 @@ export function usePeopleSettlements() {
       ),
     }));
   }, [
+    enabled,
     user?.id,
     balancesQuery.data.group_balances,
     groupsQuery.data,
@@ -122,12 +134,13 @@ export function usePeopleSettlements() {
     summary,
     preferredCurrency: currency.preferredCurrency,
     isLoading: (
+      enabled &&
       ((groupsQuery.isLoading || balancesQuery.isLoading || ratesPending)
         && people.length === 0)
     ),
-    isFetching: groupsQuery.isFetching
+    isFetching: enabled && (groupsQuery.isFetching
       || balancesQuery.isFetching
-      || groupRateQueries.some((query) => query.isFetching),
+      || groupRateQueries.some((query) => query.isFetching)),
     error: groupsQuery.error || balancesQuery.error,
     refetch: async () => {
       await Promise.all([

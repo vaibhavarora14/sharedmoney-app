@@ -14,6 +14,7 @@ import React, { useEffect, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import {
   AppState,
+  InteractionManager,
   Platform,
   LogBox,
   Text as RNText,
@@ -65,7 +66,7 @@ import {
   useCreateGroup,
   useRemoveMember,
 } from "./hooks/useGroupMutations";
-import { fetchGroupDetails, useGroupDetails } from "./hooks/useGroups";
+import { fetchGroupDetails, useGroupDetails, useGroups } from "./hooks/useGroups";
 import { useProfile } from "./hooks/useProfile";
 import {
   fetchLatestGroupExpenseSplitAmong,
@@ -218,7 +219,6 @@ function AppContent() {
     error: profileError,
     refetch: refetchProfile,
   } = useProfile();
-  const peopleSettlements = usePeopleSettlements();
   const notificationInbox = useNotifications();
   const notificationFeatureResolved =
     notificationInbox.data?.feature_enabled !== undefined;
@@ -230,6 +230,24 @@ function AppContent() {
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
   const [showAddMember, setShowAddMember] = useState(false);
   const [currentRoute, setCurrentRoute] = useState<string>("groups");
+  /** Defer global /balances until groups list can paint first. */
+  const { data: homeGroups, isLoading: homeGroupsLoading } = useGroups();
+  const [homeBalancesEnabled, setHomeBalancesEnabled] = useState(false);
+  useEffect(() => {
+    if (!session?.user?.id) {
+      setHomeBalancesEnabled(false);
+      return;
+    }
+    // Wait for groups request to finish (or warm cache) before all-balances.
+    if (homeGroupsLoading && homeGroups.length === 0) return;
+    const task = InteractionManager.runAfterInteractions(() => {
+      setHomeBalancesEnabled(true);
+    });
+    return () => task.cancel();
+  }, [session?.user?.id, homeGroupsLoading, homeGroups.length]);
+  const peopleSettlements = usePeopleSettlements({
+    enabled: homeBalancesEnabled || currentRoute === "settlements",
+  });
   const [selectedNotificationId, setSelectedNotificationId] = useState<string | null>(null);
   const [groupInitialListMode, setGroupInitialListMode] = useState<"transactions" | "activity">("transactions");
   const [highlightedTransactionId, setHighlightedTransactionId] = useState<number | null>(null);

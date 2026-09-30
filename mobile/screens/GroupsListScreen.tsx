@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import React, { useEffect, useState } from "react";
-import { Platform, ScrollView, StyleSheet, TouchableOpacity, useWindowDimensions, View } from "react-native";
+import { InteractionManager, Platform, ScrollView, StyleSheet, TouchableOpacity, useWindowDimensions, View } from "react-native";
 import {
   ActivityIndicator,
   Appbar,
@@ -32,6 +32,8 @@ import {
 import { isTransactionNotificationsEnabled } from "../utils/featureFlags";
 import { shouldShowNotificationPrimer } from "../utils/notificationPermission";
 import { logError } from "../utils/logger";
+import { captureIdentifiedAnalyticsEvent } from "../utils/posthogAnalytics";
+import { ANALYTICS_EVENTS } from "../utils/posthogEvents";
 import { getSeenGroupIds, markGroupSeen } from "../utils/seenGroups";
 import { partitionGroupsBySection } from "../utils/groupListSections";
 import { recordSentryListCounts } from "../utils/sentryTelemetry";
@@ -61,6 +63,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
   const [formerGroupsExpanded, setFormerGroupsExpanded] = useState<boolean>(false);
   const [archivedGroupsExpanded, setArchivedGroupsExpanded] = useState<boolean>(false);
   const [seenGroupIds, setSeenGroupIds] = useState<Set<string> | null>(null);
+  const [balancesEnabled, setBalancesEnabled] = useState(false);
   const theme = useTheme();
   const { fontScale } = useWindowDimensions();
   const expandedText = fontScale > 1;
@@ -73,10 +76,39 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
   const [pushError, setPushError] = useState<string | null>(null);
   const [enablingPush, setEnablingPush] = useState(false);
   const { data: groups, isLoading: loading, error, refetch } = useGroups();
+  // Share App's deferred all-balances enablement: wait for list paint, then badges.
+  useEffect(() => {
+    if (loading && groups.length === 0) return;
+    const task = InteractionManager.runAfterInteractions(() => {
+      setBalancesEnabled(true);
+    });
+    return () => task.cancel();
+  }, [loading, groups.length]);
   const {
     data: balancesData,
     refetch: refetchBalances,
-  } = useBalances();
+  } = useBalances(undefined, { enabled: balancesEnabled });
+
+  const homeLoadedLoggedRef = React.useRef(false);
+  const homeStartedAtRef = React.useRef(Date.now());
+  useEffect(() => {
+    homeStartedAtRef.current = Date.now();
+    homeLoadedLoggedRef.current = false;
+  }, [user?.id]);
+  useEffect(() => {
+    if (homeLoadedLoggedRef.current) return;
+    if (loading && groups.length === 0) return;
+    if (error) return;
+    homeLoadedLoggedRef.current = true;
+    captureIdentifiedAnalyticsEvent(
+      user?.id,
+      ANALYTICS_EVENTS.GROUPS_HOME_LOADED,
+      {
+        duration_ms: Date.now() - homeStartedAtRef.current,
+        group_count: groups.length,
+      }
+    );
+  }, [loading, groups.length, error, user?.id]);
   // Load which groups the user has already opened (for the NEW badge).
   // First run baselines all current groups so existing members see no badges
   // (an empty list stores an empty baseline, so a user's first joined group

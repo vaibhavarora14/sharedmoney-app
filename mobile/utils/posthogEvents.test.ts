@@ -28,3 +28,7 @@ Deno.test("group list perf event names are stable and PII-safe keys", () => {
 Deno.test("group details ready latency event name is stable", () => {
   assertEquals(ANALYTICS_EVENTS.GROUP_DETAILS_READY, "group_details_ready");
 });
+
+Deno.test("groups home loaded latency event name is stable", () => {
+  assertEquals(ANALYTICS_EVENTS.GROUPS_HOME_LOADED, "groups_home_loaded");
+});
