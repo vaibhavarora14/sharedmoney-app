@@ -455,20 +455,24 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
               {/* Active Groups */}
               {activeGroups.map((group) => renderGroupItem(group))}
 
-              {/* Archived Groups */}
+              {/* Archived Groups — section header hierarchy aligned with Home polish (#347) */}
               {archivedGroups.length > 0 && (
                 <List.Accordion
                   title={`Archived (${archivedGroups.length})`}
-                  titleStyle={styles.accordionTitle}
+                  titleStyle={[
+                    styles.sectionAccordionTitle,
+                    { color: theme.colors.onSurfaceVariant },
+                  ]}
                   style={[
-                    styles.accordion,
-                    { backgroundColor: theme.colors.surface },
+                    styles.sectionAccordion,
+                    { backgroundColor: theme.colors.background },
                   ]}
                   left={(props) => (
                     <List.Icon
                       {...props}
                       icon="archive-outline"
-                      style={styles.accordionLeftIcon}
+                      color={theme.colors.onSurfaceVariant}
+                      style={styles.sectionAccordionIcon}
                     />
                   )}
                   expanded={archivedGroupsExpanded}
@@ -481,20 +485,24 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                 </List.Accordion>
               )}
 
-              {/* Former Groups in Accordion */}
+              {/* Former Groups — quieter section label vs active titleMedium/700 rows */}
               {formerGroups.length > 0 && (
                 <List.Accordion
-                  title={`Former Groups (${formerGroups.length})`}
-                  titleStyle={styles.accordionTitle}
+                  title={`Former (${formerGroups.length})`}
+                  titleStyle={[
+                    styles.sectionAccordionTitle,
+                    { color: theme.colors.onSurfaceVariant },
+                  ]}
                   style={[
-                    styles.accordion,
-                    { backgroundColor: theme.colors.surface },
+                    styles.sectionAccordion,
+                    { backgroundColor: theme.colors.background },
                   ]}
                   left={(props) => (
                     <List.Icon
                       {...props}
                       icon="history"
-                      style={styles.accordionLeftIcon}
+                      color={theme.colors.onSurfaceVariant}
+                      style={styles.sectionAccordionIcon}
                     />
                   )}
                   expanded={formerGroupsExpanded}
@@ -711,17 +719,21 @@ const styles = StyleSheet.create({
     marginTop: 12,
     maxWidth: "100%",
   },
-  accordion: {
-    marginTop: 12,
-    marginBottom: 12,
-    borderRadius: 8,
-    overflow: "hidden",
+  // Secondary Home sections (Former / Archived): quieter than active group
+  // titleMedium/700 rows from #347 — muted label type, no surface card, more top gap.
+  sectionAccordion: {
+    marginTop: 20,
+    marginBottom: 4,
     paddingHorizontal: 0,
+    overflow: "hidden",
   },
-  accordionTitle: {
+  sectionAccordionTitle: {
+    fontSize: 13,
+    lineHeight: 18,
     fontWeight: "600",
+    letterSpacing: 0.2,
   },
-  accordionLeftIcon: {
+  sectionAccordionIcon: {
     marginLeft: 0,
     marginRight: 0,
   },
