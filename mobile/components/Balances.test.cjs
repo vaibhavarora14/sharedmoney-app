@@ -265,14 +265,15 @@ test("dashboard loading shows updating copy without settlement rows", () => {
   assert.doesNotMatch(text(tree), /Alice owes you|You owe Alice|\$50/);
 });
 
-test("dashboard quietLoading suppresses Updating copy while shell loader is elsewhere", () => {
+test("dashboard quietLoading hides settlement + insight chrome while shell loader is elsewhere", () => {
   const tree = dashboard([balance("me", 50), balance("Alice", -50)], {
     loading: true,
     quietLoading: true,
   });
   assert.equal(settlementRows(tree).length, 0);
+  assert.equal(nodes(tree).find(n => n.props.testID === "group-settlement-rows"), undefined);
   assert.doesNotMatch(text(tree), /Updating balances\.\.\./);
-  assert.doesNotMatch(text(tree), /Alice owes you|You owe Alice|\$50/);
+  assert.doesNotMatch(text(tree), /Alice owes you|You owe Alice|\$50|My spending|Group summary/);
 });
 
 test("balance summary adds only matching currencies on both sides", () => {
@@ -436,9 +437,10 @@ test("GroupDetailsScreen wires balanceError and gates onSettlePress for active m
   assert.match(source, /if\s*\(\s*!isActiveMember\s*\|\|\s*balancesError\s*\)\s*return/);
 });
 
-test("GroupDetailsScreen quiets dashboard Updating copy while list shell is loading", () => {
+test("GroupDetailsScreen quiets dashboard while group-open shell spinner is up", () => {
   const source = readFileSync(path.join(__dirname, "../screens/GroupDetailsScreen.tsx"), "utf8");
-  assert.match(source, /quietLoading=\{/);
-  assert.match(source, /txLoading \|\| settlementsLoading/);
-  assert.match(source, /activityLoading/);
+  assert.match(source, /quietLoading=\{groupOpenShellLoading\}/);
+  assert.match(source, /groupOpenShellLoading/);
+  assert.match(source, /listDataLoading/);
+  assert.match(source, /balancesLoading && listContentEmpty/);
 });

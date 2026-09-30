@@ -1208,6 +1208,16 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     !settlementsLoading &&
     transactions.length === 0 &&
     settlements.length === 0;
+  // Single-loader rule: while the list shell spinner is up (incl. balances on an
+  // empty list), GroupDashboard hides settlement/insight chrome so they don't stack.
+  const listDataLoading =
+    listMode === "transactions" ? txLoading || settlementsLoading : activityLoading;
+  const listContentEmpty =
+    listMode === "transactions"
+      ? transactions.length === 0 && settlements.length === 0
+      : (activityData?.activities?.length ?? 0) === 0;
+  const groupOpenShellLoading =
+    listDataLoading || (balancesLoading && listContentEmpty);
   const preferAddPeopleFab = shouldPreferAddPeopleFab(
     activeMemberCount,
     ledgerIsEmpty,
@@ -1641,11 +1651,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                 currentUserParticipantId={participants.find((p) => p.user_id === session?.user?.id)?.id}
                 loading={balancesLoading}
                 statsLoading={groupStatsLoading}
-                quietLoading={
-                  listMode === "transactions"
-                    ? txLoading || settlementsLoading
-                    : activityLoading
-                }
+                quietLoading={groupOpenShellLoading}
                 defaultCurrency={getDefaultCurrency()}
                 activeMemberCount={activeMemberCount}
                 balanceError={!!balancesError}
@@ -1949,7 +1955,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           }}
           ListEmptyComponent={
             listMode === "transactions" ? (
-              txLoading || settlementsLoading ? (
+              groupOpenShellLoading ? (
                 <ActivityIndicator size="small" style={{ marginVertical: 24 }} />
               ) : (
                 <View style={{ paddingHorizontal: 16 }}>
@@ -1962,7 +1968,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                   />
                 </View>
               )
-            ) : activityLoading ? (
+            ) : groupOpenShellLoading ? (
               <ActivityIndicator size="small" style={{ marginVertical: 16 }} />
             ) : (
               <View style={{ paddingHorizontal: 16 }}>
