@@ -33,6 +33,7 @@ import {
   existingPersonLabel,
   filterAndSortExistingPeople,
 } from "../utils/peoplePicker";
+import { getOptionalEmailFormatError } from "../utils/emailValidation";
 import { captureIdentifiedAnalyticsEvent } from "../utils/posthogAnalytics";
 import { ANALYTICS_EVENTS } from "../utils/posthogEvents";
 
@@ -61,6 +62,7 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
   const [mode, setMode] = useState<SheetMode>("chooser");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
+  const [emailError, setEmailError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
@@ -95,6 +97,7 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
     setMode("chooser");
     setFullName("");
     setEmail("");
+    setEmailError(null);
     setSearch("");
     setInviteLink(null);
     onDismiss();
@@ -178,10 +181,12 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
       Alert.alert("Error", "Please enter a name");
       return;
     }
-    if (trimmedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
-      Alert.alert("Error", "Please enter a valid email address");
+    const formatError = getOptionalEmailFormatError(trimmedEmail);
+    if (formatError) {
+      setEmailError(formatError);
       return;
     }
+    setEmailError(null);
 
     setLoading(true);
     try {
@@ -469,17 +474,39 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
                         <TextInput
                           label="Email (optional)"
                           value={email}
-                          onChangeText={setEmail}
+                          onChangeText={(value) => {
+                            setEmail(value);
+                            if (emailError) setEmailError(null);
+                          }}
                           mode="outlined"
                           keyboardType="email-address"
                           autoCapitalize="none"
                           autoComplete="email"
                           disabled={loading}
+                          error={!!emailError}
                           style={styles.input}
                           left={<TextInput.Icon icon="email" />}
                           placeholder="ayaan@example.com"
                           testID="person-email-input"
+                          accessibilityHint={emailError || undefined}
                         />
+                        {emailError
+                          ? (
+                            <Text
+                              variant="bodySmall"
+                              accessibilityLiveRegion="polite"
+                              style={{
+                                color: theme.colors.error,
+                                marginTop: -8,
+                                marginBottom: 12,
+                                marginLeft: 12,
+                              }}
+                              testID="person-email-error"
+                            >
+                              {emailError}
+                            </Text>
+                          )
+                          : null}
                         <Button
                           mode="contained"
                           onPress={handleAdd}

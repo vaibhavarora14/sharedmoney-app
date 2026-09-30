@@ -41,6 +41,18 @@ export function getUserFriendlyErrorMessage(error: unknown): string {
     return "Too many requests. Please wait a moment and try again.";
   }
 
+  // Prefer actionable email format copy over the generic invalid mapper.
+  if (
+    message.includes("email") &&
+    (message.includes("valid") ||
+      message.includes("format") ||
+      message.includes("name@example.com"))
+  ) {
+    return error.message.includes("name@example.com")
+      ? error.message
+      : "Enter a valid email like name@example.com.";
+  }
+
   // Validation errors
   if (message.includes("invalid") || message.includes("validation")) {
     return "Invalid input. Please check your data and try again.";

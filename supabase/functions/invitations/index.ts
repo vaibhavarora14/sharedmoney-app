@@ -4,7 +4,7 @@ import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
 import { parsePath } from '../_shared/path-parser.ts';
 import { createEmptyResponse, createSuccessResponse } from '../_shared/response.ts';
 import { findUserIdByEmail } from '../_shared/user-lookup.ts';
-import { isValidEmail, isValidUUID, validateBodySize } from '../_shared/validation.ts';
+import { EMAIL_FORMAT_ERROR, isValidEmail, isValidUUID, validateBodySize } from '../_shared/validation.ts';
 
 /**
  * Invitations Edge Function
@@ -83,7 +83,7 @@ Deno.serve(async (req: Request) => {
       const normalizedEmail = requestData.email.toLowerCase().trim();
       
       if (!isValidEmail(normalizedEmail)) {
-        return createErrorResponse(400, 'Invalid email address format', 'VALIDATION_ERROR', undefined, req);
+        return createErrorResponse(400, EMAIL_FORMAT_ERROR, 'VALIDATION_ERROR', undefined, req);
       }
 
       const { data: membership, error: membershipError } = await supabase
