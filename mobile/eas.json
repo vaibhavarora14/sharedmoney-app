@@ -23,6 +23,12 @@
     "production": {
       "environment": "production",
       "channel": "production",
+      "ios": {
+        "image": "sdk-57"
+      },
+      "android": {
+        "image": "sdk-57"
+      },
       "env": {
         "EAS_BUILD": "true",
         "EXPO_PUBLIC_APP_URL": "https://sharedmoney.app/app",

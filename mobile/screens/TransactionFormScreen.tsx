@@ -1091,7 +1091,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
             <Modal visible={showDatePicker} transparent animationType="slide">
               <View style={styles.modalOverlay}>
                 <Pressable
-                  style={StyleSheet.absoluteFillObject}
+                  style={StyleSheet.absoluteFill}
                   onPress={() => setShowDatePicker(false)}
                 />
                 <View

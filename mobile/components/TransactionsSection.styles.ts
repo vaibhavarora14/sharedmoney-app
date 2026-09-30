@@ -14,7 +14,7 @@ export const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   highlightOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderRadius: 8,
     borderWidth: 2,
   },

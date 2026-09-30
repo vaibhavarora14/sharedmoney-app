@@ -134,7 +134,7 @@ export const InAppBanner: React.FC<InAppBannerProps> = ({
 
 const styles = StyleSheet.create({
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: "center",
     zIndex: 1000,
   },

@@ -110,13 +110,7 @@ module.exports = ({ config }) => {
       orientation: "portrait",
       icon: "./assets/icon.png",
       userInterfaceStyle: "automatic", // Respects system dark/light mode preference
-      // Enable new architecture - supported in both Expo Go and development builds
-      newArchEnabled: true,
-      splash: {
-        image: "./assets/splash-icon.png",
-        resizeMode: "contain",
-        backgroundColor: "#F7F9FC"
-      },
+      // New Architecture is always on in SDK 55+; do not set newArchEnabled.
       ios: {
         supportsTablet: true,
         bundleIdentifier,
@@ -146,7 +140,7 @@ module.exports = ({ config }) => {
           foregroundImage: "./assets/adaptive-icon.png",
           backgroundColor: "#F7F9FC"
         },
-        edgeToEdgeEnabled: true,
+        // edgeToEdgeEnabled removed in SDK 57 — edge-to-edge is mandatory.
         // App Links for invite links; requires assetlinks.json hosted at
         // https://<host>/.well-known/assetlinks.json
         intentFilters: appLinkHosts.length > 0
@@ -211,12 +205,20 @@ module.exports = ({ config }) => {
               "enableShrinkResourcesInReleaseBuilds": true
             }
           }
-        ],  
+        ],
         [
           "expo-asset",
           {
             "assets": ["./assets"]
           },
+        ],
+        [
+          "expo-splash-screen",
+          {
+            image: "./assets/splash-icon.png",
+            resizeMode: "contain",
+            backgroundColor: "#F7F9FC"
+          }
         ],
         "expo-apple-authentication",
         "expo-font",

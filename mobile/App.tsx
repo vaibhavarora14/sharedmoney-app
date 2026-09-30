@@ -1464,14 +1464,15 @@ function ErrorFallback({
   error,
   resetErrorBoundary,
 }: {
-  error: Error;
+  error: unknown;
   resetErrorBoundary: () => void;
 }) {
   const theme = useTheme();
+  const err = error instanceof Error ? error : new Error(String(error));
 
   // Still log to console in dev via the centralized logger, and ensure
   // the error is captured by Sentry in all environments.
-  logError(error, { source: "ErrorFallback" });
+  logError(err, { source: "ErrorFallback" });
 
   return (
     <View
@@ -1484,12 +1485,12 @@ function ErrorFallback({
         Something went wrong
       </RNText>
       <RNText style={[styles.errorMessage, { color: theme.colors.onSurface }]}>
-        {error.message}
+        {err.message}
       </RNText>
       <RNText
         style={[styles.errorStack, { color: theme.colors.onSurfaceVariant }]}
       >
-        {error.stack}
+        {err.stack}
       </RNText>
       <Button onPress={resetErrorBoundary} mode="contained">
         Try Again
@@ -1671,7 +1672,7 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   transactionFormOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     zIndex: 20,
     elevation: 20,
   },
