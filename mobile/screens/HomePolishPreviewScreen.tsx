@@ -142,21 +142,7 @@ function PreviewShell({
 function HomeEmptyPreview() {
   const theme = useTheme();
   return (
-    <PreviewShell
-      title="Your Groups"
-      fab={
-        <Surface
-          style={[styles.fabSurface, { backgroundColor: theme.colors.primary }]}
-          elevation={2}
-        >
-          <View style={styles.fabContent}>
-            <Text variant="labelLarge" style={{ color: theme.colors.onPrimary }}>
-              + New Group
-            </Text>
-          </View>
-        </Surface>
-      }
-    >
+    <PreviewShell title="Your Groups">
       <View style={styles.empty} testID="preview-home-empty">
         <Text
           variant="bodyLarge"

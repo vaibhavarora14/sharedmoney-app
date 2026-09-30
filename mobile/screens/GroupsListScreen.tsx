@@ -452,35 +452,40 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
             </>
           )}
 
-          {/* Bottom padding for FAB */}
-          <View testID="new-group-clearance" style={{ height: newGroupHeight + 24 }} />
+          {/* Bottom padding for FAB when present */}
+          <View
+            testID="new-group-clearance"
+            style={{ height: hasAnyVisibleGroups ? newGroupHeight + 24 : 24 }}
+          />
         </ScrollView>
       )}
 
-      {/* Single primary CTA on Home — solid action color, competing chrome stays quieter. */}
-      <View style={styles.fab} pointerEvents="box-none">
-        <Surface
-          testID="new-group-surface"
-          style={[styles.fabSurface, { backgroundColor: theme.colors.primary }]}
-          elevation={2}
-          onLayout={({ nativeEvent }) => setNewGroupHeight(nativeEvent.layout.height)}
-        >
-          <TouchableRipple
-            testID="new-group-action"
-            style={styles.fabRipple}
-            onPress={() => setShowCreateGroup(true)}
-            accessibilityRole="button"
-            accessibilityLabel="New Group"
+      {/* Single primary CTA — solid action when groups exist; empty state owns Create group alone. */}
+      {hasAnyVisibleGroups ? (
+        <View style={styles.fab} pointerEvents="box-none">
+          <Surface
+            testID="new-group-surface"
+            style={[styles.fabSurface, { backgroundColor: theme.colors.primary }]}
+            elevation={2}
+            onLayout={({ nativeEvent }) => setNewGroupHeight(nativeEvent.layout.height)}
           >
-            <View style={styles.fabContent} pointerEvents="none">
-              <Icon source="plus" size={24} color={theme.colors.onPrimary} />
-              <Text variant="labelLarge" style={[styles.fabLabel, { color: theme.colors.onPrimary }]}>
-                New Group
-              </Text>
-            </View>
-          </TouchableRipple>
-        </Surface>
-      </View>
+            <TouchableRipple
+              testID="new-group-action"
+              style={styles.fabRipple}
+              onPress={() => setShowCreateGroup(true)}
+              accessibilityRole="button"
+              accessibilityLabel="New Group"
+            >
+              <View style={styles.fabContent} pointerEvents="none">
+                <Icon source="plus" size={24} color={theme.colors.onPrimary} />
+                <Text variant="labelLarge" style={[styles.fabLabel, { color: theme.colors.onPrimary }]}>
+                  New Group
+                </Text>
+              </View>
+            </TouchableRipple>
+          </Surface>
+        </View>
+      ) : null}
 
       <CreateGroupScreen
         visible={showCreateGroup}

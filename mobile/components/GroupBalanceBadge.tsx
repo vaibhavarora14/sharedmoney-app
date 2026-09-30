@@ -100,7 +100,7 @@ export const GroupBalanceBadge: React.FC<GroupBalanceBadgeProps> = ({
     return (
       <View style={[styles.balanceStatus, style]} testID="group-balance-amount">
         <Text style={[styles.balanceText, { color: textColor, fontWeight: '700' }]}>
-          {signedAmount > 0 ? '+' : ''}
+          {signedAmount > 0 ? '+' : signedAmount < 0 ? '−' : ''}
           {formatUnifiedHeadline(unified)}
         </Text>
       </View>
@@ -117,7 +117,7 @@ export const GroupBalanceBadge: React.FC<GroupBalanceBadgeProps> = ({
   return (
     <View style={[styles.balanceStatus, style]} testID="group-balance-amount">
       <Text style={[styles.balanceText, { color: textColor, fontWeight: '700' }]}>
-        {mainBalance.amount > 0 ? '+' : ''}
+        {mainBalance.amount > 0 ? '+' : mainBalance.amount < 0 ? '−' : ''}
         {formatCurrency(mainBalance.amount, mainBalance.currency)}
         {isMultiCurrency ? ' (+)' : ''}
       </Text>
