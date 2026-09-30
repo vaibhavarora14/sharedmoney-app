@@ -1641,6 +1641,11 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                 currentUserParticipantId={participants.find((p) => p.user_id === session?.user?.id)?.id}
                 loading={balancesLoading}
                 statsLoading={groupStatsLoading}
+                quietLoading={
+                  listMode === "transactions"
+                    ? txLoading || settlementsLoading
+                    : activityLoading
+                }
                 defaultCurrency={getDefaultCurrency()}
                 activeMemberCount={activeMemberCount}
                 balanceError={!!balancesError}

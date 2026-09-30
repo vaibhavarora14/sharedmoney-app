@@ -33,6 +33,8 @@ interface GroupDashboardProps {
   currentUserParticipantId?: string;
   loading: boolean;
   statsLoading?: boolean;
+  /** When true with loading, reserve settlement space without "Updating…" copy (shell loader lives elsewhere). */
+  quietLoading?: boolean;
   balanceError?: boolean;
   defaultCurrency?: string;
   /** Opens SettlementFormScreen for a viewer-involved settlement edge. Does not mutate data. */
@@ -70,6 +72,7 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
   currentUserParticipantId,
   loading,
   statsLoading = false,
+  quietLoading = false,
   balanceError = false,
   defaultCurrency = getDefaultCurrency(),
   onSettlePress,
@@ -208,6 +211,11 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
       );
     }
     if (dashboardLoading || !currentUserId) {
+      // Quiet placeholder while GroupDetails shows the list shell spinner —
+      // product rule: one loading chrome at a time.
+      if (quietLoading) {
+        return <View style={styles.settlementStatus} />;
+      }
       return (
         <View style={styles.settlementStatus}>
           <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>

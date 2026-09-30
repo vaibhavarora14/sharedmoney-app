@@ -305,21 +305,46 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
         ) : null}
       </Appbar.Header>
 
-      {isInitialLoading && (
-        <View
-          style={[
-            styles.centerContainer,
-            { backgroundColor: theme.colors.background },
-          ]}
+      {isInitialLoading ? (
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          testID="groups-loading-placeholders"
         >
-          <ActivityIndicator size="large" />
-          <Text variant="bodyLarge" style={{ marginTop: 16 }}>
-            Loading groups...
-          </Text>
-        </View>
-      )}
-
-      {!isInitialLoading && (
+          {[0, 1, 2, 3].map((key) => (
+            <View
+              key={key}
+              style={[
+                styles.groupItem,
+                styles.placeholderRow,
+                { borderBottomColor: theme.colors.outlineVariant },
+              ]}
+            >
+              <View style={styles.placeholderCopy}>
+                <View
+                  style={[
+                    styles.placeholderLineWide,
+                    { backgroundColor: theme.colors.surfaceVariant },
+                  ]}
+                />
+                <View
+                  style={[
+                    styles.placeholderLine,
+                    { backgroundColor: theme.colors.surfaceVariant },
+                  ]}
+                />
+              </View>
+              <View
+                style={[
+                  styles.placeholderBadge,
+                  { backgroundColor: theme.colors.surfaceVariant },
+                ]}
+              />
+            </View>
+          ))}
+        </ScrollView>
+      ) : (
         <ScrollView
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
@@ -519,6 +544,34 @@ const styles = StyleSheet.create({
     paddingVertical: 64,
     alignItems: "center",
     justifyContent: "center",
+  },
+  placeholderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 18,
+    paddingHorizontal: 4,
+    gap: 12,
+  },
+  placeholderCopy: {
+    flex: 1,
+    gap: 8,
+    paddingRight: 8,
+  },
+  placeholderLineWide: {
+    width: "70%",
+    height: 14,
+    borderRadius: 7,
+  },
+  placeholderLine: {
+    width: "42%",
+    height: 12,
+    borderRadius: 6,
+  },
+  placeholderBadge: {
+    width: 72,
+    height: 28,
+    borderRadius: 8,
   },
   groupItem: {
     borderBottomWidth: StyleSheet.hairlineWidth,
