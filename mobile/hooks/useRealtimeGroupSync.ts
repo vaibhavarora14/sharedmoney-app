@@ -49,7 +49,7 @@ export function useRealtimeGroupSync(
 ) {
   const { enabled = true } = options;
   const queryClient = useQueryClient();
-  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!groupId || !enabled) return;

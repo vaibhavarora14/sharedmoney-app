@@ -32,7 +32,7 @@ export const InAppBanner: React.FC<InAppBannerProps> = ({
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const slideAnim = useRef(new Animated.Value(0)).current;
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const useNativeDriver = Platform.OS !== "web";
 
   const dismiss = useCallback(() => {
