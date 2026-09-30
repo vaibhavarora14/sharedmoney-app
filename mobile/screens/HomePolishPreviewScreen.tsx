@@ -4,6 +4,7 @@ import {
   Appbar,
   Button,
   FAB,
+  List,
   Provider as PaperProvider,
   SegmentedButtons,
   Surface,
@@ -161,8 +162,26 @@ function HomeEmptyPreview() {
   );
 }
 
+const FORMER_GROUPS = [
+  {
+    id: "g-old-flat",
+    name: "Old flatmates",
+    description: "You left this group",
+  },
+];
+
+const ARCHIVED_GROUPS = [
+  {
+    id: "g-archive",
+    name: "College trip 2022",
+    description: "Archived",
+  },
+];
+
 function HomeListPreview() {
   const theme = useTheme();
+  const [formerExpanded, setFormerExpanded] = useState(false);
+  const [archivedExpanded, setArchivedExpanded] = useState(false);
   return (
     <PreviewShell
       title="Your Groups"
@@ -204,6 +223,77 @@ function HomeListPreview() {
             />
           </View>
         ))}
+
+        <List.Accordion
+          title={`Archived (${ARCHIVED_GROUPS.length})`}
+          titleStyle={[styles.sectionAccordionTitle, { color: theme.colors.onSurfaceVariant }]}
+          style={[styles.sectionAccordion, { backgroundColor: theme.colors.background }]}
+          left={(props) => (
+            <List.Icon
+              {...props}
+              icon="archive-outline"
+              color={theme.colors.onSurfaceVariant}
+              style={styles.sectionAccordionIcon}
+            />
+          )}
+          expanded={archivedExpanded}
+          onPress={() => setArchivedExpanded(!archivedExpanded)}
+        >
+          {ARCHIVED_GROUPS.map((group) => (
+            <View
+              key={group.id}
+              style={[styles.groupRow, { borderBottomColor: theme.colors.outlineVariant }]}
+            >
+              <View style={{ flex: 1 }}>
+                <Text
+                  variant="titleMedium"
+                  style={{ fontWeight: "700", color: theme.colors.onSurface, letterSpacing: -0.2 }}
+                >
+                  {group.name}
+                </Text>
+                <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}>
+                  {group.description}
+                </Text>
+              </View>
+            </View>
+          ))}
+        </List.Accordion>
+
+        <List.Accordion
+          title={`Former (${FORMER_GROUPS.length})`}
+          titleStyle={[styles.sectionAccordionTitle, { color: theme.colors.onSurfaceVariant }]}
+          style={[styles.sectionAccordion, { backgroundColor: theme.colors.background }]}
+          left={(props) => (
+            <List.Icon
+              {...props}
+              icon="history"
+              color={theme.colors.onSurfaceVariant}
+              style={styles.sectionAccordionIcon}
+            />
+          )}
+          expanded={formerExpanded}
+          onPress={() => setFormerExpanded(!formerExpanded)}
+          testID="preview-former-accordion"
+        >
+          {FORMER_GROUPS.map((group) => (
+            <View
+              key={group.id}
+              style={[styles.groupRow, { borderBottomColor: theme.colors.outlineVariant }]}
+            >
+              <View style={{ flex: 1 }}>
+                <Text
+                  variant="titleMedium"
+                  style={{ fontWeight: "700", color: theme.colors.onSurface, letterSpacing: -0.2 }}
+                >
+                  {group.name}
+                </Text>
+                <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}>
+                  {group.description}
+                </Text>
+              </View>
+            </View>
+          ))}
+        </List.Accordion>
       </View>
     </PreviewShell>
   );
@@ -367,5 +457,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     alignItems: "center",
     justifyContent: "center",
+  },
+  sectionAccordion: {
+    marginTop: 20,
+    marginBottom: 4,
+    paddingHorizontal: 0,
+    overflow: "hidden",
+  },
+  sectionAccordionTitle: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "600",
+    letterSpacing: 0.2,
+  },
+  sectionAccordionIcon: {
+    marginLeft: 0,
+    marginRight: 0,
   },
 });
