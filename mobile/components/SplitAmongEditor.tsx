@@ -295,12 +295,27 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
                 ) : (
                   <View style={styles.shareStepper}>
                     <IconButton
-                      icon="minus"
+                      icon={shareCount === 1 ? "close" : "minus"}
                       size={20}
-                      disabled={disabled || shareCount <= 1}
-                      onPress={() => onShareChange(participant.id, shareCount - 1)}
-                      accessibilityLabel={`Fewer shares for ${name}`}
-                      accessibilityValue={{ min: 1, max: MAX_SHARE_COUNT, now: shareCount, text: `${shareCount} shares` }}
+                      disabled={!!disabled}
+                      onPress={() => {
+                        if (shareCount === 1) {
+                          onToggleMember(participant.id);
+                          return;
+                        }
+                        onShareChange(participant.id, shareCount - 1);
+                      }}
+                      accessibilityLabel={
+                        shareCount === 1
+                          ? `Remove ${name} from split`
+                          : `Fewer shares for ${name}`
+                      }
+                      accessibilityValue={
+                        shareCount === 1
+                          ? undefined
+                          : { min: 1, max: MAX_SHARE_COUNT, now: shareCount, text: `${shareCount} shares` }
+                      }
+                      testID={`split-share-minus-${participant.email || participant.id}`}
                     />
                     <Text
                       variant="titleMedium"
@@ -320,6 +335,14 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
                     />
                   </View>
                 )}
+                <IconButton
+                  icon="account-remove"
+                  size={20}
+                  disabled={!!disabled}
+                  onPress={() => onToggleMember(participant.id)}
+                  accessibilityLabel={`Remove ${name} from split`}
+                  testID={`split-remove-${participant.email || participant.id}`}
+                />
               </View>
             );
           })}
