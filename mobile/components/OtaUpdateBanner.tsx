@@ -1,17 +1,16 @@
 import * as Updates from "expo-updates";
 import React, { useState } from "react";
-import { Linking, Platform, Pressable, StyleSheet, View } from "react-native";
+import { Platform, Pressable, StyleSheet, View } from "react-native";
 import { ActivityIndicator, Icon, Text, useTheme } from "react-native-paper";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WEB_MAX_WIDTH } from "../constants/layout";
-import { storeUrlForPlatform } from "../constants/storeUrls";
 import { logError } from "../utils/logger";
 import { otaUpdateMessage, otaUpdateNotice } from "../utils/otaUpdateNotice";
 
 /**
  * Non-blocking OTA status. Native already downloads on launch; this only
- * tells the user when that work is happening, when a restart will apply it,
- * or when they need a store binary instead of another OTA retry.
+ * tells the user when that work is happening or when a restart will apply it.
+ * Hidden when no compatible OTA can apply — store upgrades use ForceUpdateModal.
  */
 export const OtaUpdateBanner: React.FC = () => {
   const theme = useTheme();
@@ -35,30 +34,14 @@ export const OtaUpdateBanner: React.FC = () => {
     reloadFailed,
     isEmergencyLaunch: updates.currentlyRunning?.isEmergencyLaunch,
   });
-  const message = otaUpdateMessage(notice, Platform.OS);
+  const message = otaUpdateMessage(notice);
 
   if (!message) return null;
 
-  const isStoreRequired = notice.kind === "storeRequired";
-  const foreground = isStoreRequired
-    ? theme.colors.onErrorContainer
-    : theme.colors.onSecondaryContainer;
-  const background = isStoreRequired
-    ? theme.colors.errorContainer
-    : theme.colors.secondaryContainer;
+  const foreground = theme.colors.onSecondaryContainer;
   const canRestart = notice.kind === "ready" && !restarting;
-  const canOpenStore = isStoreRequired;
 
   const handlePress = async () => {
-    if (canOpenStore) {
-      try {
-        await Linking.openURL(storeUrlForPlatform(Platform.OS));
-      } catch (error) {
-        logError(error, { context: "OtaUpdateBanner.openStore" });
-      }
-      return;
-    }
-
     if (!canRestart) return;
     try {
       setRestarting(true);
@@ -70,11 +53,6 @@ export const OtaUpdateBanner: React.FC = () => {
     }
   };
 
-  const showSpinner = notice.kind === "downloading" || restarting;
-  const iconSource = isStoreRequired
-    ? "storefront-outline"
-    : "cellphone-arrow-down";
-
   return (
     <View
       pointerEvents="box-none"
@@ -82,23 +60,24 @@ export const OtaUpdateBanner: React.FC = () => {
     >
       <Pressable
         onPress={handlePress}
-        disabled={!canRestart && !canOpenStore}
-        style={[styles.banner, { backgroundColor: background }]}
-        accessibilityRole={canRestart || canOpenStore ? "button" : "text"}
+        disabled={!canRestart}
+        style={[
+          styles.banner,
+          { backgroundColor: theme.colors.secondaryContainer },
+        ]}
+        accessibilityRole={canRestart ? "button" : "text"}
         accessibilityLabel={message}
-        testID={
-          isStoreRequired ? "ota-update-banner-store" : "ota-update-banner"
-        }
+        testID="ota-update-banner"
       >
-        {showSpinner ? (
+        {notice.kind === "downloading" || restarting ? (
           <ActivityIndicator size={16} color={foreground} />
         ) : (
-          <Icon source={iconSource} size={18} color={foreground} />
+          <Icon source="cellphone-arrow-down" size={18} color={foreground} />
         )}
         <Text
           variant="bodyMedium"
           style={[styles.message, { color: foreground }]}
-          numberOfLines={3}
+          numberOfLines={2}
         >
           {restarting ? "Restarting…" : message}
         </Text>

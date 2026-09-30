@@ -12,12 +12,12 @@ Builds: https://expo.dev/accounts/varora1406/projects/share-money/builds
 
 Production binaries check for updates on launch (`ON_LOAD`), download in the
 background, and apply the new JS/asset bundle on the **next cold start**. Splash
-is not blocked (`fallbackToCacheTimeout: 0`). While a download is in progress
-or ready, `OtaUpdateBanner` shows a quiet status chip. Tapping it after the
-download finishes restarts into the new bundle. If the check/download fails,
-the update is incompatible with this runtime, or restarting does not apply it,
-the chip switches to an App Store / Play Store CTA instead of looping on
-restart/retry.
+is not blocked (`fallbackToCacheTimeout: 0`). While a compatible OTA download is
+in progress or ready, `OtaUpdateBanner` shows a quiet status chip. Tapping it
+after the download finishes restarts into the new bundle. If there is no
+compatible OTA for this runtime (check/download error, incompatible update,
+failed reload), the banner stays hidden — store upgrades use the existing
+HTTP 426 + `ForceUpdateModal` path only.
 
 `runtimeVersion` uses the `appVersion` policy. An OTA only reaches store
 binaries whose marketing version matches `mobile/version.json` at publish time.
