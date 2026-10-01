@@ -444,3 +444,23 @@ test("GroupDetailsScreen quiets dashboard while group-open shell spinner is up",
   assert.match(source, /listDataLoading/);
   assert.match(source, /balancesLoading && listContentEmpty/);
 });
+
+test("App prefetchGroupData fetches balances with include_stats for shared key", () => {
+  const source = readFileSync(path.join(__dirname, "../App.tsx"), "utf8");
+  assert.match(source, /prefetchGroupData/);
+  assert.match(source, /fetchBalances\(groupId,\s*true\)/);
+  assert.match(source, /queryKeys\.groupStats\(groupId\)/);
+  assert.doesNotMatch(
+    source,
+    /queryKey:\s*queryKeys\.balances\(groupId\),[\s\S]{0,80}queryFn:\s*\(\)\s*=>\s*fetchBalances\(groupId\)/
+  );
+});
+
+test("useBalances refetches when includeStats cache lacks group_stats", () => {
+  const hook = readFileSync(path.join(__dirname, "../hooks/useBalances.ts"), "utf8");
+  const helper = readFileSync(path.join(__dirname, "../hooks/balancesCacheStats.ts"), "utf8");
+  assert.match(helper, /group_stats == null/);
+  assert.match(hook, /balancesCacheMissingStats/);
+  assert.match(hook, /refetchOnMount/);
+  assert.match(hook, /statsRefetchAttempted/);
+});
