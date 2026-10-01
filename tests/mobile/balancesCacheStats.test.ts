@@ -121,7 +121,7 @@ Deno.test("observer with missing-stats refetchOnMount always hits network", asyn
       return withStats;
     },
     staleTime: 30_000,
-    refetchOnMount: (q) =>
+    refetchOnMount: (q: { state: { data: BalancesResponse | undefined } }) =>
       balancesCacheMissingStats(q.state.data, true) ? "always" : true,
   });
 
