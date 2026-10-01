@@ -118,6 +118,7 @@ import {
   getInviteLinkErrorMessage,
 } from "./utils/inviteLinks";
 import { log, logError } from "./utils/logger";
+import { isBenignConnectivityError } from "./utils/networkErrors";
 import { needsTermsAcceptance } from "./utils/onboardingFlow";
 import {
   NotificationGroupReference,
@@ -548,7 +549,15 @@ function AppContent() {
       pushRegistrationSyncedUserRef.current = userId;
       syncEnabledPushRegistration().catch((error) => {
         pushRegistrationSyncedUserRef.current = null;
-        logError(error, { context: "sync push registration" });
+        if (isBenignConnectivityError(error)) {
+          log(
+            "sync push registration skipped (offline)",
+            { context: "sync push registration" },
+            "warn",
+          );
+        } else {
+          logError(error, { context: "sync push registration" });
+        }
       });
     }
   }, [
@@ -567,7 +576,15 @@ function AppContent() {
     const unsubscribeReceived = subscribeToReceivedNotifications(refreshInbox);
     const unsubscribeToken = notificationInbox.data?.preference.push_enabled
       ? subscribeToPushTokenChanges(refreshInbox, (error) => {
-        logError(error, { context: "push token rotation" });
+        if (isBenignConnectivityError(error)) {
+          log(
+            "push token rotation skipped (offline)",
+            { context: "push token rotation" },
+            "warn",
+          );
+        } else {
+          logError(error, { context: "push token rotation" });
+        }
       })
       : () => {};
     const appStateSubscription = AppState.addEventListener("change", (nextState) => {
