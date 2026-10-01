@@ -319,8 +319,19 @@ function AppContent() {
           queryFn: () => fetchLatestGroupExpenseSplitAmong(groupId),
         }),
         queryClientInstance.prefetchQuery({
+          // Must include stats: GroupDetails / GroupStats share this key and need
+          // group_stats for My spending / Group summary (#349 key merge regression).
           queryKey: queryKeys.balances(groupId),
-          queryFn: () => fetchBalances(groupId),
+          queryFn: async () => {
+            const data = await fetchBalances(groupId, true);
+            if (data.group_stats) {
+              queryClientInstance.setQueryData(
+                queryKeys.groupStats(groupId),
+                data.group_stats
+              );
+            }
+            return data;
+          },
         }),
         queryClientInstance.prefetchInfiniteQuery(
           activityQueryOptions(groupId, fetchActivityPage)
