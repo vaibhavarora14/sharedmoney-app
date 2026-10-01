@@ -200,9 +200,10 @@ function HomeListPreview() {
     >
       <View style={{ paddingHorizontal: 16 }} testID="preview-home-list">
         {GROUPS.map((group) => (
-          <View
+          <Surface
             key={group.id}
-            style={[styles.groupRow, { borderBottomColor: theme.colors.outlineVariant }]}
+            style={[styles.groupRow, { backgroundColor: theme.colors.surface }]}
+            elevation={0}
           >
             <View style={{ flex: 1, paddingRight: 12 }}>
               <Text
@@ -221,13 +222,13 @@ function HomeListPreview() {
               balanceData={{ group_id: group.id, balances: group.balances }}
               currentUserId="u-you"
             />
-          </View>
+          </Surface>
         ))}
 
         <List.Accordion
           title={`Archived (${ARCHIVED_GROUPS.length})`}
           titleStyle={[styles.sectionAccordionTitle, { color: theme.colors.onSurfaceVariant }]}
-          style={[styles.sectionAccordion, { backgroundColor: theme.colors.background }]}
+          style={[styles.sectionAccordion, { backgroundColor: theme.colors.surface }]}
           left={(props) => (
             <List.Icon
               {...props}
@@ -239,30 +240,33 @@ function HomeListPreview() {
           expanded={archivedExpanded}
           onPress={() => setArchivedExpanded(!archivedExpanded)}
         >
-          {ARCHIVED_GROUPS.map((group) => (
-            <View
-              key={group.id}
-              style={[styles.groupRow, { borderBottomColor: theme.colors.outlineVariant }]}
-            >
-              <View style={{ flex: 1 }}>
-                <Text
-                  variant="titleMedium"
-                  style={{ fontWeight: "700", color: theme.colors.onSurface, letterSpacing: -0.2 }}
-                >
-                  {group.name}
-                </Text>
-                <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}>
-                  {group.description}
-                </Text>
-              </View>
-            </View>
-          ))}
+          <View style={[styles.accordionContent, { backgroundColor: theme.colors.background }]}>
+            {ARCHIVED_GROUPS.map((group) => (
+              <Surface
+                key={group.id}
+                style={[styles.groupRow, { backgroundColor: theme.colors.surface }]}
+                elevation={0}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text
+                    variant="titleMedium"
+                    style={{ fontWeight: "700", color: theme.colors.onSurface, letterSpacing: -0.2 }}
+                  >
+                    {group.name}
+                  </Text>
+                  <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}>
+                    {group.description}
+                  </Text>
+                </View>
+              </Surface>
+            ))}
+          </View>
         </List.Accordion>
 
         <List.Accordion
           title={`Former (${FORMER_GROUPS.length})`}
           titleStyle={[styles.sectionAccordionTitle, { color: theme.colors.onSurfaceVariant }]}
-          style={[styles.sectionAccordion, { backgroundColor: theme.colors.background }]}
+          style={[styles.sectionAccordion, { backgroundColor: theme.colors.surface }]}
           left={(props) => (
             <List.Icon
               {...props}
@@ -275,24 +279,27 @@ function HomeListPreview() {
           onPress={() => setFormerExpanded(!formerExpanded)}
           testID="preview-former-accordion"
         >
-          {FORMER_GROUPS.map((group) => (
-            <View
-              key={group.id}
-              style={[styles.groupRow, { borderBottomColor: theme.colors.outlineVariant }]}
-            >
-              <View style={{ flex: 1 }}>
-                <Text
-                  variant="titleMedium"
-                  style={{ fontWeight: "700", color: theme.colors.onSurface, letterSpacing: -0.2 }}
-                >
-                  {group.name}
-                </Text>
-                <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}>
-                  {group.description}
-                </Text>
-              </View>
-            </View>
-          ))}
+          <View style={[styles.accordionContent, { backgroundColor: theme.colors.background }]}>
+            {FORMER_GROUPS.map((group) => (
+              <Surface
+                key={group.id}
+                style={[styles.groupRow, { backgroundColor: theme.colors.surface }]}
+                elevation={0}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text
+                    variant="titleMedium"
+                    style={{ fontWeight: "700", color: theme.colors.onSurface, letterSpacing: -0.2 }}
+                  >
+                    {group.name}
+                  </Text>
+                  <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}>
+                    {group.description}
+                  </Text>
+                </View>
+              </Surface>
+            ))}
+          </View>
         </List.Accordion>
       </View>
     </PreviewShell>
@@ -403,7 +410,7 @@ export const HomePolishPreviewScreen: React.FC = () => {
           }}
         >
           <Text variant="labelLarge" style={{ marginBottom: 8, fontWeight: "700" }}>
-            Home + Add polish preview (#320)
+            Home tighten preview — flat group cards
           </Text>
           <SegmentedButtons
             value={surface}
@@ -437,8 +444,11 @@ const styles = StyleSheet.create({
   groupRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 18,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingVertical: 16,
+    paddingHorizontal: 14,
+    marginBottom: 9,
+    borderRadius: 14,
+    overflow: "hidden",
   },
   fab: {
     position: "absolute",
@@ -460,8 +470,10 @@ const styles = StyleSheet.create({
   },
   sectionAccordion: {
     marginTop: 20,
-    marginBottom: 4,
-    paddingHorizontal: 0,
+    marginBottom: 8,
+    borderRadius: 12,
+    paddingVertical: 2,
+    paddingHorizontal: 4,
     overflow: "hidden",
   },
   sectionAccordionTitle: {
@@ -473,5 +485,9 @@ const styles = StyleSheet.create({
   sectionAccordionIcon: {
     marginLeft: 0,
     marginRight: 0,
+  },
+  accordionContent: {
+    paddingTop: 8,
+    marginHorizontal: -4,
   },
 });

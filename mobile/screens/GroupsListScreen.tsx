@@ -195,12 +195,13 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
     const description = group.description?.trim();
 
     return (
-    <View
+    <Surface
       key={group.id}
       style={[
         styles.groupItem,
-        { borderBottomColor: theme.colors.outlineVariant },
+        { backgroundColor: theme.colors.surface },
       ]}
+      elevation={0}
     >
       <TouchableOpacity
         testID={`group-card-${group.id}`}
@@ -263,7 +264,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
           currentUserId={user?.id}
         />
       </TouchableOpacity>
-    </View>
+    </Surface>
     );
   };
 
@@ -345,13 +346,14 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
           testID="groups-loading-placeholders"
         >
           {[0, 1, 2, 3].map((key) => (
-            <View
+            <Surface
               key={key}
               style={[
                 styles.groupItem,
                 styles.placeholderRow,
-                { borderBottomColor: theme.colors.outlineVariant },
+                { backgroundColor: theme.colors.surface },
               ]}
+              elevation={0}
             >
               <View style={styles.placeholderCopy}>
                 <View
@@ -373,7 +375,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                   { backgroundColor: theme.colors.surfaceVariant },
                 ]}
               />
-            </View>
+            </Surface>
           ))}
         </ScrollView>
       ) : (
@@ -455,7 +457,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
               {/* Active Groups */}
               {activeGroups.map((group) => renderGroupItem(group))}
 
-              {/* Archived Groups — section header hierarchy aligned with Home polish (#347) */}
+              {/* Archived Groups — mute label + light surface chip (Home tighten) */}
               {archivedGroups.length > 0 && (
                 <List.Accordion
                   title={`Archived (${archivedGroups.length})`}
@@ -465,7 +467,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                   ]}
                   style={[
                     styles.sectionAccordion,
-                    { backgroundColor: theme.colors.background },
+                    { backgroundColor: theme.colors.surface },
                   ]}
                   left={(props) => (
                     <List.Icon
@@ -479,13 +481,18 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                   onPress={() => setArchivedGroupsExpanded(!archivedGroupsExpanded)}
                   testID="archived-groups-accordion"
                 >
-                  <View style={styles.accordionContent}>
+                  <View
+                    style={[
+                      styles.accordionContent,
+                      { backgroundColor: theme.colors.background },
+                    ]}
+                  >
                     {archivedGroups.map((group) => renderGroupItem(group))}
                   </View>
                 </List.Accordion>
               )}
 
-              {/* Former Groups — quieter section label vs active titleMedium/700 rows */}
+              {/* Former Groups — mute label + light surface chip (Home tighten) */}
               {formerGroups.length > 0 && (
                 <List.Accordion
                   title={`Former (${formerGroups.length})`}
@@ -495,7 +502,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                   ]}
                   style={[
                     styles.sectionAccordion,
-                    { backgroundColor: theme.colors.background },
+                    { backgroundColor: theme.colors.surface },
                   ]}
                   left={(props) => (
                     <List.Icon
@@ -509,7 +516,12 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                   onPress={() => setFormerGroupsExpanded(!formerGroupsExpanded)}
                   testID="former-groups-accordion"
                 >
-                  <View style={styles.accordionContent}>
+                  <View
+                    style={[
+                      styles.accordionContent,
+                      { backgroundColor: theme.colors.background },
+                    ]}
+                  >
                     {formerGroups.map((group) => renderGroupItem(group))}
                   </View>
                 </List.Accordion>
@@ -589,8 +601,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 18,
-    paddingHorizontal: 4,
+    paddingVertical: 16,
+    paddingHorizontal: 14,
     gap: 12,
   },
   placeholderCopy: {
@@ -614,14 +626,15 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   groupItem: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    marginBottom: 9,
+    borderRadius: 14,
     overflow: "hidden",
   },
   groupTouchable: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 18,
-    paddingHorizontal: 4,
+    paddingVertical: 16,
+    paddingHorizontal: 14,
     gap: 12,
   },
   groupContent: {
@@ -719,12 +732,14 @@ const styles = StyleSheet.create({
     marginTop: 12,
     maxWidth: "100%",
   },
-  // Secondary Home sections (Former / Archived): quieter than active group
-  // titleMedium/700 rows from #347 — muted label type, no surface card, more top gap.
+  // Secondary Home sections (Former / Archived): mute 13/600 labels + light
+  // surface chip (quieter padding than active flat cards). Keep Former (N).
   sectionAccordion: {
     marginTop: 20,
-    marginBottom: 4,
-    paddingHorizontal: 0,
+    marginBottom: 8,
+    borderRadius: 12,
+    paddingVertical: 2,
+    paddingHorizontal: 4,
     overflow: "hidden",
   },
   sectionAccordionTitle: {
@@ -741,5 +756,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
     paddingLeft: 0,
     marginLeft: 0,
+    marginRight: 0,
+    paddingTop: 8,
+    // Pull expanded cards onto page canvas so they rhyme with active rows
+    // instead of nesting same-color surfaces inside the chip.
+    marginHorizontal: -4,
   },
 });
