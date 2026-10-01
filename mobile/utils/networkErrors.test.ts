@@ -1,5 +1,8 @@
 import { assertEquals } from "jsr:@std/assert@1";
-import { formatNetworkErrorMessage } from "./networkErrors.ts";
+import {
+  formatNetworkErrorMessage,
+  isBenignConnectivityError,
+} from "./networkErrors.ts";
 
 Deno.test("production network errors use concise connectivity wording", () => {
   assertEquals(
@@ -35,4 +38,41 @@ Deno.test("production timeouts remain concise and actionable", () => {
     }),
     "Request timed out. Check your connection and try again.",
   );
+});
+
+Deno.test("isBenignConnectivityError matches production connectivity copy", () => {
+  assertEquals(
+    isBenignConnectivityError(
+      new Error("Unable to connect. Check your internet connection and try again."),
+    ),
+    true,
+  );
+});
+
+Deno.test("isBenignConnectivityError matches production timeout copy", () => {
+  assertEquals(
+    isBenignConnectivityError(
+      new Error("Request timed out. Check your connection and try again."),
+    ),
+    true,
+  );
+});
+
+Deno.test("isBenignConnectivityError matches classic fetch failures", () => {
+  assertEquals(
+    isBenignConnectivityError(new TypeError("Network request failed")),
+    true,
+  );
+  assertEquals(
+    isBenignConnectivityError(new TypeError("Failed to fetch")),
+    true,
+  );
+});
+
+Deno.test("isBenignConnectivityError rejects unrelated errors", () => {
+  assertEquals(
+    isBenignConnectivityError(new Error("Unable to register this device for notifications")),
+    false,
+  );
+  assertEquals(isBenignConnectivityError(new TypeError("Cannot read property x")), false);
 });

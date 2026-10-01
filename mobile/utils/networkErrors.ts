@@ -52,3 +52,47 @@ export function formatNetworkErrorMessage({
 
   return "Network request failed";
 }
+
+function getErrorParts(error: unknown): { name: string; message: string } {
+  if (error instanceof Error) {
+    return { name: error.name, message: error.message };
+  }
+  if (typeof error === "string") {
+    return { name: "", message: error };
+  }
+  if (error && typeof error === "object") {
+    const record = error as { name?: unknown; message?: unknown };
+    return {
+      name: typeof record.name === "string" ? record.name : "",
+      message: typeof record.message === "string"
+        ? record.message
+        : String(record.message ?? ""),
+    };
+  }
+  return { name: "", message: String(error ?? "") };
+}
+
+/**
+ * True for expected offline / connectivity failures that should not be
+ * captured as Sentry exceptions (breadcrumb/warn is enough).
+ */
+export function isBenignConnectivityError(error: unknown): boolean {
+  const { name, message } = getErrorParts(error);
+
+  if (
+    message ===
+      "Unable to connect. Check your internet connection and try again." ||
+    message === "Request timed out. Check your connection and try again." ||
+    message.includes("Network request failed") ||
+    message.includes("Failed to fetch")
+  ) {
+    return true;
+  }
+
+  // Classic fetch TypeError with a network-ish message
+  if (name === "TypeError" && /network|fetch|internet|connect/i.test(message)) {
+    return true;
+  }
+
+  return false;
+}
