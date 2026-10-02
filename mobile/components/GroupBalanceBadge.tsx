@@ -21,6 +21,11 @@ interface GroupBalanceBadgeProps {
   currentUserId?: string | null;
   style?: ViewStyle;
   previewSettings?: GroupCurrencySettings | null;
+  /**
+   * When true (balances query still deferred/loading), show a neutral placeholder.
+   * Never claim "Even" until balances have resolved — missing data ≠ zero.
+   */
+  loading?: boolean;
 }
 
 export const GroupBalanceBadge: React.FC<GroupBalanceBadgeProps> = ({ 
@@ -28,6 +33,7 @@ export const GroupBalanceBadge: React.FC<GroupBalanceBadgeProps> = ({
   currentUserId,
   style,
   previewSettings,
+  loading = false,
 }) => {
   const theme = useTheme();
   const { groupSettings, rateBook: storedRateBook } = useCurrencyPreferences(
@@ -50,7 +56,28 @@ export const GroupBalanceBadge: React.FC<GroupBalanceBadgeProps> = ({
     </View>
   );
 
-  // Robust null checks
+  const renderLoading = () => (
+    <View
+      style={[styles.balanceStatus, style]}
+      testID="group-balance-loading"
+      accessibilityLabel="Loading balance"
+    >
+      <View
+        style={[
+          styles.loadingPlaceholder,
+          { backgroundColor: theme.colors.surfaceVariant },
+        ]}
+      />
+    </View>
+  );
+
+  // Cold Home paint: list rows appear before deferred all-balances finishes.
+  // Missing/undefined balanceData must not read as Even until the query resolves.
+  if (loading) {
+    return renderLoading();
+  }
+
+  // Robust null checks — only after balances have resolved
   if (!balanceData || !balanceData.balances || balanceData.balances.length === 0) {
     return renderEven();
   }
@@ -137,5 +164,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
     letterSpacing: -0.1,
+  },
+  loadingPlaceholder: {
+    width: 48,
+    height: 12,
+    borderRadius: 6,
+    opacity: 0.7,
   },
 });

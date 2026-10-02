@@ -27,7 +27,7 @@ function harness(fontScale = 1) {
     '@tanstack/react-query': { useQueryClient: () => ({}) },
     '../contexts/AuthContext': { useAuth: () => ({ user: { id: 'me' } }) },
     '../hooks/useGroups': { useGroups: () => ({ data: [group], isLoading: false }) },
-    '../hooks/useBalances': { useBalances: () => ({ data: { group_balances: [] } }) },
+    '../hooks/useBalances': { useBalances: () => ({ data: { group_balances: [] }, isLoading: false }) },
     '../hooks/useCurrencyPreferences': { useCurrencyPreferences: () => ({ rateBook: {} }) },
     '../hooks/useNotifications': { useNotifications: () => ({}), useUpdateNotificationPreference: () => ({}) },
     '../utils/featureFlags': { isTransactionNotificationsEnabled: () => false },
@@ -40,6 +40,8 @@ function harness(fontScale = 1) {
     '../utils/groupListSections': { partitionGroupsBySection: (groups) => ({ activeGroups: groups, archivedGroups: [], formerGroups: [] }) },
     '../utils/sentryTelemetry': { recordSentryListCounts: () => {} },
     '../utils/groupListPerfTelemetry': {},
+    '../utils/posthogAnalytics': { captureIdentifiedAnalyticsEvent: () => {} },
+    '../utils/posthogEvents': { ANALYTICS_EVENTS: {} },
     '../components/NotificationBell': { NotificationBell: 'NotificationBell' },
     '../components/GroupBalanceBadge': { GroupBalanceBadge: 'GroupBalanceBadge' },
     './CreateGroupScreen': { CreateGroupScreen: 'CreateGroupScreen' },
@@ -51,12 +53,18 @@ function harness(fontScale = 1) {
       target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true,
     }}).outputText;
     new Function('require', 'module', 'exports', code)(id => {
-      if (id === 'react') return { ...React, useEffect: () => {}, useState: initial => {
+      if (id === 'react') return { ...React, useEffect: () => {}, useRef: v => ({ current: v }), useState: initial => {
         const index = stateIndex++;
         if (!(index in state)) state[index] = initial;
         return [state[index], value => { state[index] = typeof value === 'function' ? value(state[index]) : value; }];
       }};
-      if (id === 'react-native') return { View: 'View', ScrollView: 'ScrollView', TouchableOpacity: 'TouchableOpacity', Platform: { OS: 'android' }, useWindowDimensions: () => ({ width: 393, height: 851, fontScale }), StyleSheet: { create: x => x, flatten, hairlineWidth: 1 } };
+      if (id === 'react-native') return {
+        View: 'View', ScrollView: 'ScrollView', TouchableOpacity: 'TouchableOpacity',
+        InteractionManager: { runAfterInteractions: cb => { cb(); return { cancel: () => {} }; } },
+        Platform: { OS: 'android' },
+        useWindowDimensions: () => ({ width: 393, height: 851, fontScale }),
+        StyleSheet: { create: x => x, flatten, hairlineWidth: 1 },
+      };
       if (id === 'react-native-paper') return paper;
       if (id in overrides) return overrides[id];
       if (id.startsWith('.')) {
@@ -161,7 +169,7 @@ test('group rows retain compact normal layout and reflow enlarged title, descrip
     if (fontScale === 2) assert.equal(flatten(badge.props.style).alignSelf, 'flex-start');
     for (const balances of [[], [{ user_id: 'me', amount: 123456.78, currency: 'USD' }], [{ user_id: 'me', amount: -42, currency: 'EUR' }]]) {
       const renderedBadge = app.render('components/GroupBalanceBadge.tsx', 'GroupBalanceBadge', {
-        ...badge.props, currentUserId: 'me', balanceData: { group_id: 'g', balances },
+        ...badge.props, currentUserId: 'me', loading: false, balanceData: { group_id: 'g', balances },
       });
       for (const node of nodes(renderedBadge)) {
         assert.equal(flatten(node.props.style).height, undefined, 'status remains content-sized');
