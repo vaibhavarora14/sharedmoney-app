@@ -180,8 +180,9 @@ const ARCHIVED_GROUPS = [
 
 function HomeListPreview() {
   const theme = useTheme();
-  const [formerExpanded, setFormerExpanded] = useState(false);
-  const [archivedExpanded, setArchivedExpanded] = useState(false);
+  // Expand Former by default so Design can re-score nested demoted chrome.
+  const [formerExpanded, setFormerExpanded] = useState(true);
+  const [archivedExpanded, setArchivedExpanded] = useState(true);
   return (
     <PreviewShell
       title="Your Groups"
@@ -225,6 +226,26 @@ function HomeListPreview() {
           </Surface>
         ))}
 
+        {/* Loading badge sample — cold paint must not claim Even */}
+        <Surface
+          style={[styles.groupRow, { backgroundColor: theme.colors.surface }]}
+          elevation={0}
+          testID="preview-balance-loading-row"
+        >
+          <View style={{ flex: 1, paddingRight: 12 }}>
+            <Text
+              variant="titleMedium"
+              style={{ fontWeight: "700", color: theme.colors.onSurface, letterSpacing: -0.2 }}
+            >
+              Loading balances…
+            </Text>
+            <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}>
+              Placeholder until all-balances resolves
+            </Text>
+          </View>
+          <GroupBalanceBadge loading balanceData={undefined} currentUserId="u-you" />
+        </Surface>
+
         <List.Accordion
           title={`Archived (${ARCHIVED_GROUPS.length})`}
           titleStyle={[styles.sectionAccordionTitle, { color: theme.colors.onSurfaceVariant }]}
@@ -242,23 +263,33 @@ function HomeListPreview() {
         >
           <View style={[styles.accordionContent, { backgroundColor: theme.colors.background }]}>
             {ARCHIVED_GROUPS.map((group) => (
-              <Surface
+              <View
                 key={group.id}
-                style={[styles.groupRow, { backgroundColor: theme.colors.surface }]}
-                elevation={0}
+                style={[styles.nestedGroupRow, { borderBottomColor: theme.colors.outlineVariant }]}
+                testID={`preview-nested-${group.id}`}
               >
-                <View style={{ flex: 1 }}>
-                  <Text
-                    variant="titleMedium"
-                    style={{ fontWeight: "700", color: theme.colors.onSurface, letterSpacing: -0.2 }}
-                  >
-                    {group.name}
-                  </Text>
-                  <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}>
-                    {group.description}
-                  </Text>
+                <View style={styles.nestedGroupTouchable}>
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      variant="titleMedium"
+                      style={{
+                        fontWeight: "600",
+                        color: theme.colors.onSurfaceVariant,
+                        letterSpacing: -0.2,
+                      }}
+                    >
+                      {group.name}
+                    </Text>
+                    <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}>
+                      {group.description}
+                    </Text>
+                  </View>
+                  <GroupBalanceBadge
+                    balanceData={{ group_id: group.id, balances: [] }}
+                    currentUserId="u-you"
+                  />
                 </View>
-              </Surface>
+              </View>
             ))}
           </View>
         </List.Accordion>
@@ -281,23 +312,36 @@ function HomeListPreview() {
         >
           <View style={[styles.accordionContent, { backgroundColor: theme.colors.background }]}>
             {FORMER_GROUPS.map((group) => (
-              <Surface
+              <View
                 key={group.id}
-                style={[styles.groupRow, { backgroundColor: theme.colors.surface }]}
-                elevation={0}
+                style={[styles.nestedGroupRow, { borderBottomColor: theme.colors.outlineVariant }]}
+                testID={`preview-nested-${group.id}`}
               >
-                <View style={{ flex: 1 }}>
-                  <Text
-                    variant="titleMedium"
-                    style={{ fontWeight: "700", color: theme.colors.onSurface, letterSpacing: -0.2 }}
-                  >
-                    {group.name}
-                  </Text>
-                  <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}>
-                    {group.description}
-                  </Text>
+                <View style={styles.nestedGroupTouchable}>
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      variant="titleMedium"
+                      style={{
+                        fontWeight: "600",
+                        color: theme.colors.onSurfaceVariant,
+                        letterSpacing: -0.2,
+                      }}
+                    >
+                      {group.name}
+                    </Text>
+                    <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}>
+                      {group.description}
+                    </Text>
+                  </View>
+                  <GroupBalanceBadge
+                    balanceData={{
+                      group_id: group.id,
+                      balances: [{ user_id: "u-you", amount: -12, currency: "USD", full_name: "You" }],
+                    }}
+                    currentUserId="u-you"
+                  />
                 </View>
-              </Surface>
+              </View>
             ))}
           </View>
         </List.Accordion>
@@ -410,7 +454,7 @@ export const HomePolishPreviewScreen: React.FC = () => {
           }}
         >
           <Text variant="labelLarge" style={{ marginBottom: 8, fontWeight: "700" }}>
-            Home tighten preview — flat group cards
+            Home polish preview — nested Former + loading badge
           </Text>
           <SegmentedButtons
             value={surface}
@@ -474,6 +518,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 2,
     paddingHorizontal: 4,
+    minHeight: 44,
     overflow: "hidden",
   },
   sectionAccordionTitle: {
@@ -487,7 +532,18 @@ const styles = StyleSheet.create({
     marginRight: 0,
   },
   accordionContent: {
-    paddingTop: 8,
+    paddingTop: 4,
     marginHorizontal: -4,
+  },
+  nestedGroupRow: {
+    marginLeft: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  nestedGroupTouchable: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    gap: 8,
   },
 });

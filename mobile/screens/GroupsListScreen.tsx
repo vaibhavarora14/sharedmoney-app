@@ -86,8 +86,11 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
   }, [loading, groups.length]);
   const {
     data: balancesData,
+    isLoading: balancesLoading,
     refetch: refetchBalances,
   } = useBalances(undefined, { enabled: balancesEnabled });
+  // Deferred all-balances: do not paint "Even" until the query has resolved.
+  const balancesReady = balancesEnabled && !balancesLoading;
 
   const homeLoadedLoggedRef = React.useRef(false);
   const homeStartedAtRef = React.useRef(Date.now());
@@ -181,8 +184,10 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
     });
   }, [loading, groups.length]);
 
-  // Helper function to render a group item
-  const renderGroupItem = (group: Group) => {
+  // Helper function to render a group item.
+  // nested=true: Former/Archived children — indented hairline rows (not twin active cards).
+  const renderGroupItem = (group: Group, options?: { nested?: boolean }) => {
+    const nested = Boolean(options?.nested);
     const isNew =
       seenGroupIds !== null &&
       !seenGroupIds.has(group.id) &&
@@ -194,18 +199,13 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
     const hasUnreadActivity = unreadActivityCount > 0;
     const description = group.description?.trim();
 
-    return (
-    <Surface
-      key={group.id}
-      style={[
-        styles.groupItem,
-        { backgroundColor: theme.colors.surface },
-      ]}
-      elevation={0}
-    >
+    const row = (
       <TouchableOpacity
         testID={`group-card-${group.id}`}
-        style={[styles.groupTouchable, expandedText && styles.groupTouchableExpanded]}
+        style={[
+          nested ? styles.nestedGroupTouchable : styles.groupTouchable,
+          expandedText && styles.groupTouchableExpanded,
+        ]}
         onPress={() => handleGroupPress(group)}
         activeOpacity={0.7}
         accessibilityLabel={`${group.name}${isNew ? ", new group" : ""}${hasUnreadActivity ? `, ${unreadActivityCount} unread ${unreadActivityCount === 1 ? "notification" : "notifications"}` : ""}${group.archived_at ? ", archived" : ""}${group.user_status === "left" ? ", former member" : ""}`}
@@ -216,9 +216,16 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
               <Text
                 variant="titleMedium"
                 style={[
-                  styles.groupName,
-                  { color: theme.colors.onSurface },
-                  group.user_status === 'left' && { color: theme.colors.onSurfaceVariant }
+                  nested ? styles.nestedGroupName : styles.groupName,
+                  {
+                    color: nested
+                      ? theme.colors.onSurfaceVariant
+                      : theme.colors.onSurface,
+                  },
+                  !nested &&
+                    group.user_status === "left" && {
+                      color: theme.colors.onSurfaceVariant,
+                    },
                 ]}
                 numberOfLines={expandedText ? undefined : 1}
               >
@@ -257,14 +264,42 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
           </View>
         </View>
 
-        {/* Balance status — color + label, no badge soup */}
-        <GroupBalanceBadge 
+        {/* Balance status — color + label, no badge soup; never optimistic Even */}
+        <GroupBalanceBadge
           style={expandedText ? styles.balanceBadgeExpanded : undefined}
-          balanceData={balancesData?.group_balances?.find(gb => gb.group_id === group.id)} 
+          balanceData={balancesData?.group_balances?.find(gb => gb.group_id === group.id)}
           currentUserId={user?.id}
+          loading={!balancesReady}
         />
       </TouchableOpacity>
-    </Surface>
+    );
+
+    if (nested) {
+      return (
+        <View
+          key={group.id}
+          style={[
+            styles.nestedGroupRow,
+            { borderBottomColor: theme.colors.outlineVariant },
+          ]}
+          testID={`nested-group-row-${group.id}`}
+        >
+          {row}
+        </View>
+      );
+    }
+
+    return (
+      <Surface
+        key={group.id}
+        style={[
+          styles.groupItem,
+          { backgroundColor: theme.colors.surface },
+        ]}
+        elevation={0}
+      >
+        {row}
+      </Surface>
     );
   };
 
@@ -457,7 +492,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
               {/* Active Groups */}
               {activeGroups.map((group) => renderGroupItem(group))}
 
-              {/* Archived Groups — mute label + light surface chip (Home tighten) */}
+              {/* Archived Groups — mute chip + demoted nested hairline children */}
               {archivedGroups.length > 0 && (
                 <List.Accordion
                   title={`Archived (${archivedGroups.length})`}
@@ -487,12 +522,14 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                       { backgroundColor: theme.colors.background },
                     ]}
                   >
-                    {archivedGroups.map((group) => renderGroupItem(group))}
+                    {archivedGroups.map((group) =>
+                      renderGroupItem(group, { nested: true })
+                    )}
                   </View>
                 </List.Accordion>
               )}
 
-              {/* Former Groups — mute label + light surface chip (Home tighten) */}
+              {/* Former Groups — mute chip + demoted nested hairline children */}
               {formerGroups.length > 0 && (
                 <List.Accordion
                   title={`Former (${formerGroups.length})`}
@@ -522,7 +559,9 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                       { backgroundColor: theme.colors.background },
                     ]}
                   >
-                    {formerGroups.map((group) => renderGroupItem(group))}
+                    {formerGroups.map((group) =>
+                      renderGroupItem(group, { nested: true })
+                    )}
                   </View>
                 </List.Accordion>
               )}
@@ -733,13 +772,15 @@ const styles = StyleSheet.create({
     maxWidth: "100%",
   },
   // Secondary Home sections (Former / Archived): mute 13/600 labels + light
-  // surface chip (quieter padding than active flat cards). Keep Former (N).
+  // surface chip. Expanded body uses indented hairline rows — not twin cards.
   sectionAccordion: {
     marginTop: 20,
     marginBottom: 8,
     borderRadius: 12,
     paddingVertical: 2,
     paddingHorizontal: 4,
+    // Expand/collapse hit target ≥44pt (Design soft note from #351/#357).
+    minHeight: 44,
     overflow: "hidden",
   },
   sectionAccordionTitle: {
@@ -757,9 +798,25 @@ const styles = StyleSheet.create({
     paddingLeft: 0,
     marginLeft: 0,
     marginRight: 0,
-    paddingTop: 8,
-    // Pull expanded cards onto page canvas so they rhyme with active rows
-    // instead of nesting same-color surfaces inside the chip.
+    paddingTop: 4,
+    // Pull nested rows onto page canvas under the mute chip.
     marginHorizontal: -4,
+  },
+  // Nested Former/Archived children: indent + hairline on canvas (no surface/r14 cards).
+  nestedGroupRow: {
+    marginLeft: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  nestedGroupTouchable: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    gap: 8,
+  },
+  nestedGroupName: {
+    fontWeight: "600",
+    flexShrink: 1,
+    letterSpacing: -0.2,
   },
 });

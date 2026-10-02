@@ -68,10 +68,20 @@ const lightTheme = {
 test("group list zero balance shows Even, never Settled", () => {
   const Badge = loadBadge(lightTheme);
   for (const balanceData of [null, { group_id: "g", balances: [] }, { group_id: "g", balances: [{ user_id: "me", amount: 0, currency: "USD" }] }]) {
-    const tree = Badge({ balanceData, currentUserId: "me" });
+    const tree = Badge({ balanceData, currentUserId: "me", loading: false });
     assert.match(text(tree), /Even/);
     assert.doesNotMatch(text(tree), /Settled/i);
     assert.equal(nodes(tree).some((n) => n.props?.testID === "group-balance-even"), true);
+  }
+});
+
+test("group list does not claim Even while balances are still loading", () => {
+  const Badge = loadBadge(lightTheme);
+  for (const balanceData of [undefined, null, { group_id: "g", balances: [] }]) {
+    const tree = Badge({ balanceData, currentUserId: "me", loading: true });
+    assert.doesNotMatch(text(tree), /Even|Settled/i);
+    assert.equal(nodes(tree).some((n) => n.props?.testID === "group-balance-loading"), true);
+    assert.equal(nodes(tree).some((n) => n.props?.testID === "group-balance-even"), false);
   }
 });
 
