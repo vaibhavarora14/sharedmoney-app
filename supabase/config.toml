@@ -270,6 +270,9 @@ verify_jwt = false
 [functions.notification-worker]
 verify_jwt = false
 
+[functions.whatsapp-dry-run]
+verify_jwt = false
+
 # Configure MFA via WebAuthn
 # [auth.mfa.web_authn]
 # enroll_enabled = true
