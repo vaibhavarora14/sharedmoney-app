@@ -118,6 +118,7 @@ The workflow deploys all functions in `supabase/functions/`:
 - `notification-worker` - Service-only Expo push outbox and receipt processor
 - `settlements` - Settlement management
 - `transactions` - Transaction management
+- `whatsapp-dry-run` - Admin/debug Meta Cloud API template dry-run (OTP/reminder)
 
 ### Notes
 
