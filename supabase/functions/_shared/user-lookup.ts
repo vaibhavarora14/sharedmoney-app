@@ -40,3 +40,32 @@ export async function findUserIdByEmail(email: string): Promise<string | null> {
 
   return (data as string | null) ?? null;
 }
+
+export async function findUserIdByPhone(phone: string): Promise<string | null> {
+  if (!SUPABASE_SERVICE_ROLE_KEY) {
+    throw new Error('SUPABASE_SERVICE_ROLE_KEY is not configured');
+  }
+
+  const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  });
+
+  const { data, error } = await adminClient
+    .from('profiles')
+    .select('id')
+    .eq('phone', phone.trim())
+    .maybeSingle();
+
+  if (error) {
+    log.error('Failed to look up user by phone', 'user-lookup', {
+      error: error.message,
+    });
+    throw new Error(`Failed to look up user by phone: ${error.message}`);
+  }
+
+  return (data as { id: string } | null)?.id ?? null;
+}

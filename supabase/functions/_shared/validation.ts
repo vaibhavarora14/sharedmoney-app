@@ -9,6 +9,46 @@ export function isValidUUID(uuid: string): boolean {
 export const EMAIL_FORMAT_ERROR =
   "Enter a valid email like name@example.com.";
 
+export const DEFAULT_PHONE_COUNTRY_CODE = "IN";
+
+export const PHONE_FORMAT_ERROR =
+  "Enter a valid phone number with area code.";
+
+const E164_REGEX = /^\+[1-9]\d{7,14}$/;
+
+const COUNTRY_DIAL_CODES: Record<string, string> = {
+  US: "+1",
+  IN: "+91",
+  GB: "+44",
+  CA: "+1",
+  AU: "+61",
+  DE: "+49",
+  FR: "+33",
+  IT: "+39",
+  ES: "+34",
+  BR: "+55",
+  MX: "+52",
+  JP: "+81",
+  CN: "+86",
+  KR: "+82",
+  SG: "+65",
+  AE: "+971",
+  SA: "+966",
+  ZA: "+27",
+  NZ: "+64",
+};
+
+function digitsOnly(value: string): string {
+  return value.replace(/\D/g, "");
+}
+
+function defaultDialCode(countryCode?: string | null): string {
+  const normalized = countryCode?.trim().toUpperCase() ||
+    DEFAULT_PHONE_COUNTRY_CODE;
+  return COUNTRY_DIAL_CODES[normalized] ??
+    COUNTRY_DIAL_CODES[DEFAULT_PHONE_COUNTRY_CODE];
+}
+
 /**
  * Practical email format check for invites and member emails.
  * Rejects clearly invalid addresses without over-restricting uncommon-but-legal TLDs.
@@ -40,6 +80,29 @@ export function isValidEmail(email: string): boolean {
   }
 
   return true;
+}
+
+export function isValidE164Phone(phone: string): boolean {
+  return E164_REGEX.test(phone.trim());
+}
+
+export function normalizePhoneToE164(
+  phone: string,
+  countryCode?: string | null,
+): string | null {
+  const trimmed = phone.trim();
+  if (!trimmed) return null;
+
+  if (trimmed.startsWith("+")) {
+    const normalized = `+${digitsOnly(trimmed)}`;
+    return isValidE164Phone(normalized) ? normalized : null;
+  }
+
+  const nationalDigits = digitsOnly(trimmed).replace(/^0+/, "");
+  if (!nationalDigits) return null;
+
+  const normalized = `${defaultDialCode(countryCode)}${nationalDigits}`;
+  return isValidE164Phone(normalized) ? normalized : null;
 }
 
 /**
