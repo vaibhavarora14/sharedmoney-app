@@ -84,6 +84,8 @@ import { useCurrencyPreferences } from "../hooks/useCurrencyPreferences";
 import { getDefaultCurrency } from "../utils/currency";
 import { collectCurrencies } from "../utils/currencyMerge";
 import { showErrorAlert } from "../utils/errorHandling";
+import { buildSettleShareMessage } from "../utils/settleShareMessage";
+import { shareSettleDraft } from "../utils/shareSettleDraft";
 import {
   getUserFriendlyErrorMessage,
   isSessionExpiredError,
@@ -1097,6 +1099,26 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     setShowSettlementForm(true);
   };
 
+  const handleShareBalance = (balance: Balance) => {
+    if (!isActiveMember || balancesError) return;
+    const counterpartyName = balance.full_name?.trim()
+      || balance.email?.split("@")[0]?.trim()
+      || "Someone";
+    const message = buildSettleShareMessage({
+      lines: [{
+        counterpartyName,
+        direction: balance.amount < 0 ? "pay" : "receive",
+        amount: Math.abs(balance.amount),
+        currency: balance.currency,
+        groupName: group.name,
+      }],
+    });
+
+    void shareSettleDraft(message).catch((error) => {
+      showErrorAlert(error, signOut, "Could not share settle message");
+    });
+  };
+
   const handleSettlementSave = async (settlementData: {
     group_id: string;
     from_participant_id: string;
@@ -1664,6 +1686,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                 activeMemberCount={activeMemberCount}
                 balanceError={!!balancesError}
                 onSettlePress={isActiveMember && !balancesError ? handleSettleUp : undefined}
+                onSharePress={isActiveMember && !balancesError ? handleShareBalance : undefined}
                 onMyCostsPress={() => handleStatNavigation("my-costs")}
                 onTotalCostsPress={() => handleStatNavigation("total-costs")}
                 onOpenCurrencySettings={() => setShowCurrencySettings(true)}

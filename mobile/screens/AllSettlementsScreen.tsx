@@ -18,6 +18,8 @@ import { Group } from "../types";
 import { getDefaultCurrency } from "../utils/currency";
 import { showErrorAlert } from "../utils/errorHandling";
 import { createPreviewRateBook } from "../utils/previewRates";
+import { buildSettleShareMessage } from "../utils/settleShareMessage";
+import { shareSettleDraft } from "../utils/shareSettleDraft";
 import {
   clubPersonSettlements,
   membersFromSettlementLine,
@@ -133,6 +135,22 @@ export const AllSettlementsScreen: React.FC<AllSettlementsScreenProps> = ({
     if (group) onOpenGroup?.(group);
   };
 
+  const handleSharePerson = (person: PersonSettlementView) => {
+    const message = buildSettleShareMessage({
+      lines: person.lines.map((line) => ({
+        counterpartyName: person.displayName,
+        direction: line.direction,
+        amount: line.amount,
+        currency: line.currency,
+        groupName: line.groupName,
+      })),
+    });
+
+    void shareSettleDraft(message).catch((error) => {
+      showErrorAlert(error, signOut, "Could not share settle message");
+    });
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Appbar.Header style={{ backgroundColor: theme.colors.background }}>
@@ -229,6 +247,7 @@ export const AllSettlementsScreen: React.FC<AllSettlementsScreenProps> = ({
                   }
                   setSelectedLine(line);
                 }}
+                onSharePerson={handleSharePerson}
               />
             </>
           )}
