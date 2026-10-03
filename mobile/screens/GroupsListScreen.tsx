@@ -186,13 +186,9 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
 
   // Helper function to render a group item.
   // nested=true: Archived children — indented hairline rows (not twin active cards).
-  // formerCard=true: Former Surface cards inside accordion (gap owns vertical rhythm).
-  const renderGroupItem = (
-    group: Group,
-    options?: { nested?: boolean; formerCard?: boolean }
-  ) => {
+  // Former uses the same non-nested Surface cards as active (marginBottom 9).
+  const renderGroupItem = (group: Group, options?: { nested?: boolean }) => {
     const nested = Boolean(options?.nested);
-    const formerCard = Boolean(options?.formerCard);
     const isNew =
       seenGroupIds !== null &&
       !seenGroupIds.has(group.id) &&
@@ -299,7 +295,6 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
         key={group.id}
         style={[
           styles.groupItem,
-          formerCard && styles.formerGroupItem,
           { backgroundColor: theme.colors.surface },
         ]}
         elevation={0}
@@ -535,51 +530,59 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                 </List.Accordion>
               )}
 
-              {/* Former Groups — mute chip; children use same flat cards as active
-                  (comfortable padding/gap). Archived stays nested hairlines. */}
+              {/* Former Groups — mute chip header (not List.Accordion): Paper
+                  Accordion clones children and collapses card gaps on web.
+                  Flat Surface cards with the same padding/gap as active. */}
               {formerGroups.length > 0 && (
-                <List.Accordion
-                  title={`Former (${formerGroups.length})`}
-                  titleStyle={[
-                    styles.sectionAccordionTitle,
-                    { color: theme.colors.onSurfaceVariant },
-                  ]}
+                <View
                   style={[
                     styles.sectionAccordion,
                     { backgroundColor: theme.colors.surface },
                   ]}
-                  left={(props) => (
-                    <List.Icon
-                      {...props}
-                      icon="history"
-                      color={theme.colors.onSurfaceVariant}
-                      style={styles.sectionAccordionIcon}
-                    />
-                  )}
-                  expanded={formerGroupsExpanded}
-                  onPress={() => setFormerGroupsExpanded(!formerGroupsExpanded)}
                   testID="former-groups-accordion"
                 >
-                  <View
-                    style={[
-                      styles.accordionContent,
-                      styles.formerAccordionContent,
-                      { backgroundColor: theme.colors.background },
-                    ]}
+                  <TouchableRipple
+                    onPress={() =>
+                      setFormerGroupsExpanded(!formerGroupsExpanded)
+                    }
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded: formerGroupsExpanded }}
+                    accessibilityLabel={`Former, ${formerGroups.length} groups`}
+                    style={styles.formerAccordionHeader}
                   >
-                    {formerGroups.map((group, index) => (
-                      <View key={group.id}>
-                        {index > 0 ? (
-                          <View
-                            style={styles.formerCardGap}
-                            testID={`former-card-gap-${group.id}`}
-                          />
-                        ) : null}
-                        {renderGroupItem(group, { formerCard: true })}
-                      </View>
-                    ))}
-                  </View>
-                </List.Accordion>
+                    <View style={styles.formerAccordionHeaderRow}>
+                      <List.Icon
+                        icon="history"
+                        color={theme.colors.onSurfaceVariant}
+                        style={styles.sectionAccordionIcon}
+                      />
+                      <Text
+                        style={[
+                          styles.sectionAccordionTitle,
+                          { color: theme.colors.onSurfaceVariant, flex: 1 },
+                        ]}
+                      >
+                        {`Former (${formerGroups.length})`}
+                      </Text>
+                      <List.Icon
+                        icon={
+                          formerGroupsExpanded ? "chevron-up" : "chevron-down"
+                        }
+                        color={theme.colors.onSurfaceVariant}
+                      />
+                    </View>
+                  </TouchableRipple>
+                  {formerGroupsExpanded ? (
+                    <View
+                      style={[
+                        styles.formerAccordionContent,
+                        { backgroundColor: theme.colors.background },
+                      ]}
+                    >
+                      {formerGroups.map((group) => renderGroupItem(group))}
+                    </View>
+                  ) : null}
+                </View>
               )}
             </>
           )}
@@ -819,18 +822,21 @@ const styles = StyleSheet.create({
     // Pull nested rows onto page canvas under the mute chip.
     marginHorizontal: -4,
   },
-  // Former children: match active card rhythm under the mute accordion chip.
-  // Explicit spacer height (not margin/gap) — Paper Accordion on web collapses
-  // sibling margins and flex gap, which re-crushed Former into one slab.
+  // Former: custom expand (not List.Accordion) so Surface card margins paint.
+  formerAccordionHeader: {
+    minHeight: 44,
+    justifyContent: "center",
+  },
+  formerAccordionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: 44,
+    paddingRight: 4,
+  },
   formerAccordionContent: {
     paddingTop: 8,
-  },
-  formerCardGap: {
-    height: 9,
-  },
-  // Accordion spacer owns Former vertical rhythm; don't also stack groupItem margin.
-  formerGroupItem: {
-    marginBottom: 0,
+    // Pull cards onto page canvas under the mute chip (same as #357).
+    marginHorizontal: -4,
   },
   // Nested Archived children: indent + hairline on canvas (no surface/r14 cards).
   nestedGroupRow: {

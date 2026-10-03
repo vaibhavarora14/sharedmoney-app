@@ -9,6 +9,7 @@ import {
   SegmentedButtons,
   Surface,
   Text,
+  TouchableRipple,
   useTheme,
 } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -309,38 +310,50 @@ function HomeListPreview() {
           </View>
         </List.Accordion>
 
-        <List.Accordion
-          title={`Former (${FORMER_GROUPS.length})`}
-          titleStyle={[styles.sectionAccordionTitle, { color: theme.colors.onSurfaceVariant }]}
-          style={[styles.sectionAccordion, { backgroundColor: theme.colors.surface }]}
-          left={(props) => (
-            <List.Icon
-              {...props}
-              icon="history"
-              color={theme.colors.onSurfaceVariant}
-              style={styles.sectionAccordionIcon}
-            />
-          )}
-          expanded={formerExpanded}
-          onPress={() => setFormerExpanded(!formerExpanded)}
+        <View
+          style={[
+            styles.sectionAccordion,
+            { backgroundColor: theme.colors.surface },
+          ]}
           testID="preview-former-accordion"
         >
-          <View
-            style={[
-              styles.accordionContent,
-              styles.formerAccordionContent,
-              { backgroundColor: theme.colors.background },
-            ]}
+          <TouchableRipple
+            onPress={() => setFormerExpanded(!formerExpanded)}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: formerExpanded }}
+            style={styles.formerAccordionHeader}
           >
-            {FORMER_GROUPS.map((group, index) => (
-              <View key={group.id}>
-                {index > 0 ? <View style={styles.formerCardGap} /> : null}
+            <View style={styles.formerAccordionHeaderRow}>
+              <List.Icon
+                icon="history"
+                color={theme.colors.onSurfaceVariant}
+                style={styles.sectionAccordionIcon}
+              />
+              <Text
+                style={[
+                  styles.sectionAccordionTitle,
+                  { color: theme.colors.onSurfaceVariant, flex: 1 },
+                ]}
+              >
+                {`Former (${FORMER_GROUPS.length})`}
+              </Text>
+              <List.Icon
+                icon={formerExpanded ? "chevron-up" : "chevron-down"}
+                color={theme.colors.onSurfaceVariant}
+              />
+            </View>
+          </TouchableRipple>
+          {formerExpanded ? (
+            <View
+              style={[
+                styles.formerAccordionContent,
+                { backgroundColor: theme.colors.background },
+              ]}
+            >
+              {FORMER_GROUPS.map((group) => (
                 <Surface
-                  style={[
-                    styles.groupRow,
-                    styles.formerGroupItem,
-                    { backgroundColor: theme.colors.surface },
-                  ]}
+                  key={group.id}
+                  style={[styles.groupRow, { backgroundColor: theme.colors.surface }]}
                   elevation={0}
                   testID={`preview-former-card-${group.id}`}
                 >
@@ -367,10 +380,10 @@ function HomeListPreview() {
                     currentUserId="u-you"
                   />
                 </Surface>
-              </View>
-            ))}
-          </View>
-        </List.Accordion>
+              ))}
+            </View>
+          ) : null}
+        </View>
       </View>
     </PreviewShell>
   );
@@ -565,14 +578,19 @@ const styles = StyleSheet.create({
     paddingTop: 4,
     marginHorizontal: -4,
   },
+  formerAccordionHeader: {
+    minHeight: 44,
+    justifyContent: "center",
+  },
+  formerAccordionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: 44,
+    paddingRight: 4,
+  },
   formerAccordionContent: {
     paddingTop: 8,
-  },
-  formerCardGap: {
-    height: 9,
-  },
-  formerGroupItem: {
-    marginBottom: 0,
+    marginHorizontal: -4,
   },
   nestedGroupRow: {
     marginLeft: 14,
