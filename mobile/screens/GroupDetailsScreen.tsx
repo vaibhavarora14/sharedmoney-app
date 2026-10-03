@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import * as Localization from "expo-localization";
 import {
   ActivityIndicator as RNActivityIndicator,
   Alert,
@@ -65,6 +66,8 @@ import {
   useUpdateSettlement,
 } from "../hooks/useSettlements";
 import { useRealtimeGroupSync } from "../hooks/useRealtimeGroupSync";
+import { useProfile } from "../hooks/useProfile";
+import { useUserProfiles } from "../hooks/useUserProfiles";
 import {
   useGroupLastExpenseSplitAmong,
   useGroupLastTransactionCurrency,
@@ -86,6 +89,12 @@ import { collectCurrencies } from "../utils/currencyMerge";
 import { showErrorAlert } from "../utils/errorHandling";
 import { buildSettleShareMessage } from "../utils/settleShareMessage";
 import { shareSettleDraft } from "../utils/shareSettleDraft";
+import {
+  buildSettleHandoffPack,
+  settleHandoffPersonKey,
+  settleHandoffSelfKey,
+} from "../utils/settleHandoff";
+import { loadSettleHandoffDetails } from "../utils/settleHandoffStorage";
 import {
   getUserFriendlyErrorMessage,
   isSessionExpiredError,
@@ -211,6 +220,8 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     onConfirm: () => void;
     destructive?: boolean;
   } | null>(null);
+  const { session, signOut } = useAuth();
+  const { data: profile } = useProfile();
 
   // Stable handler for closing menu
   const handleCloseMenu = () => {
@@ -272,6 +283,17 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     error: balancesError,
     refetch: refetchBalances,
   } = useBalances(initialGroup.id, { includeStats: true });
+  const balanceUserIds = useMemo(
+    () => (balancesData?.group_balances?.[0]?.balances || [])
+      .map((balance) => balance.user_id)
+      .filter((userId): userId is string => !!userId && userId !== session?.user?.id),
+    [balancesData?.group_balances, session?.user?.id],
+  );
+  const userProfiles = useUserProfiles(balanceUserIds);
+  const deviceCountryCode = useMemo(
+    () => Localization.getLocales?.()[0]?.regionCode ?? null,
+    [],
+  );
   const groupStatsLoading = balancesLoading;
   const {
     data: settlementsData,
@@ -297,7 +319,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const [cancellingInvitationId, setCancellingInvitationId] = useState<
     string | null
   >(null);
-  const { session, signOut } = useAuth();
   const theme = useTheme();
   const {
     preferredCurrency,
@@ -1104,17 +1125,46 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     const counterpartyName = balance.full_name?.trim()
       || balance.email?.split("@")[0]?.trim()
       || "Someone";
-    const message = buildSettleShareMessage({
-      lines: [{
+    const line = {
         counterpartyName,
         direction: balance.amount < 0 ? "pay" : "receive",
         amount: Math.abs(balance.amount),
         currency: balance.currency,
         groupName: group.name,
-      }],
-    });
+    } as const;
 
-    void shareSettleDraft(message).catch((error) => {
+    void (async () => {
+      const usesSelfPayout = balance.amount > 0;
+      const detailKey = usesSelfPayout
+        ? settleHandoffSelfKey()
+        : settleHandoffPersonKey({
+            userId: balance.user_id,
+            email: balance.email,
+            displayName: counterpartyName,
+          });
+      const details = await loadSettleHandoffDetails(detailKey).catch(() => ({}));
+      const currentUserName = profile?.full_name?.trim()
+        || session?.user?.email?.split("@")[0]?.trim()
+        || "you";
+      const pack = buildSettleHandoffPack({
+        lines: [line],
+        counterpartyName,
+        currentUserName,
+        details,
+        country: {
+          profileCountryCode: usesSelfPayout
+            ? profile?.country_code ?? null
+            : userProfiles.data.get(balance.user_id)?.country_code ?? null,
+          localeCountryCode: deviceCountryCode,
+        },
+      });
+      const message = buildSettleShareMessage({
+        lines: [line],
+        paymentUrl: pack.shareUrl,
+      });
+
+      await shareSettleDraft(message, pack.shareUrl);
+    })().catch((error) => {
       showErrorAlert(error, signOut, "Could not share settle message");
     });
   };
