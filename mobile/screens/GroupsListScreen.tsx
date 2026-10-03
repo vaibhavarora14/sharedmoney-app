@@ -185,7 +185,8 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
   }, [loading, groups.length]);
 
   // Helper function to render a group item.
-  // nested=true: Former/Archived children — indented hairline rows (not twin active cards).
+  // nested=true: Archived children — indented hairline rows (not twin active cards).
+  // Former uses non-nested Surface cards (same padding/gap as active).
   const renderGroupItem = (group: Group, options?: { nested?: boolean }) => {
     const nested = Boolean(options?.nested);
     const isNew =
@@ -529,7 +530,8 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                 </List.Accordion>
               )}
 
-              {/* Former Groups — mute chip + demoted nested hairline children */}
+              {/* Former Groups — mute chip; children use same flat cards as active
+                  (comfortable padding/gap). Archived stays nested hairlines. */}
               {formerGroups.length > 0 && (
                 <List.Accordion
                   title={`Former (${formerGroups.length})`}
@@ -556,12 +558,11 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                   <View
                     style={[
                       styles.accordionContent,
+                      styles.formerAccordionContent,
                       { backgroundColor: theme.colors.background },
                     ]}
                   >
-                    {formerGroups.map((group) =>
-                      renderGroupItem(group, { nested: true })
-                    )}
+                    {formerGroups.map((group) => renderGroupItem(group))}
                   </View>
                 </List.Accordion>
               )}
@@ -772,7 +773,8 @@ const styles = StyleSheet.create({
     maxWidth: "100%",
   },
   // Secondary Home sections (Former / Archived): mute 13/600 labels + light
-  // surface chip. Expanded body uses indented hairline rows — not twin cards.
+  // surface chip. Archived expands to indented hairlines; Former expands to
+  // the same flat surface cards as active (comfortable padding, not crushed).
   sectionAccordion: {
     marginTop: 20,
     marginBottom: 8,
@@ -802,7 +804,11 @@ const styles = StyleSheet.create({
     // Pull nested rows onto page canvas under the mute chip.
     marginHorizontal: -4,
   },
-  // Nested Former/Archived children: indent + hairline on canvas (no surface/r14 cards).
+  // Former children: match active card rhythm under the mute accordion chip.
+  formerAccordionContent: {
+    paddingTop: 8,
+  },
+  // Nested Archived children: indent + hairline on canvas (no surface/r14 cards).
   nestedGroupRow: {
     marginLeft: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,

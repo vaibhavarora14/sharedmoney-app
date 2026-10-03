@@ -258,11 +258,13 @@ test("solo group does not gain settlement chrome", () => {
   assert.equal(nodes(tree).find(n => n.props.testID === "group-settlement-rows"), undefined);
 });
 
-test("dashboard loading shows updating copy without settlement rows", () => {
+test("dashboard loading shows updating copy without settlement rows or insight skeletons", () => {
   const tree = dashboard([balance("me", 50), balance("Alice", -50)], { loading: true });
   assert.equal(settlementRows(tree).length, 0);
   assert.match(text(tree), /Updating balances\.\.\./);
   assert.doesNotMatch(text(tree), /Alice owes you|You owe Alice|\$50/);
+  // Single loading treatment: banner only — no My spending / Group summary "..." cards.
+  assert.doesNotMatch(text(tree), /My spending|Group summary/);
 });
 
 test("dashboard quietLoading hides settlement + insight chrome while shell loader is elsewhere", () => {

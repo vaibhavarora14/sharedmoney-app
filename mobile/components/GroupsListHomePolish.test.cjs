@@ -49,25 +49,26 @@ test("Former/Archived accordion hit target is at least 44pt", () => {
   assert.ok((styles.sectionAccordion.minHeight ?? 0) >= 44);
 });
 
-test("nested Former/Archived rows are indented hairlines, not twin surface cards", () => {
+test("nested Archived rows are indented hairlines; Former uses active flat cards", () => {
   const styles = loadStyles(
     path.join(__dirname, "../screens/GroupsListScreen.tsx")
   );
   assert.ok(
     styles.nestedGroupRow.marginLeft >= 12 &&
       styles.nestedGroupRow.marginLeft <= 16,
-    "indent children ~12–16px"
+    "Archived indent children ~12–16px"
   );
   assert.equal(styles.nestedGroupRow.borderBottomWidth, 1);
   assert.equal(styles.nestedGroupRow.borderRadius, undefined);
   assert.equal(styles.nestedGroupName.fontWeight, "600");
-  // Active cards keep surface chrome; nested must not reuse that recipe.
+  // Active + Former cards share surface chrome; nested Archived must not.
   assert.equal(styles.groupItem.borderRadius, 14);
   assert.equal(styles.groupItem.marginBottom, 9);
   assert.notEqual(styles.nestedGroupRow.borderRadius, 14);
+  assert.equal(styles.formerAccordionContent.paddingTop, 8);
 });
 
-test("preview mirror keeps demoted nested chrome + accordion minHeight", () => {
+test("preview mirror keeps Archived nested chrome + accordion minHeight", () => {
   const styles = loadStyles(
     path.join(__dirname, "../screens/HomePolishPreviewScreen.tsx")
   );
@@ -77,6 +78,9 @@ test("preview mirror keeps demoted nested chrome + accordion minHeight", () => {
       styles.nestedGroupRow.marginLeft <= 16
   );
   assert.equal(styles.nestedGroupRow.borderBottomWidth, 1);
+  assert.equal(styles.groupRow.borderRadius, 14);
+  assert.equal(styles.groupRow.marginBottom, 9);
+  assert.equal(styles.formerAccordionContent.paddingTop, 8);
 });
 
 function harnessWithFormer() {
@@ -263,7 +267,7 @@ function harnessWithFormer() {
   };
 }
 
-test("expanded Former children render nested hairline rows, not Surface cards", () => {
+test("expanded Former children render flat Surface cards like active, not hairlines", () => {
   const app = harnessWithFormer();
   app.setFormerExpanded(true);
   const tree = app.render();
@@ -273,15 +277,26 @@ test("expanded Former children render nested hairline rows, not Surface cards", 
   assert.ok(accordion);
   assert.ok((flatten(accordion.props.style).minHeight ?? 0) >= 44);
 
+  // Former must not use the nested hairline wrapper reserved for Archived.
   const nested = nodes(tree).find(
     (n) => n.props?.testID === "nested-group-row-g-former"
   );
-  assert.ok(nested, "Former child must use nested row wrapper");
-  assert.equal(flatten(nested.props.style).marginLeft, 14);
-  assert.equal(flatten(nested.props.style).borderBottomWidth, 1);
+  assert.equal(nested, undefined);
 
-  // Nested row must not be wrapped in Surface (active cards use Surface).
-  assert.notEqual(nested.type, "Surface");
+  const formerCard = nodes(tree).find(
+    (n) => n.props?.testID === "group-card-g-former"
+  );
+  assert.ok(formerCard, "Former child must render the same card touch target");
+  // Walk up: card lives inside Surface with active groupItem chrome.
+  const formerSurface = nodes(tree).find(
+    (n) =>
+      n.type === "Surface" &&
+      nodes(n).some((c) => c.props?.testID === "group-card-g-former")
+  );
+  assert.ok(formerSurface, "Former child must be wrapped in Surface");
+  assert.equal(flatten(formerSurface.props.style).borderRadius, 14);
+  assert.equal(flatten(formerSurface.props.style).marginBottom, 9);
+
   const activeCard = nodes(tree).find(
     (n) => n.props?.testID === "group-card-g-active"
   );

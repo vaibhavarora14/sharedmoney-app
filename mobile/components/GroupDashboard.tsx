@@ -417,7 +417,9 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
         </Text>
       ) : null}
 
-      {deferChromeToShell ? null : renderCompactInsights()}
+      {/* One loading treatment: while balances/stats load, settlement shows
+          "Updating balances..." alone — do not also paint insight "..." cards. */}
+      {deferChromeToShell || dashboardLoading ? null : renderCompactInsights()}
     </View>
   );
 };

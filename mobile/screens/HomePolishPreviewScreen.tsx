@@ -20,7 +20,7 @@ import { WEB_MAX_WIDTH } from "../constants/layout";
 import { lightTheme } from "../theme";
 import { Balance, GroupStatsResponse } from "../types";
 
-type SurfaceId = "home-empty" | "home-list" | "group-home" | "stats";
+type SurfaceId = "home-empty" | "home-list" | "group-home" | "group-loading" | "stats";
 
 const SAMPLE_BALANCES: Balance[] = [
   {
@@ -168,6 +168,21 @@ const FORMER_GROUPS = [
     name: "Old flatmates",
     description: "You left this group",
   },
+  {
+    id: "g-notif-test",
+    name: "Notification Test",
+    description: "You left this group",
+  },
+  {
+    id: "g-sushma",
+    name: "Sushma Cloth press",
+    description: "You left this group",
+  },
+  {
+    id: "g-weekend",
+    name: "Weekend",
+    description: "You left this group",
+  },
 ];
 
 const ARCHIVED_GROUPS = [
@@ -180,7 +195,7 @@ const ARCHIVED_GROUPS = [
 
 function HomeListPreview() {
   const theme = useTheme();
-  // Expand Former by default so Design can re-score nested demoted chrome.
+  // Expand Former by default so Design can re-score comfortable Former cards.
   const [formerExpanded, setFormerExpanded] = useState(true);
   const [archivedExpanded, setArchivedExpanded] = useState(true);
   return (
@@ -310,38 +325,43 @@ function HomeListPreview() {
           onPress={() => setFormerExpanded(!formerExpanded)}
           testID="preview-former-accordion"
         >
-          <View style={[styles.accordionContent, { backgroundColor: theme.colors.background }]}>
+          <View
+            style={[
+              styles.accordionContent,
+              styles.formerAccordionContent,
+              { backgroundColor: theme.colors.background },
+            ]}
+          >
             {FORMER_GROUPS.map((group) => (
-              <View
+              <Surface
                 key={group.id}
-                style={[styles.nestedGroupRow, { borderBottomColor: theme.colors.outlineVariant }]}
-                testID={`preview-nested-${group.id}`}
+                style={[styles.groupRow, { backgroundColor: theme.colors.surface }]}
+                elevation={0}
+                testID={`preview-former-card-${group.id}`}
               >
-                <View style={styles.nestedGroupTouchable}>
-                  <View style={{ flex: 1 }}>
-                    <Text
-                      variant="titleMedium"
-                      style={{
-                        fontWeight: "600",
-                        color: theme.colors.onSurfaceVariant,
-                        letterSpacing: -0.2,
-                      }}
-                    >
-                      {group.name}
-                    </Text>
-                    <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}>
-                      {group.description}
-                    </Text>
-                  </View>
-                  <GroupBalanceBadge
-                    balanceData={{
-                      group_id: group.id,
-                      balances: [{ user_id: "u-you", amount: -12, currency: "USD", full_name: "You" }],
+                <View style={{ flex: 1, paddingRight: 12 }}>
+                  <Text
+                    variant="titleMedium"
+                    style={{
+                      fontWeight: "700",
+                      color: theme.colors.onSurfaceVariant,
+                      letterSpacing: -0.2,
                     }}
-                    currentUserId="u-you"
-                  />
+                  >
+                    {group.name}
+                  </Text>
+                  <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}>
+                    {group.description}
+                  </Text>
                 </View>
-              </View>
+                <GroupBalanceBadge
+                  balanceData={{
+                    group_id: group.id,
+                    balances: [{ user_id: "u-you", amount: -12, currency: "USD", full_name: "You" }],
+                  }}
+                  currentUserId="u-you"
+                />
+              </Surface>
             ))}
           </View>
         </List.Accordion>
@@ -350,28 +370,30 @@ function HomeListPreview() {
   );
 }
 
-function GroupHomePreview() {
+function GroupHomePreview({ loading = false }: { loading?: boolean }) {
   const theme = useTheme();
   return (
     <PreviewShell
       title="Roommates"
       fab={
-        <FAB
-          icon="plus"
-          label="Add expense"
-          style={[styles.fab, { backgroundColor: theme.colors.primary }]}
-          color={theme.colors.onPrimary}
-          onPress={() => {}}
-        />
+        loading ? null : (
+          <FAB
+            icon="plus"
+            label="Add expense"
+            style={[styles.fab, { backgroundColor: theme.colors.primary }]}
+            color={theme.colors.onPrimary}
+            onPress={() => {}}
+          />
+        )
       }
     >
-      <View testID="preview-group-home">
+      <View testID={loading ? "preview-group-loading" : "preview-group-home"}>
         <GroupDashboard
           balances={SAMPLE_BALANCES}
-          groupStats={SAMPLE_GROUP_STATS}
+          groupStats={loading ? null : SAMPLE_GROUP_STATS}
           currentUserId="u-you"
           currentUserParticipantId="p-you"
-          loading={false}
+          loading={loading}
           activeMemberCount={3}
           defaultCurrency="USD"
         />
@@ -454,7 +476,7 @@ export const HomePolishPreviewScreen: React.FC = () => {
           }}
         >
           <Text variant="labelLarge" style={{ marginBottom: 8, fontWeight: "700" }}>
-            Home polish preview — nested Former + loading badge
+            Home polish preview — Former flat cards + Archived nested
           </Text>
           <SegmentedButtons
             value={surface}
@@ -462,6 +484,7 @@ export const HomePolishPreviewScreen: React.FC = () => {
             buttons={[
               { value: "home-empty", label: "Empty" },
               { value: "home-list", label: "Home" },
+              { value: "group-loading", label: "Loading" },
               { value: "group-home", label: "Group" },
               { value: "stats", label: "Stats" },
             ]}
@@ -469,6 +492,7 @@ export const HomePolishPreviewScreen: React.FC = () => {
         </View>
         {surface === "home-empty" ? <HomeEmptyPreview /> : null}
         {surface === "home-list" ? <HomeListPreview /> : null}
+        {surface === "group-loading" ? <GroupHomePreview loading /> : null}
         {surface === "group-home" ? <GroupHomePreview /> : null}
         {surface === "stats" ? <StatsPreview /> : null}
       </SafeAreaView>
@@ -534,6 +558,9 @@ const styles = StyleSheet.create({
   accordionContent: {
     paddingTop: 4,
     marginHorizontal: -4,
+  },
+  formerAccordionContent: {
+    paddingTop: 8,
   },
   nestedGroupRow: {
     marginLeft: 14,
