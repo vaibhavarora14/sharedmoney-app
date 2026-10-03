@@ -103,6 +103,7 @@ import {
   countActiveMembers,
   shouldPreferAddPeopleFab,
 } from "../utils/transactionsEmptyCopy";
+import { resolveGroupDetailsLoadingTreatment } from "../utils/groupDetailsLoadingTreatment";
 import {
   ARCHIVE_GROUP_CONFIRM_MESSAGE,
   REMOVE_FROM_LISTS_CONFIRM_MESSAGE,
@@ -1208,16 +1209,23 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     !settlementsLoading &&
     transactions.length === 0 &&
     settlements.length === 0;
-  // Single-loader rule: while the list shell spinner is up (incl. balances on an
-  // empty list), GroupDashboard hides settlement/insight chrome so they don't stack.
   const listDataLoading =
     listMode === "transactions" ? txLoading || settlementsLoading : activityLoading;
   const listContentEmpty =
     listMode === "transactions"
       ? transactions.length === 0 && settlements.length === 0
       : (activityData?.activities?.length ?? 0) === 0;
-  const groupOpenShellLoading =
-    listDataLoading || (balancesLoading && listContentEmpty);
+  const fetchingNextPage =
+    listMode === "transactions" ? txIsFetchingNextPage : activityFetchingNextPage;
+  const loadingTreatment = resolveGroupDetailsLoadingTreatment({
+    balancesLoading: balancesLoading || groupStatsLoading,
+    balancesError: !!balancesError,
+    listDataLoading,
+    listContentEmpty,
+    listRefreshing,
+    fetchingNextPage,
+  });
+  const groupOpenShellLoading = loadingTreatment.showListInitialLoader;
   const preferAddPeopleFab = shouldPreferAddPeopleFab(
     activeMemberCount,
     ledgerIsEmpty,
@@ -1635,7 +1643,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           }
           refreshControl={
             <RefreshControl
-              refreshing={listRefreshing}
+              refreshing={loadingTreatment.showRefreshControlLoader}
               onRefresh={() => {
                 void handlePullToRefresh();
               }}
@@ -1983,9 +1991,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           }
           ListFooterComponent={
             <View style={{ alignItems: "center", paddingTop: 8, paddingBottom: 80 }}>
-              {(listMode === "transactions"
-                ? txIsFetchingNextPage
-                : activityFetchingNextPage) ? (
+              {loadingTreatment.showFooterLoader ? (
                 <RNActivityIndicator size="small" />
               ) : null}
             </View>

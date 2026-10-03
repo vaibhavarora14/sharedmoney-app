@@ -439,12 +439,19 @@ test("GroupDetailsScreen wires balanceError and gates onSettlePress for active m
   assert.match(source, /if\s*\(\s*!isActiveMember\s*\|\|\s*balancesError\s*\)\s*return/);
 });
 
-test("GroupDetailsScreen quiets dashboard while group-open shell spinner is up", () => {
+test("GroupDetailsScreen uses one loading treatment for balances banner versus list spinners", () => {
   const source = readFileSync(path.join(__dirname, "../screens/GroupDetailsScreen.tsx"), "utf8");
+  const policy = readFileSync(path.join(__dirname, "../utils/groupDetailsLoadingTreatment.ts"), "utf8");
+
+  assert.match(source, /resolveGroupDetailsLoadingTreatment/);
   assert.match(source, /quietLoading=\{groupOpenShellLoading\}/);
-  assert.match(source, /groupOpenShellLoading/);
-  assert.match(source, /listDataLoading/);
-  assert.match(source, /balancesLoading && listContentEmpty/);
+  assert.match(source, /refreshing=\{loadingTreatment\.showRefreshControlLoader\}/);
+  assert.match(source, /loadingTreatment\.showFooterLoader/);
+  assert.match(source, /const groupOpenShellLoading = loadingTreatment\.showListInitialLoader/);
+  assert.match(policy, /showBalancesUpdatingBanner/);
+  assert.match(policy, /showListInitialLoader\s*=[\s\S]*!showBalancesUpdatingBanner[\s\S]*listDataLoading[\s\S]*listContentEmpty/);
+  assert.match(policy, /showRefreshControlLoader:\s*listRefreshing && !showBalancesUpdatingBanner/);
+  assert.match(policy, /showFooterLoader:\s*fetchingNextPage && !showBalancesUpdatingBanner/);
 });
 
 test("App prefetchGroupData fetches balances with include_stats for shared key", () => {
