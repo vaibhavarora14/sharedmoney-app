@@ -65,6 +65,8 @@ export interface BuildWhatsAppTemplateInput {
   to: string;
   template: WhatsAppTemplateKind;
   code?: string;
+  group?: unknown;
+  amount?: unknown;
   config: WhatsAppTemplateConfig;
 }
 
@@ -156,10 +158,25 @@ function buildOtpComponents(code: string): WhatsAppTemplateComponent[] {
   ];
 }
 
-function buildReminderComponents(): WhatsAppTemplateComponent[] {
-  // Utility reminder templates vary; dry-run sends with empty body params.
-  // Founders can extend once the approved template placeholders are known.
-  return [];
+function resolveReminderText(value: unknown, fallback: string, field: string): string {
+  if (value === undefined || value === null) return fallback;
+  if (typeof value !== 'string') {
+    throw new Error(`Invalid request: ${field} must be a string`);
+  }
+  const trimmed = value.trim();
+  return trimmed ? trimmed : fallback;
+}
+
+function buildReminderComponents(group: unknown, amount: unknown): WhatsAppTemplateComponent[] {
+  return [
+    {
+      type: 'body',
+      parameters: [
+        textParam(resolveReminderText(group, 'Weekend trip', 'group')),
+        textParam(resolveReminderText(amount, 'Rs 450', 'amount')),
+      ],
+    },
+  ];
 }
 
 export function buildWhatsAppTemplatePayload(
@@ -203,7 +220,7 @@ export function buildWhatsAppTemplatePayload(
         template: {
           name: config.reminderTemplateName,
           language: { code: config.reminderTemplateLang },
-          components: buildReminderComponents(),
+          components: buildReminderComponents(input.group, input.amount),
         },
       };
     }

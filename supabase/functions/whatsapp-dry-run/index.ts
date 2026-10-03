@@ -12,7 +12,9 @@
  *   "to": "+E.164",
  *   "template": "otp" | "reminder",
  *   "dryRun": true | false,   // default true
- *   "code"?: "123456"         // required for otp
+ *   "code"?: "123456",        // required for otp
+ *   "group"?: "Weekend trip", // optional for reminder; blank uses sample
+ *   "amount"?: "Rs 450"       // optional for reminder; blank uses sample
  * }
  *
  * Secrets (Supabase / GitHub Production — never commit):
@@ -48,6 +50,8 @@ interface DryRunBody {
   template?: unknown;
   dryRun?: unknown;
   code?: unknown;
+  group?: unknown;
+  amount?: unknown;
 }
 
 function getBearerToken(req: Request): string | null {
@@ -99,6 +103,8 @@ function parseBody(raw: unknown): {
   template: WhatsAppTemplateKind;
   dryRun: boolean;
   code?: string;
+  group?: string | null;
+  amount?: string | null;
 } {
   if (!raw || typeof raw !== 'object') {
     throw new Error('Invalid request: JSON body required');
@@ -124,7 +130,27 @@ function parseBody(raw: unknown): {
     code = body.code.trim();
   }
 
-  return { to, template, dryRun, code };
+  let group: string | null | undefined;
+  if (body.group !== undefined && body.group !== null) {
+    if (typeof body.group !== 'string') {
+      throw new Error('Invalid request: group must be a string');
+    }
+    group = body.group.trim();
+  } else if (body.group === null) {
+    group = null;
+  }
+
+  let amount: string | null | undefined;
+  if (body.amount !== undefined && body.amount !== null) {
+    if (typeof body.amount !== 'string') {
+      throw new Error('Invalid request: amount must be a string');
+    }
+    amount = body.amount.trim();
+  } else if (body.amount === null) {
+    amount = null;
+  }
+
+  return { to, template, dryRun, code, group, amount };
 }
 
 Deno.serve(async (req: Request) => {
@@ -146,14 +172,13 @@ Deno.serve(async (req: Request) => {
       throw new Error('Invalid request: JSON body required');
     }
 
-    const { to, template, dryRun, code } = parseBody(raw);
+    const { to, template, dryRun, code, group, amount } = parseBody(raw);
     const config = loadWhatsAppTemplateConfig();
-    const payload = buildWhatsAppTemplatePayload({ to, template, code, config });
+    const payload = buildWhatsAppTemplatePayload({ to, template, code, group, amount, config });
 
     if (dryRun) {
       log.info('WhatsApp dry-run payload built', 'whatsapp-dry-run', {
         template,
-        to,
         dryRun: true,
       });
       return createSuccessResponse({
@@ -186,7 +211,6 @@ Deno.serve(async (req: Request) => {
 
     log.info('WhatsApp template sent', 'whatsapp-dry-run', {
       template,
-      to,
       messageId: result.messageId,
       dryRun: false,
     });
