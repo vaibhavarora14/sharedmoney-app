@@ -96,7 +96,7 @@ Deno.test('buildWhatsAppTemplatePayload rejects otp without code', () => {
   );
 });
 
-Deno.test('buildWhatsAppTemplatePayload builds reminder template when name configured', () => {
+Deno.test('buildWhatsAppTemplatePayload builds reminder template with sample params by default', () => {
   const payload = buildWhatsAppTemplatePayload({
     to: '+919876543210',
     template: 'reminder',
@@ -105,7 +105,49 @@ Deno.test('buildWhatsAppTemplatePayload builds reminder template when name confi
 
   assertEquals(payload.template.name, 'sharedmoney_monthly_balance');
   assertEquals(payload.to, '919876543210');
-  assertEquals(payload.template.components, []);
+  assertEquals(payload.template.components, [
+    {
+      type: 'body',
+      parameters: [
+        { type: 'text', text: 'Weekend trip' },
+        { type: 'text', text: 'Rs 450' },
+      ],
+    },
+  ]);
+});
+
+Deno.test('buildWhatsAppTemplatePayload builds reminder template with trimmed custom params', () => {
+  const payload = buildWhatsAppTemplatePayload({
+    to: '+919876543210',
+    template: 'reminder',
+    group: '  Ski lodge  ',
+    amount: '  Rs 1,250  ',
+    config: baseConfig,
+  });
+
+  assertEquals(payload.template.components, [
+    {
+      type: 'body',
+      parameters: [
+        { type: 'text', text: 'Ski lodge' },
+        { type: 'text', text: 'Rs 1,250' },
+      ],
+    },
+  ]);
+});
+
+Deno.test('buildWhatsAppTemplatePayload rejects non-string reminder params', () => {
+  assertThrows(
+    () =>
+      buildWhatsAppTemplatePayload({
+        to: '+919876543210',
+        template: 'reminder',
+        group: 123,
+        config: baseConfig,
+      }),
+    Error,
+    'Invalid request: group must be a string',
+  );
 });
 
 Deno.test('buildWhatsAppTemplatePayload requires reminder template name secret', () => {
