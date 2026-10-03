@@ -2,10 +2,11 @@ import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import React, { useMemo } from "react";
 import { StyleSheet, useWindowDimensions, View } from "react-native";
 import {
-    Surface,
-    Text,
-    TouchableRipple,
-    useTheme
+  Button,
+  Surface,
+  Text,
+  TouchableRipple,
+  useTheme
 } from "react-native-paper";
 import { Balance, GroupStatsResponse } from "../types";
 import { UnifyPromptCard } from "./UnifyPromptCard";
@@ -39,6 +40,7 @@ interface GroupDashboardProps {
   defaultCurrency?: string;
   /** Opens SettlementFormScreen for a viewer-involved settlement edge. Does not mutate data. */
   onSettlePress?: (balance: Balance) => void;
+  onSharePress?: (balance: Balance) => void;
   onMyCostsPress?: () => void;
   onTotalCostsPress?: () => void;
   onOpenCurrencySettings?: () => void;
@@ -80,6 +82,7 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
   onTotalCostsPress,
   onOpenCurrencySettings,
   activeMemberCount = 2,
+  onSharePress,
 }) => {
   const theme = useTheme();
   const { width, fontScale } = useWindowDimensions();
@@ -249,60 +252,75 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
       const name = personShort(balance);
       const rowKey =
         balance.participant_id || balance.user_id || `${name}-${balance.currency}`;
+      const currency = balance.currency || defaultCurrency;
       const amountColor = isOwed
         ? theme.colors.onTertiaryContainer
         : theme.colors.onSecondaryContainer;
       const isConverted = !unifyEnabled || balance.currency.toUpperCase() === settlementCurrency.toUpperCase();
       const Row = onSettlePress ? TouchableRipple : View;
+      const owesLabel = isOwed ? `${name} owes you` : `You owe ${name}`;
+      const signedAmount = formatSignedBalance(balance.amount, currency, isOwed);
       return (
-        <Row
-          key={`${rowKey}-${balance.currency}-${index}`}
-          testID={`settlement-row-${rowKey}-${balance.currency || defaultCurrency}`}
-          onPress={onSettlePress ? () => onSettlePress(balance) : undefined}
-          accessible
-          accessibilityRole={onSettlePress ? "button" : undefined}
-          accessibilityLabel={`${isOwed ? `${name} owes you` : `You owe ${name}`}, ${formatSignedBalance(balance.amount, balance.currency, isOwed)}`}
-          accessibilityHint={onSettlePress ? "Opens the payment record form. No payment is recorded until confirmed." : undefined}
-          style={styles.settlementRow}
-        >
-          <View style={styles.settlementRowContent}>
-            <View
-              accessible={false}
-              style={[styles.settlementAvatar, { backgroundColor: theme.colors.primaryContainer }]}
-            >
-              <Text style={{ color: theme.colors.onPrimaryContainer, fontWeight: "600", fontSize: 13 }}>
-                {initials(balance.full_name, balance.email)}
-              </Text>
-            </View>
-            <View style={styles.settlementDetails}>
-              <Text
-                variant="bodyMedium"
-                style={{ flexGrow: 1, flexShrink: 1, flexBasis: 80, color: theme.colors.onSurface }}
+        <View key={`${rowKey}-${currency}-${index}`}>
+          <Row
+            testID={`settlement-row-${rowKey}-${currency}`}
+            onPress={onSettlePress ? () => onSettlePress(balance) : undefined}
+            accessible
+            accessibilityRole={onSettlePress ? "button" : undefined}
+            accessibilityLabel={`${owesLabel}, ${signedAmount}`}
+            accessibilityHint={onSettlePress ? "Opens the payment record form. No payment is recorded until confirmed." : undefined}
+            style={styles.settlementRow}
+          >
+            <View style={styles.settlementRowContent}>
+              <View
+                accessible={false}
+                style={[styles.settlementAvatar, { backgroundColor: theme.colors.primaryContainer }]}
               >
-                {isOwed ? `${name} owes you` : `You owe ${name}`}
-              </Text>
-              <Text
-                variant="titleSmall"
-                style={{ flexShrink: 1, color: amountColor, fontWeight: "700" }}
-              >
-                {formatSignedBalance(balance.amount, balance.currency, isOwed)}
-              </Text>
-              {!isConverted ? (
-                <Text
-                  variant="labelSmall"
-                  style={{ width: "100%", color: theme.colors.onSurfaceVariant }}
-                >
-                  Not converted · {balance.currency}
+                <Text style={{ color: theme.colors.onPrimaryContainer, fontWeight: "600", fontSize: 13 }}>
+                  {initials(balance.full_name, balance.email)}
                 </Text>
-              ) : null}
+              </View>
+              <View style={styles.settlementDetails}>
+                <Text
+                  variant="bodyMedium"
+                  style={{ flexGrow: 1, flexShrink: 1, flexBasis: 80, color: theme.colors.onSurface }}
+                >
+                  {owesLabel}
+                </Text>
+                <Text
+                  variant="titleSmall"
+                  style={{ flexShrink: 1, color: amountColor, fontWeight: "700" }}
+                >
+                  {signedAmount}
+                </Text>
+                {!isConverted ? (
+                  <Text
+                    variant="labelSmall"
+                    style={{ width: "100%", color: theme.colors.onSurfaceVariant }}
+                  >
+                    Not converted · {balance.currency}
+                  </Text>
+                ) : null}
+              </View>
+              {onSettlePress ? <MaterialCommunityIcons
+                name="chevron-right"
+                size={22}
+                color={theme.colors.onSurfaceVariant}
+              /> : null}
             </View>
-            {onSettlePress ? <MaterialCommunityIcons
-              name="chevron-right"
-              size={22}
-              color={theme.colors.onSurfaceVariant}
-            /> : null}
-          </View>
-        </Row>
+          </Row>
+          {onSharePress ? (
+            <Button
+              mode="text"
+              testID={`share-in-chat-${rowKey}-${currency}`}
+              accessibilityLabel={`Share in chat, ${owesLabel}`}
+              onPress={() => onSharePress(balance)}
+              style={styles.shareInChatButton}
+            >
+              Share in chat
+            </Button>
+          ) : null}
+        </View>
       );
     });
   };
@@ -481,6 +499,11 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 14,
     alignItems: "center",
+  },
+  shareInChatButton: {
+    alignSelf: "flex-start",
+    marginLeft: 52,
+    marginBottom: 8,
   },
   compactStatsRow: {
       flexDirection: 'row',
