@@ -1,33 +1,51 @@
-import React from "react";
-import { Platform, Pressable, StyleSheet, View } from "react-native";
+import React, { useEffect, useMemo, useState } from "react";
+import { Alert, Clipboard, Linking, Platform, Pressable, StyleSheet, View } from "react-native";
 import {
   Avatar,
   Button,
+  Menu,
   Surface,
   Text,
+  TextInput,
   TouchableRipple,
   useTheme,
 } from "react-native-paper";
 import { PersonSettlementView } from "../hooks/usePeopleSettlements";
 import { formatCurrency } from "../utils/currency";
 import { formatBreakdown } from "../utils/currencyMerge";
+import { openAppExternalUrl } from "../utils/openAppExternalUrl";
 import {
   canRecordSettlementLine,
   personSettleActionLabel,
   personSettlePlan,
   type GroupSettlementLine,
 } from "../utils/peopleSettlements";
+import {
+  buildSettleHandoffPack,
+  settleHandoffPersonKey,
+  settleHandoffSelfKey,
+  type SettleHandoffAction,
+  type SettleHandoffDetails,
+} from "../utils/settleHandoff";
+import {
+  loadSettleHandoffDetails,
+  saveSettleHandoffDetails,
+} from "../utils/settleHandoffStorage";
 
 interface PeopleSettlementsListProps {
   people: PersonSettlementView[];
   confirmingPerson: PersonSettlementView | null;
   submitting?: boolean;
   preview?: boolean;
+  currentUserName?: string | null;
+  currentUserCountryCode?: string | null;
+  deviceCountryCode?: string | null;
+  profileCountryCodesByUserId?: Record<string, string | null | undefined>;
   onSettlePerson: (person: PersonSettlementView) => void;
   onConfirmPerson: () => void;
   onCancelPerson: () => void;
   onSettleLine?: (line: GroupSettlementLine) => void;
-  onSharePerson?: (person: PersonSettlementView) => void;
+  onSharePerson?: (person: PersonSettlementView, paymentUrl?: string | null) => void;
 }
 
 function initials(name: string): string {
@@ -47,11 +65,270 @@ function verbLabel(verb: PersonSettlementView["headline"]["verb"]): string {
   return "Settled";
 }
 
+function personUsesSelfPayout(person: PersonSettlementView): boolean {
+  const visible = person.lines.filter((line) => Math.abs(line.amount) >= 0.005);
+  return visible.length > 0 && visible.every((line) => line.direction === "receive");
+}
+
+const COUNTRY_CHOICES = [
+  { code: "US", label: "United States" },
+  { code: "IN", label: "India" },
+  { code: "EU", label: "Euro area" },
+  { code: "BR", label: "Brazil" },
+];
+
+type SettleHandoffPackViewProps = {
+  person: PersonSettlementView;
+  currentUserName?: string | null;
+  currentUserCountryCode?: string | null;
+  deviceCountryCode?: string | null;
+  profileCountryCode?: string | null;
+  onShareUrlChange?: (url: string | null) => void;
+};
+
+const SettleHandoffPackView: React.FC<SettleHandoffPackViewProps> = ({
+  person,
+  currentUserName,
+  currentUserCountryCode,
+  deviceCountryCode,
+  profileCountryCode,
+  onShareUrlChange,
+}) => {
+  const theme = useTheme();
+  const [details, setDetails] = useState<SettleHandoffDetails>({});
+  const [countryMenuVisible, setCountryMenuVisible] = useState(false);
+  const detailKey = personUsesSelfPayout(person)
+    ? settleHandoffSelfKey()
+    : settleHandoffPersonKey({
+        userId: person.userId,
+        email: person.email,
+        displayName: person.displayName,
+      });
+
+  useEffect(() => {
+    let mounted = true;
+    loadSettleHandoffDetails(detailKey)
+      .then((stored) => {
+        if (mounted) setDetails(stored);
+      })
+      .catch(() => {
+        if (mounted) setDetails({});
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [detailKey]);
+
+  const pack = useMemo(() => {
+    const payeeCountryCode = personUsesSelfPayout(person)
+      ? currentUserCountryCode
+      : profileCountryCode;
+
+    return buildSettleHandoffPack({
+      lines: person.lines.map((line) => ({
+        counterpartyName: person.displayName,
+        direction: line.direction,
+        amount: line.amount,
+        currency: line.currency,
+        groupName: line.groupName,
+      })),
+      counterpartyName: person.displayName,
+      currentUserName,
+      details,
+      country: {
+        profileCountryCode: payeeCountryCode,
+        localeCountryCode: deviceCountryCode,
+      },
+    });
+  }, [
+    currentUserCountryCode,
+    currentUserName,
+    details,
+    deviceCountryCode,
+    person,
+    profileCountryCode,
+  ]);
+
+  useEffect(() => {
+    onShareUrlChange?.(pack.shareUrl);
+  }, [onShareUrlChange, pack.shareUrl]);
+
+  const updateDetails = (patch: Partial<SettleHandoffDetails>) => {
+    const next = { ...details, ...patch };
+    setDetails(next);
+    saveSettleHandoffDetails(detailKey, next).catch(() => undefined);
+  };
+
+  const handleCopy = (text: string) => {
+    Clipboard.setString(text);
+  };
+
+  const handleOpen = async (url: string) => {
+    if (url.startsWith("upi://")) {
+      try {
+        await Linking.openURL(url);
+      } catch {
+        Alert.alert("Couldn't open app", "You can still copy the details and pay outside SharedMoney.");
+      }
+      return;
+    }
+
+    await openAppExternalUrl(url, {
+      errorTitle: "Couldn't open app",
+    });
+  };
+
+  const renderAction = (action: SettleHandoffAction) => (
+    <Button
+      key={action.id}
+      mode={action.kind === "open" ? "contained-tonal" : "outlined"}
+      compact
+      onPress={() => {
+        if (action.kind === "open") {
+          void handleOpen(action.url);
+          return;
+        }
+        handleCopy(action.copyText);
+      }}
+      style={styles.handoffButton}
+    >
+      {action.label}
+    </Button>
+  );
+
+  return (
+    <View
+      style={[
+        styles.handoff,
+        {
+          backgroundColor: theme.colors.surfaceVariant,
+          borderColor: theme.colors.outlineVariant,
+        },
+      ]}
+    >
+      <View style={styles.handoffHeader}>
+        <View style={styles.handoffTitle}>
+          <Text variant="labelLarge" style={{ color: theme.colors.onSurface, fontWeight: "700" }}>
+            Pay outside the app
+          </Text>
+          <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+            Opens their app. SharedMoney never moves the money.
+          </Text>
+        </View>
+        <Menu
+          visible={countryMenuVisible}
+          onDismiss={() => setCountryMenuVisible(false)}
+          anchor={
+            <Button
+              mode="text"
+              compact
+              onPress={() => setCountryMenuVisible(true)}
+            >
+              {pack.countryLabel}
+            </Button>
+          }
+        >
+          {COUNTRY_CHOICES.map((choice) => (
+            <Menu.Item
+              key={choice.code}
+              title={choice.label}
+              onPress={() => {
+                setCountryMenuVisible(false);
+                updateDetails({ countryOverride: choice.code });
+              }}
+            />
+          ))}
+        </Menu>
+      </View>
+
+      {pack.pack === "US" ? (
+        <View style={styles.handoffFields}>
+          <TextInput
+            mode="outlined"
+            dense
+            placeholder="Venmo username"
+            value={details.venmoHandle ?? ""}
+            onChangeText={(value) => updateDetails({ venmoHandle: value })}
+          />
+          <TextInput
+            mode="outlined"
+            dense
+            placeholder="$cashtag"
+            value={details.cashAppCashtag ?? ""}
+            onChangeText={(value) => updateDetails({ cashAppCashtag: value })}
+          />
+          <TextInput
+            mode="outlined"
+            dense
+            placeholder="PayPal.me name"
+            value={details.paypalMe ?? ""}
+            onChangeText={(value) => updateDetails({ paypalMe: value })}
+          />
+        </View>
+      ) : null}
+
+      {pack.pack === "IN" ? (
+        <View style={styles.handoffFields}>
+          <TextInput
+            mode="outlined"
+            dense
+            placeholder="UPI ID"
+            value={details.upiVpa ?? ""}
+            autoCapitalize="none"
+            onChangeText={(value) => updateDetails({ upiVpa: value })}
+          />
+        </View>
+      ) : null}
+
+      {pack.pack === "EU" ? (
+        <View style={styles.handoffFields}>
+          <TextInput
+            mode="outlined"
+            dense
+            placeholder="IBAN"
+            value={details.iban ?? ""}
+            autoCapitalize="characters"
+            onChangeText={(value) => updateDetails({ iban: value })}
+          />
+          <TextInput
+            mode="outlined"
+            dense
+            placeholder="Name on account"
+            value={details.ibanName ?? ""}
+            onChangeText={(value) => updateDetails({ ibanName: value })}
+          />
+        </View>
+      ) : null}
+
+      {pack.pack === "BR" ? (
+        <View style={styles.handoffFields}>
+          <TextInput
+            mode="outlined"
+            dense
+            placeholder="Pix key"
+            value={details.pixKey ?? ""}
+            autoCapitalize="none"
+            onChangeText={(value) => updateDetails({ pixKey: value })}
+          />
+        </View>
+      ) : null}
+
+      <View style={styles.handoffActions}>
+        {pack.actions.map(renderAction)}
+      </View>
+    </View>
+  );
+};
+
 export const PeopleSettlementsList: React.FC<PeopleSettlementsListProps> = ({
   people,
   confirmingPerson,
   submitting = false,
   preview = false,
+  currentUserName,
+  currentUserCountryCode,
+  deviceCountryCode,
+  profileCountryCodesByUserId = {},
   onSettlePerson,
   onConfirmPerson,
   onCancelPerson,
@@ -59,6 +336,7 @@ export const PeopleSettlementsList: React.FC<PeopleSettlementsListProps> = ({
   onSharePerson,
 }) => {
   const theme = useTheme();
+  const [shareUrls, setShareUrls] = useState<Record<string, string | null>>({});
 
   return (
     <View style={styles.list}>
@@ -228,12 +506,27 @@ export const PeopleSettlementsList: React.FC<PeopleSettlementsListProps> = ({
               </Pressable>
             )}
 
+            <SettleHandoffPackView
+              person={person}
+              currentUserName={currentUserName}
+              currentUserCountryCode={currentUserCountryCode}
+              deviceCountryCode={deviceCountryCode}
+              profileCountryCode={
+                person.userId ? profileCountryCodesByUserId[person.userId] ?? null : null
+              }
+              onShareUrlChange={(url) => {
+                setShareUrls((current) => (
+                  current[person.key] === url ? current : { ...current, [person.key]: url }
+                ));
+              }}
+            />
+
             <Button
               mode="outlined"
               icon="share-variant"
               testID={`share-in-chat-${person.key}`}
               accessibilityLabel={`Share in chat with ${person.displayName}`}
-              onPress={onSharePerson ? () => onSharePerson(person) : undefined}
+              onPress={onSharePerson ? () => onSharePerson(person, shareUrls[person.key] ?? null) : undefined}
               disabled={person.lines.length === 0 || !onSharePerson}
               style={styles.shareInChat}
             >
@@ -305,5 +598,32 @@ const styles = StyleSheet.create({
   },
   shareInChat: {
     marginTop: 12,
+  },
+  handoff: {
+    marginTop: 12,
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    gap: 10,
+  },
+  handoffHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+  },
+  handoffTitle: {
+    flex: 1,
+    gap: 2,
+  },
+  handoffFields: {
+    gap: 8,
+  },
+  handoffActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  handoffButton: {
+    marginTop: 0,
   },
 });

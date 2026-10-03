@@ -1,4 +1,5 @@
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
+import * as Localization from "expo-localization";
 import React, { useMemo, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import {
@@ -12,6 +13,8 @@ import {
 import { PeopleSettlementsList } from "../components/PeopleSettlementsList";
 import { useAuth } from "../contexts/AuthContext";
 import { usePeopleSettlements, type PersonSettlementView } from "../hooks/usePeopleSettlements";
+import { useProfile } from "../hooks/useProfile";
+import { useUserProfiles } from "../hooks/useUserProfiles";
 import { useCreateSettlement, useCreateSettlements } from "../hooks/useSettlements";
 import { useGroups } from "../hooks/useGroups";
 import { Group } from "../types";
@@ -115,6 +118,7 @@ export const AllSettlementsScreen: React.FC<AllSettlementsScreenProps> = ({
   const theme = useTheme();
   const { user, signOut } = useAuth();
   const live = usePeopleSettlements();
+  const { data: profile } = useProfile();
   const { data: groups } = useGroups();
   const createSettlement = useCreateSettlement();
   const createSettlements = useCreateSettlements();
@@ -124,6 +128,25 @@ export const AllSettlementsScreen: React.FC<AllSettlementsScreenProps> = ({
   const people = preview ? previewPeople() : live.people;
   const summary = preview ? settlementSummary(people) : live.summary;
   const isLoading = preview ? false : live.isLoading;
+  const profileUserIds = useMemo(
+    () => preview ? [] : people.map((person) => person.userId).filter((id): id is string => !!id),
+    [people, preview],
+  );
+  const userProfiles = useUserProfiles(profileUserIds);
+  const profileCountryCodesByUserId = useMemo(() => {
+    const countries: Record<string, string | null> = {};
+    userProfiles.data.forEach((userProfile, userId) => {
+      countries[userId] = userProfile.country_code ?? null;
+    });
+    return countries;
+  }, [userProfiles.data]);
+  const currentUserName = profile?.full_name?.trim()
+    || user?.email?.split("@")[0]?.trim()
+    || "you";
+  const deviceCountryCode = useMemo(
+    () => Localization.getLocales?.()[0]?.regionCode ?? null,
+    [],
+  );
 
   const selectedMembers = useMemo(() => {
     if (!selectedLine || !user?.id) return { members: [], participants: [] };
@@ -135,7 +158,7 @@ export const AllSettlementsScreen: React.FC<AllSettlementsScreenProps> = ({
     if (group) onOpenGroup?.(group);
   };
 
-  const handleSharePerson = (person: PersonSettlementView) => {
+  const handleSharePerson = (person: PersonSettlementView, paymentUrl?: string | null) => {
     const message = buildSettleShareMessage({
       lines: person.lines.map((line) => ({
         counterpartyName: person.displayName,
@@ -144,9 +167,10 @@ export const AllSettlementsScreen: React.FC<AllSettlementsScreenProps> = ({
         currency: line.currency,
         groupName: line.groupName,
       })),
+      paymentUrl,
     });
 
-    void shareSettleDraft(message).catch((error) => {
+    void shareSettleDraft(message, paymentUrl).catch((error) => {
       showErrorAlert(error, signOut, "Could not share settle message");
     });
   };
@@ -224,6 +248,10 @@ export const AllSettlementsScreen: React.FC<AllSettlementsScreenProps> = ({
                 confirmingPerson={selectedPerson}
                 submitting={createSettlements.isLoading}
                 preview={preview}
+                currentUserName={currentUserName}
+                currentUserCountryCode={profile?.country_code ?? null}
+                deviceCountryCode={deviceCountryCode}
+                profileCountryCodesByUserId={profileCountryCodesByUserId}
                 onSettlePerson={setSelectedPerson}
                 onCancelPerson={() => setSelectedPerson(null)}
                 onConfirmPerson={async () => {
