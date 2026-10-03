@@ -186,9 +186,13 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
 
   // Helper function to render a group item.
   // nested=true: Archived children — indented hairline rows (not twin active cards).
-  // Former uses non-nested Surface cards (same padding/gap as active).
-  const renderGroupItem = (group: Group, options?: { nested?: boolean }) => {
+  // formerCard=true: Former Surface cards inside accordion (gap owns vertical rhythm).
+  const renderGroupItem = (
+    group: Group,
+    options?: { nested?: boolean; formerCard?: boolean }
+  ) => {
     const nested = Boolean(options?.nested);
+    const formerCard = Boolean(options?.formerCard);
     const isNew =
       seenGroupIds !== null &&
       !seenGroupIds.has(group.id) &&
@@ -295,6 +299,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
         key={group.id}
         style={[
           styles.groupItem,
+          formerCard && styles.formerGroupItem,
           { backgroundColor: theme.colors.surface },
         ]}
         elevation={0}
@@ -562,7 +567,9 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                       { backgroundColor: theme.colors.background },
                     ]}
                   >
-                    {formerGroups.map((group) => renderGroupItem(group))}
+                    {formerGroups.map((group) =>
+                      renderGroupItem(group, { formerCard: true })
+                    )}
                   </View>
                 </List.Accordion>
               )}
@@ -807,6 +814,11 @@ const styles = StyleSheet.create({
   // Former children: match active card rhythm under the mute accordion chip.
   formerAccordionContent: {
     paddingTop: 8,
+    gap: 9,
+  },
+  // Accordion gap owns Former vertical rhythm; don't also stack groupItem margin.
+  formerGroupItem: {
+    marginBottom: 0,
   },
   // Nested Archived children: indent + hairline on canvas (no surface/r14 cards).
   nestedGroupRow: {

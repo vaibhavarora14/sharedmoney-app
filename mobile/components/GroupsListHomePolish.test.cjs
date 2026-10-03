@@ -66,6 +66,8 @@ test("nested Archived rows are indented hairlines; Former uses active flat cards
   assert.equal(styles.groupItem.marginBottom, 9);
   assert.notEqual(styles.nestedGroupRow.borderRadius, 14);
   assert.equal(styles.formerAccordionContent.paddingTop, 8);
+  assert.equal(styles.formerAccordionContent.gap, 9);
+  assert.equal(styles.formerGroupItem.marginBottom, 0);
 });
 
 test("preview mirror keeps Archived nested chrome + accordion minHeight", () => {
@@ -81,6 +83,8 @@ test("preview mirror keeps Archived nested chrome + accordion minHeight", () => 
   assert.equal(styles.groupRow.borderRadius, 14);
   assert.equal(styles.groupRow.marginBottom, 9);
   assert.equal(styles.formerAccordionContent.paddingTop, 8);
+  assert.equal(styles.formerAccordionContent.gap, 9);
+  assert.equal(styles.formerGroupItem.marginBottom, 0);
 });
 
 function harnessWithFormer() {
@@ -295,7 +299,8 @@ test("expanded Former children render flat Surface cards like active, not hairli
   );
   assert.ok(formerSurface, "Former child must be wrapped in Surface");
   assert.equal(flatten(formerSurface.props.style).borderRadius, 14);
-  assert.equal(flatten(formerSurface.props.style).marginBottom, 9);
+  // Accordion gap owns spacing; former cards zero marginBottom.
+  assert.equal(flatten(formerSurface.props.style).marginBottom, 0);
 
   const activeCard = nodes(tree).find(
     (n) => n.props?.testID === "group-card-g-active"

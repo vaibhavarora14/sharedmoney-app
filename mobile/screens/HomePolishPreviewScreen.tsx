@@ -335,7 +335,11 @@ function HomeListPreview() {
             {FORMER_GROUPS.map((group) => (
               <Surface
                 key={group.id}
-                style={[styles.groupRow, { backgroundColor: theme.colors.surface }]}
+                style={[
+                  styles.groupRow,
+                  styles.formerGroupItem,
+                  { backgroundColor: theme.colors.surface },
+                ]}
                 elevation={0}
                 testID={`preview-former-card-${group.id}`}
               >
@@ -561,6 +565,10 @@ const styles = StyleSheet.create({
   },
   formerAccordionContent: {
     paddingTop: 8,
+    gap: 9,
+  },
+  formerGroupItem: {
+    marginBottom: 0,
   },
   nestedGroupRow: {
     marginLeft: 14,
