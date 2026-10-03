@@ -23,17 +23,28 @@ import {
 } from "react-native-paper";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WEB_MAX_WIDTH } from "../constants/layout";
+import { CountryCodePicker } from "../components/CountryCodePicker";
 import { useAuth } from "../contexts/AuthContext";
 import { useCreateGroupShareLink } from "../hooks/useGroupInvitations";
 import { useExistingPeople } from "../hooks/useParticipants";
+import { useProfile } from "../hooks/useProfile";
 import { getInviteLinkUrl } from "../utils/inviteLinks";
 import { showErrorAlert } from "../utils/errorHandling";
+import {
+  type CountryCode,
+  getCountryByCode,
+} from "../utils/countryCodes";
 import {
   type ExistingPerson,
   existingPersonLabel,
   filterAndSortExistingPeople,
 } from "../utils/peoplePicker";
 import { getOptionalEmailFormatError } from "../utils/emailValidation";
+import {
+  DEFAULT_PHONE_COUNTRY_CODE,
+  getOptionalPhoneFormatError,
+  normalizePhoneToE164,
+} from "../utils/phoneValidation";
 import { captureIdentifiedAnalyticsEvent } from "../utils/posthogAnalytics";
 import { ANALYTICS_EVENTS } from "../utils/posthogEvents";
 
@@ -43,6 +54,8 @@ interface AddMemberScreenProps {
   onAddMember: (person: {
     fullName?: string;
     email?: string | null;
+    phone?: string | null;
+    countryCode?: string | null;
     sourceParticipantId?: string;
   }) => Promise<unknown>;
   onDismiss: () => void;
@@ -63,6 +76,18 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [emailError, setEmailError] = useState<string | null>(null);
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [phoneError, setPhoneError] = useState<string | null>(null);
+  const [showCountryPicker, setShowCountryPicker] = useState(false);
+  const [selectedCountry, setSelectedCountry] = useState<CountryCode>(
+    () => getCountryByCode(DEFAULT_PHONE_COUNTRY_CODE) ||
+      {
+        code: DEFAULT_PHONE_COUNTRY_CODE,
+        dialCode: "+91",
+        name: "India",
+        flag: "🇮🇳",
+      },
+  );
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
@@ -71,6 +96,7 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
   const insets = useSafeAreaInsets();
   const screenHeight = Dimensions.get("window").height;
   const { signOut, user } = useAuth();
+  const { data: profile } = useProfile();
   const createShareLink = useCreateGroupShareLink();
   const useNativeDriver = Platform.OS !== "web";
   const { data: existingPeople, isLoading: existingPeopleLoading } =
@@ -93,11 +119,32 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
     }).start();
   }, [visible, slideAnim, useNativeDriver]);
 
+  useEffect(() => {
+    if (!visible) return;
+    const profileCountry = profile?.country_code
+      ? getCountryByCode(profile.country_code)
+      : null;
+    const defaultCountry = getCountryByCode(DEFAULT_PHONE_COUNTRY_CODE);
+    setSelectedCountry(
+      profileCountry ||
+        defaultCountry ||
+        {
+          code: DEFAULT_PHONE_COUNTRY_CODE,
+          dialCode: "+91",
+          name: "India",
+          flag: "🇮🇳",
+        },
+    );
+  }, [profile?.country_code, visible]);
+
   const handleDismiss = () => {
     setMode("chooser");
     setFullName("");
     setEmail("");
     setEmailError(null);
+    setPhoneNumber("");
+    setPhoneError(null);
+    setShowCountryPicker(false);
     setSearch("");
     setInviteLink(null);
     onDismiss();
@@ -174,9 +221,36 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
     }
   };
 
+  const sharePhoneInviteLink = async (url: string) => {
+    if (Platform.OS === "web") {
+      if (typeof navigator !== "undefined" && navigator.share) {
+        await navigator.share({
+          title: "Join my group on SharedMoney!",
+          text: `Join my group on SharedMoney! ${url}`,
+          url,
+        });
+        return;
+      }
+      if (typeof navigator !== "undefined" && navigator.clipboard) {
+        await navigator.clipboard.writeText(url);
+        Alert.alert(
+          "Invite link copied",
+          "Share it by SMS, WhatsApp, or any app you prefer.",
+        );
+        return;
+      }
+    }
+
+    await Share.share({
+      message: `Join my group on SharedMoney! ${url}`,
+      url,
+    });
+  };
+
   const handleAdd = async () => {
     const trimmedName = fullName.trim();
     const trimmedEmail = email.trim();
+    const trimmedPhone = phoneNumber.trim();
     if (!trimmedName) {
       Alert.alert("Error", "Please enter a name");
       return;
@@ -188,10 +262,42 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
     }
     setEmailError(null);
 
+    const phoneFormatError = getOptionalPhoneFormatError(
+      trimmedPhone,
+      selectedCountry.code,
+    );
+    if (phoneFormatError) {
+      setPhoneError(phoneFormatError);
+      return;
+    }
+    const normalizedPhone = trimmedPhone
+      ? normalizePhoneToE164(trimmedPhone, selectedCountry.code)
+      : null;
+    setPhoneError(null);
+
     setLoading(true);
     try {
-      await onAddMember({ fullName: trimmedName, email: trimmedEmail || null });
-      Alert.alert("Added", "This person can now be included in expenses.", [
+      const result = await onAddMember({
+        fullName: trimmedName,
+        email: trimmedEmail || null,
+        phone: normalizedPhone,
+        countryCode: selectedCountry.code,
+      });
+      const inviteToken = typeof result === "object" && result !== null
+        ? (result as { token?: string | null }).token
+        : null;
+
+      if (normalizedPhone && inviteToken) {
+        await sharePhoneInviteLink(getInviteLinkUrl(inviteToken));
+        Alert.alert("Invitation ready", "Share it by SMS or WhatsApp.", [
+          { text: "OK", onPress: handleDismiss },
+        ]);
+        return;
+      }
+
+      Alert.alert("Added", normalizedPhone
+        ? "This person was added to the group."
+        : "This person can now be included in expenses.", [
         { text: "OK", onPress: handleDismiss },
       ]);
     } catch (error) {
@@ -507,6 +613,66 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
                             </Text>
                           )
                           : null}
+                        <View style={styles.phoneInputWrapper}>
+                          <Pressable
+                            onPress={() => setShowCountryPicker(true)}
+                            disabled={loading}
+                            style={({ pressed }) => [
+                              styles.countryCodeButton,
+                              {
+                                borderColor: theme.colors.outline,
+                                backgroundColor: theme.colors.surfaceVariant,
+                              },
+                              pressed && styles.pressedRow,
+                            ]}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Country code ${selectedCountry.name} ${selectedCountry.dialCode}`}
+                          >
+                            <Text style={styles.countryFlag}>
+                              {selectedCountry.flag}
+                            </Text>
+                            <Text
+                              variant="bodyMedium"
+                              style={{ color: theme.colors.onSurface }}
+                            >
+                              {selectedCountry.dialCode}
+                            </Text>
+                          </Pressable>
+                          <TextInput
+                            label="Phone (optional)"
+                            value={phoneNumber}
+                            onChangeText={(value) => {
+                              setPhoneNumber(value);
+                              if (phoneError) setPhoneError(null);
+                            }}
+                            mode="outlined"
+                            keyboardType="phone-pad"
+                            autoComplete="tel"
+                            disabled={loading}
+                            error={!!phoneError}
+                            style={[styles.input, styles.phoneInput]}
+                            placeholder="98765 43210"
+                            testID="person-phone-input"
+                            accessibilityHint={phoneError || undefined}
+                          />
+                        </View>
+                        {phoneError
+                          ? (
+                            <Text
+                              variant="bodySmall"
+                              accessibilityLiveRegion="polite"
+                              style={{
+                                color: theme.colors.error,
+                                marginTop: -8,
+                                marginBottom: 12,
+                                marginLeft: 12,
+                              }}
+                              testID="person-phone-error"
+                            >
+                              {phoneError}
+                            </Text>
+                          )
+                          : null}
                         <Button
                           mode="contained"
                           onPress={handleAdd}
@@ -517,6 +683,12 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
                         >
                           Add person
                         </Button>
+                        <CountryCodePicker
+                          visible={showCountryPicker}
+                          onDismiss={() => setShowCountryPicker(false)}
+                          onSelect={setSelectedCountry}
+                          selectedCountry={selectedCountry}
+                        />
                       </ScrollView>
                     </KeyboardAvoidingView>
                   )}
@@ -630,6 +802,30 @@ const styles = StyleSheet.create({
   linkHint: { textAlign: "center", marginTop: 10, fontSize: 12 },
   keyboardView: { flex: 1 },
   input: { marginBottom: 16 },
+  phoneInputWrapper: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 16,
+  },
+  countryCodeButton: {
+    minWidth: 92,
+    height: 56,
+    borderWidth: 1,
+    borderRadius: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    marginRight: 8,
+  },
+  countryFlag: {
+    fontSize: 18,
+    lineHeight: 22,
+  },
+  phoneInput: {
+    flex: 1,
+    marginBottom: 0,
+  },
   addButton: { marginTop: 8 },
   pickerContent: { flex: 1 },
   pickerBody: { paddingHorizontal: 20 },

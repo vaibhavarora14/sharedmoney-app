@@ -1,9 +1,10 @@
 import { verifyAuth } from '../_shared/auth.ts';
 import { SUPABASE_SERVICE_ROLE_KEY } from '../_shared/env.ts';
 import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
+import { buildInvitationInsert, InviteIdentity, normalizeInviteIdentity, resolveInviteAction } from '../_shared/invite-identity.ts';
 import { createEmptyResponse, createSuccessResponse } from '../_shared/response.ts';
-import { findUserIdByEmail } from '../_shared/user-lookup.ts';
-import { EMAIL_FORMAT_ERROR, isValidEmail, isValidUUID, validateBodySize } from '../_shared/validation.ts';
+import { findUserIdByEmail, findUserIdByPhone } from '../_shared/user-lookup.ts';
+import { isValidUUID, validateBodySize } from '../_shared/validation.ts';
 
 /**
  * Group Members Edge Function
@@ -18,28 +19,28 @@ import { EMAIL_FORMAT_ERROR, isValidEmail, isValidUUID, validateBodySize } from 
 
 interface AddMemberRequest {
   group_id: string;
-  email: string;
+  email?: string | null;
+  phone?: string | null;
+  country_code?: string | null;
   role?: 'owner' | 'member';
 }
 
 async function createInvitation(
   supabase: Awaited<ReturnType<typeof verifyAuth>>['supabase'],
   groupId: string,
-  email: string,
+  identity: InviteIdentity,
   invitedBy: string
-): Promise<{ id: string } | null> {
-  const normalizedEmail = email.toLowerCase().trim();
-  
+): Promise<{ id: string; token: string } | null> {
   const { data: existingInvitation } = await supabase
     .from('group_invitations')
-    .select('id')
+    .select('id, token')
     .eq('group_id', groupId)
-    .eq('email', normalizedEmail)
+    .eq(identity.column, identity.value)
     .eq('status', 'pending')
     .single();
 
   if (existingInvitation) {
-    return null;
+    return existingInvitation as { id: string; token: string };
   }
 
   const tokenArray = new Uint8Array(32);
@@ -50,14 +51,8 @@ async function createInvitation(
 
   const { data: invitation, error: inviteError } = await supabase
     .from('group_invitations')
-    .insert({
-      group_id: groupId,
-      email: normalizedEmail,
-      invited_by: invitedBy,
-      token: token,
-      status: 'pending',
-    })
-    .select()
+    .insert(buildInvitationInsert({ groupId, invitedBy, token, identity }))
+    .select('id, token')
     .single();
 
   if (inviteError) {
@@ -97,8 +92,8 @@ Deno.serve(async (req: Request) => {
         return createErrorResponse(400, 'Invalid JSON in request body', 'VALIDATION_ERROR', undefined, req);
       }
 
-      if (!requestData.group_id || !requestData.email) {
-        return createErrorResponse(400, 'Missing required fields: group_id, email', 'VALIDATION_ERROR', undefined, req);
+      if (!requestData.group_id || (!requestData.email && !requestData.phone)) {
+        return createErrorResponse(400, 'Missing required fields: group_id and email or phone', 'VALIDATION_ERROR', undefined, req);
       }
 
       if (!isValidUUID(requestData.group_id)) {
@@ -116,55 +111,54 @@ Deno.serve(async (req: Request) => {
         return createErrorResponse(403, 'You must be a member of the group to add members', 'PERMISSION_DENIED', undefined, req);
       }
 
-      const normalizedEmail = requestData.email.toLowerCase().trim();
-      
-      if (!isValidEmail(normalizedEmail)) {
-        return createErrorResponse(400, EMAIL_FORMAT_ERROR, 'VALIDATION_ERROR', undefined, req);
+      const identityResult = normalizeInviteIdentity(requestData);
+      if (identityResult.error || !identityResult.identity) {
+        return createErrorResponse(400, identityResult.error || 'Invalid invite target', 'VALIDATION_ERROR', undefined, req);
       }
+      const identity = identityResult.identity;
 
       if (!SUPABASE_SERVICE_ROLE_KEY) {
         return createErrorResponse(
           500,
-          'Server configuration error: Service role key not configured. This is required for user lookup by email. Please configure SUPABASE_SERVICE_ROLE_KEY in your environment variables.',
+          'Server configuration error: Service role key not configured. This is required for user lookup. Please configure SUPABASE_SERVICE_ROLE_KEY in your environment variables.',
           'CONFIGURATION_ERROR',
           undefined,
           req
         );
       }
 
-      // Exact, case-insensitive lookup against auth.users via SECURITY DEFINER RPC.
-      // (The previous `GET /auth/v1/admin/users?email=...` call silently ignored the
-      // email parameter and only returned the newest page of users, so existing
-      // users were wrongly treated as non-existent and got pending invitations.)
       let targetUserId: string | null;
       try {
-        targetUserId = await findUserIdByEmail(normalizedEmail);
+        targetUserId = identity.kind === 'phone'
+          ? await findUserIdByPhone(identity.value)
+          : await findUserIdByEmail(identity.value);
       } catch (error: unknown) {
         return handleError(error, 'searching for user', req);
       }
 
-      if (!targetUserId) {
+      if (resolveInviteAction(targetUserId) === 'create_pending_invite') {
         try {
           const invitation = await createInvitation(
             supabase,
             requestData.group_id,
-            normalizedEmail,
+            identity,
             currentUser.id
           );
 
           if (!invitation) {
             return createSuccessResponse({
               invitation: true,
-              message: 'An invitation has already been sent to this email address. The user will be added to the group when they sign up.',
-              email: normalizedEmail,
+              message: `An invitation has already been sent to this ${identity.kind}. The user will be added to the group when they sign up.`,
+              [identity.kind]: identity.value,
             }, 200, 0, req);
           }
 
           return createSuccessResponse({
             invitation: true,
             message: 'Invitation sent successfully. The user will be added to the group when they sign up.',
-            email: normalizedEmail,
+            [identity.kind]: identity.value,
             invitation_id: invitation.id,
+            token: invitation.token,
           }, 201, 0, req);
         } catch (error: unknown) {
           const errorMessage = error instanceof Error ? error.message : 'Failed to create invitation';
@@ -219,13 +213,13 @@ Deno.serve(async (req: Request) => {
 
             return createSuccessResponse({
               ...fetchedMember,
-              email: normalizedEmail,
+              [identity.kind]: identity.value,
             }, 200, 0, req);
           }
 
           return createSuccessResponse({
             ...reactivatedMember,
-            email: normalizedEmail,
+            [identity.kind]: identity.value,
           }, 200, 0, req);
         }
         
@@ -237,11 +231,11 @@ Deno.serve(async (req: Request) => {
         .from('group_invitations')
         .select('id')
         .eq('group_id', requestData.group_id)
-        .eq('email', normalizedEmail)
+        .eq(identity.column, identity.value)
         .eq('status', 'pending')
         .single();
 
-      if (pendingInvitation) {
+      if (pendingInvitation && identity.kind === 'email') {
         const { error: acceptError } = await supabase.rpc('accept_group_invitation', {
           invitation_id: pendingInvitation.id,
           accepting_user_id: targetUserId,
@@ -258,9 +252,41 @@ Deno.serve(async (req: Request) => {
           if (member) {
             return createSuccessResponse({
               ...member,
-              email: normalizedEmail,
+              [identity.kind]: identity.value,
             }, 201, 0, req);
           }
+        }
+      } else if (pendingInvitation && identity.kind === 'phone') {
+        const acceptedAt = new Date().toISOString();
+        const { error: updateError } = await supabase
+          .from('group_invitations')
+          .update({
+            status: 'accepted',
+            accepted_at: acceptedAt,
+            accepted_by: targetUserId,
+          })
+          .eq('id', pendingInvitation.id);
+
+        if (updateError) {
+          return handleError(updateError, 'accepting phone invitation for existing user', req);
+        }
+
+        const { error: participantUpdateError } = await supabase
+          .from('participants')
+          .update({
+            user_id: targetUserId,
+            phone: null,
+            type: 'member',
+            role: requestData.role || 'member',
+            joined_at: acceptedAt,
+            updated_at: acceptedAt,
+          })
+          .eq('group_id', requestData.group_id)
+          .eq('phone', identity.value)
+          .eq('type', 'invited');
+
+        if (participantUpdateError) {
+          return handleError(participantUpdateError, 'connecting phone invite participant', req);
         }
       }
 
@@ -280,7 +306,7 @@ Deno.serve(async (req: Request) => {
 
       return createSuccessResponse({
         ...member,
-        email: normalizedEmail,
+        [identity.kind]: identity.value,
       }, 201, 0, req);
     }
 

@@ -2,6 +2,7 @@ export interface ExistingPerson {
   id: string;
   full_name: string;
   email?: string | null;
+  phone?: string | null;
   avatar_url?: string | null;
   user_id?: string | null;
 }

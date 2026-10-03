@@ -3,6 +3,7 @@ export interface Participant {
   group_id: string;
   user_id?: string | null;
   email?: string | null;
+  phone?: string | null;
   type: 'member' | 'invited' | 'former';
   role?: 'owner' | 'member';
   full_name?: string | null;
@@ -92,6 +93,8 @@ export interface GroupInvitation {
   group_id: string;
   /** Invitee email; null for shareable link invites */
   email?: string | null;
+  /** Invitee phone in E.164; null for email and shareable link invites */
+  phone?: string | null;
   invited_by: string;
   status: 'pending' | 'accepted' | 'expired' | 'cancelled';
   token?: string;

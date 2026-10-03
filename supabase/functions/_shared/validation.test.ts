@@ -1,5 +1,11 @@
 import { assertEquals } from "jsr:@std/assert@1";
-import { EMAIL_FORMAT_ERROR, isValidEmail } from "./validation.ts";
+import {
+  EMAIL_FORMAT_ERROR,
+  isValidE164Phone,
+  isValidEmail,
+  normalizePhoneToE164,
+  PHONE_FORMAT_ERROR,
+} from "./validation.ts";
 
 Deno.test("isValidEmail accepts common and uncommon-but-legal addresses", () => {
   const valid = [
@@ -48,4 +54,21 @@ Deno.test("isValidEmail rejects clearly invalid invite emails", () => {
 Deno.test("EMAIL_FORMAT_ERROR is actionable", () => {
   assertEquals(EMAIL_FORMAT_ERROR.includes("name@example.com"), true);
   assertEquals(EMAIL_FORMAT_ERROR.toLowerCase().includes("valid"), true);
+});
+
+Deno.test("normalizePhoneToE164 accepts E.164 and national numbers", () => {
+  assertEquals(normalizePhoneToE164("+1 (415) 555-2671"), "+14155552671");
+  assertEquals(normalizePhoneToE164("415 555 2671", "US"), "+14155552671");
+  assertEquals(normalizePhoneToE164("98765 43210", null), "+919876543210");
+});
+
+Deno.test("isValidE164Phone rejects invalid or non-normalized phone numbers", () => {
+  assertEquals(isValidE164Phone("+919876543210"), true);
+  assertEquals(isValidE164Phone("9876543210"), false);
+  assertEquals(normalizePhoneToE164("123"), null);
+});
+
+Deno.test("PHONE_FORMAT_ERROR is actionable", () => {
+  assertEquals(PHONE_FORMAT_ERROR.toLowerCase().includes("phone"), true);
+  assertEquals(PHONE_FORMAT_ERROR.toLowerCase().includes("area code"), true);
 });

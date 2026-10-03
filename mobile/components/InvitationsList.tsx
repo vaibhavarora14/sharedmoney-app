@@ -40,9 +40,10 @@ export const InvitationsList: React.FC<InvitationsListProps> = ({
     );
   }
 
-  const getInitials = (email: string | null | undefined) => {
-    if (!email) return "🔗";
-    return email.substring(0, 2).toUpperCase();
+  const getInitials = (invitation: GroupInvitation) => {
+    if (invitation.email) return invitation.email.substring(0, 2).toUpperCase();
+    if (invitation.phone) return "☎";
+    return "🔗";
   };
 
   return (
@@ -67,16 +68,16 @@ export const InvitationsList: React.FC<InvitationsListProps> = ({
             >
               <Avatar.Text 
                 size={40} 
-                label={getInitials(invitation.email)} 
+                label={getInitials(invitation)}
                 style={{ 
-	                  backgroundColor: invitation.email
+	                  backgroundColor: invitation.email || invitation.phone
 	                    ? theme.colors.surfaceVariant
 	                    : theme.colors.primaryContainer,
                   marginRight: 16,
                   opacity: 0.7
                 }}
                 color={
-	                  invitation.email
+	                  invitation.email || invitation.phone
 	                    ? theme.colors.onSurfaceVariant
 	                    : theme.colors.onPrimaryContainer
                 }
@@ -90,6 +91,7 @@ export const InvitationsList: React.FC<InvitationsListProps> = ({
                   ]}
                 >
                   {invitation.email ||
+                    invitation.phone ||
                     (() => {
                       const remaining = Math.max(
                         (invitation.max_uses ?? 1) - (invitation.uses_count ?? 0),

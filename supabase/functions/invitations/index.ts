@@ -1,10 +1,11 @@
 import { verifyAuth } from '../_shared/auth.ts';
 import { SUPABASE_SERVICE_ROLE_KEY } from '../_shared/env.ts';
 import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
+import { buildInvitationInsert, normalizeInviteIdentity, resolveInviteAction } from '../_shared/invite-identity.ts';
 import { parsePath } from '../_shared/path-parser.ts';
 import { createEmptyResponse, createSuccessResponse } from '../_shared/response.ts';
-import { findUserIdByEmail } from '../_shared/user-lookup.ts';
-import { EMAIL_FORMAT_ERROR, isValidEmail, isValidUUID, validateBodySize } from '../_shared/validation.ts';
+import { findUserIdByEmail, findUserIdByPhone } from '../_shared/user-lookup.ts';
+import { isValidUUID, validateBodySize } from '../_shared/validation.ts';
 
 /**
  * Invitations Edge Function
@@ -23,6 +24,7 @@ interface GroupInvitation {
   id: string;
   group_id: string;
   email: string | null; // null for shareable link invites
+  phone?: string | null;
   invited_by: string;
   status: 'pending' | 'accepted' | 'expired' | 'cancelled';
   token?: string;
@@ -34,7 +36,9 @@ interface GroupInvitation {
 
 interface CreateInvitationRequest {
   group_id: string;
-  email: string;
+  email?: string | null;
+  phone?: string | null;
+  country_code?: string | null;
 }
 
 Deno.serve(async (req: Request) => {
@@ -72,19 +76,19 @@ Deno.serve(async (req: Request) => {
         return createErrorResponse(400, 'Invalid JSON in request body', 'VALIDATION_ERROR', undefined, req);
       }
 
-      if (!requestData.group_id || !requestData.email) {
-        return createErrorResponse(400, 'Missing required fields: group_id, email', 'VALIDATION_ERROR', undefined, req);
+      if (!requestData.group_id || (!requestData.email && !requestData.phone)) {
+        return createErrorResponse(400, 'Missing required fields: group_id and email or phone', 'VALIDATION_ERROR', undefined, req);
       }
 
       if (!isValidUUID(requestData.group_id)) {
         return createErrorResponse(400, 'Invalid group_id format. Expected UUID.', 'VALIDATION_ERROR', undefined, req);
       }
 
-      const normalizedEmail = requestData.email.toLowerCase().trim();
-      
-      if (!isValidEmail(normalizedEmail)) {
-        return createErrorResponse(400, EMAIL_FORMAT_ERROR, 'VALIDATION_ERROR', undefined, req);
+      const identityResult = normalizeInviteIdentity(requestData);
+      if (identityResult.error || !identityResult.identity) {
+        return createErrorResponse(400, identityResult.error || 'Invalid invite target', 'VALIDATION_ERROR', undefined, req);
       }
+      const identity = identityResult.identity;
 
       const { data: membership, error: membershipError } = await supabase
         .from('group_members')
@@ -104,7 +108,9 @@ Deno.serve(async (req: Request) => {
         // users were wrongly treated as non-existent.)
         let targetUserId: string | null;
         try {
-          targetUserId = await findUserIdByEmail(normalizedEmail);
+          targetUserId = identity.kind === 'phone'
+            ? await findUserIdByPhone(identity.value)
+            : await findUserIdByEmail(identity.value);
         } catch (error: unknown) {
           return handleError(error, 'searching for user', req);
         }
@@ -112,7 +118,7 @@ Deno.serve(async (req: Request) => {
         // If the invitee already has an account, add them as a member directly
         // instead of creating a pending invitation. Invitations are only for
         // people who don't have an account yet.
-        if (targetUserId) {
+        if (resolveInviteAction(targetUserId) === 'attach_existing_user') {
           const { data: existingMember } = await supabase
             .from('group_members')
             .select('id, status')
@@ -130,11 +136,11 @@ Deno.serve(async (req: Request) => {
             .from('group_invitations')
             .select('id')
             .eq('group_id', requestData.group_id)
-            .eq('email', normalizedEmail)
+            .eq(identity.column, identity.value)
             .eq('status', 'pending')
             .maybeSingle();
 
-          if (pendingInvitation) {
+          if (pendingInvitation && identity.kind === 'email') {
             const { error: acceptError } = await supabase.rpc('accept_group_invitation', {
               invitation_id: pendingInvitation.id,
               accepting_user_id: targetUserId,
@@ -142,6 +148,38 @@ Deno.serve(async (req: Request) => {
 
             if (acceptError) {
               return handleError(acceptError, 'accepting invitation for existing user', req);
+            }
+          } else if (pendingInvitation && identity.kind === 'phone') {
+            const acceptedAt = new Date().toISOString();
+            const { error: acceptError } = await supabase
+              .from('group_invitations')
+              .update({
+                status: 'accepted',
+                accepted_at: acceptedAt,
+                accepted_by: targetUserId,
+              })
+              .eq('id', pendingInvitation.id);
+
+            if (acceptError) {
+              return handleError(acceptError, 'accepting phone invitation for existing user', req);
+            }
+
+            const { error: participantUpdateError } = await supabase
+              .from('participants')
+              .update({
+                user_id: targetUserId,
+                phone: null,
+                type: 'member',
+                role: 'member',
+                joined_at: acceptedAt,
+                updated_at: acceptedAt,
+              })
+              .eq('group_id', requestData.group_id)
+              .eq('phone', identity.value)
+              .eq('type', 'invited');
+
+            if (participantUpdateError) {
+              return handleError(participantUpdateError, 'connecting phone invite participant', req);
             }
           } else if (existingMember && existingMember.status === 'left') {
             const { error: reactivateError } = await supabase
@@ -181,7 +219,7 @@ Deno.serve(async (req: Request) => {
           return createSuccessResponse({
             member: true,
             message: 'User already has an account and was added to the group as a member.',
-            email: normalizedEmail,
+            [identity.kind]: identity.value,
             ...member,
           }, 201, 0, req);
         }
@@ -191,12 +229,12 @@ Deno.serve(async (req: Request) => {
         .from('group_invitations')
         .select('id')
         .eq('group_id', requestData.group_id)
-        .eq('email', normalizedEmail)
+        .eq(identity.column, identity.value)
         .eq('status', 'pending')
         .single();
 
       if (existingInvitation) {
-        return createErrorResponse(400, 'A pending invitation already exists for this email', 'VALIDATION_ERROR', undefined, req);
+        return createErrorResponse(400, `A pending invitation already exists for this ${identity.kind}`, 'VALIDATION_ERROR', undefined, req);
       }
 
       // Generate a unique token for the invitation using Deno crypto
@@ -208,13 +246,12 @@ Deno.serve(async (req: Request) => {
 
       const { data: invitation, error: createError } = await supabase
         .from('group_invitations')
-        .insert({
-          group_id: requestData.group_id,
-          email: normalizedEmail,
-          invited_by: currentUser.id,
-          token: token,
-          status: 'pending',
-        })
+        .insert(buildInvitationInsert({
+          groupId: requestData.group_id,
+          invitedBy: currentUser.id,
+          token,
+          identity,
+        }))
         .select()
         .single();
 
@@ -233,7 +270,7 @@ Deno.serve(async (req: Request) => {
 
       let query = supabase
         .from('group_invitations')
-        .select('id, group_id, email, invited_by, status, token, expires_at, created_at, accepted_at, max_uses, uses_count')
+        .select('id, group_id, email, phone, invited_by, status, token, expires_at, created_at, accepted_at, max_uses, uses_count')
         .order('created_at', { ascending: false });
 
       if (groupId) {
@@ -274,14 +311,16 @@ Deno.serve(async (req: Request) => {
       // Enrich invitations with user_id for invited users who have signed up
       const enrichedInvitations = await Promise.all(
         (invitations || []).map(async (invitation: GroupInvitation) => {
-          // Only look up user_id for pending email invitations
+          // Only look up user_id for pending targeted invitations
           // (link invitations have no email until redeemed)
-          if (invitation.status !== 'pending' || !invitation.email || !SUPABASE_SERVICE_ROLE_KEY) {
+          if (invitation.status !== 'pending' || (!invitation.email && !invitation.phone) || !SUPABASE_SERVICE_ROLE_KEY) {
             return invitation;
           }
 
           try {
-            const invitedUserId = await findUserIdByEmail(invitation.email);
+            const invitedUserId = invitation.phone
+              ? await findUserIdByPhone(invitation.phone)
+              : await findUserIdByEmail(invitation.email as string);
 
             if (invitedUserId) {
               return {

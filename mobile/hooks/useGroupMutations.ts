@@ -229,20 +229,33 @@ export function useAddMember(onSuccess?: () => void) {
       groupId: string;
       fullName?: string;
       email?: string | null;
+      phone?: string | null;
+      countryCode?: string | null;
       sourceParticipantId?: string;
     }) => {
-      const response = await fetchWithAuth("/participants", {
-        method: "POST",
-        body: JSON.stringify({
-          group_id: variables.groupId,
-          ...(variables.sourceParticipantId
-            ? { source_participant_id: variables.sourceParticipantId }
-            : {
-              full_name: variables.fullName,
-              email: variables.email || null,
-            }),
-        }),
-      });
+      const response = await fetchWithAuth(
+        variables.phone ? "/group-members" : "/participants",
+        {
+          method: "POST",
+          body: JSON.stringify(
+            variables.phone
+              ? {
+                group_id: variables.groupId,
+                phone: variables.phone,
+                country_code: variables.countryCode || null,
+              }
+              : {
+                group_id: variables.groupId,
+                ...(variables.sourceParticipantId
+                  ? { source_participant_id: variables.sourceParticipantId }
+                  : {
+                    full_name: variables.fullName,
+                    email: variables.email || null,
+                  }),
+              },
+          ),
+        },
+      );
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));

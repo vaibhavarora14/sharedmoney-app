@@ -989,6 +989,8 @@ function AppContent() {
   const handleAddMember = async (person: {
     fullName?: string;
     email?: string | null;
+    phone?: string | null;
+    countryCode?: string | null;
     sourceParticipantId?: string;
   }) => {
     if (!selectedGroup) {
@@ -999,6 +1001,8 @@ function AppContent() {
       groupId: selectedGroup.id,
       fullName: person.fullName,
       email: person.email || null,
+      phone: person.phone || null,
+      countryCode: person.countryCode || null,
       sourceParticipantId: person.sourceParticipantId,
     });
 
