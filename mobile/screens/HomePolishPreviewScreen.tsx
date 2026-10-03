@@ -332,40 +332,42 @@ function HomeListPreview() {
               { backgroundColor: theme.colors.background },
             ]}
           >
-            {FORMER_GROUPS.map((group) => (
-              <Surface
-                key={group.id}
-                style={[
-                  styles.groupRow,
-                  styles.formerGroupItem,
-                  { backgroundColor: theme.colors.surface },
-                ]}
-                elevation={0}
-                testID={`preview-former-card-${group.id}`}
-              >
-                <View style={{ flex: 1, paddingRight: 12 }}>
-                  <Text
-                    variant="titleMedium"
-                    style={{
-                      fontWeight: "700",
-                      color: theme.colors.onSurfaceVariant,
-                      letterSpacing: -0.2,
+            {FORMER_GROUPS.map((group, index) => (
+              <View key={group.id}>
+                {index > 0 ? <View style={styles.formerCardGap} /> : null}
+                <Surface
+                  style={[
+                    styles.groupRow,
+                    styles.formerGroupItem,
+                    { backgroundColor: theme.colors.surface },
+                  ]}
+                  elevation={0}
+                  testID={`preview-former-card-${group.id}`}
+                >
+                  <View style={{ flex: 1, paddingRight: 12 }}>
+                    <Text
+                      variant="titleMedium"
+                      style={{
+                        fontWeight: "700",
+                        color: theme.colors.onSurfaceVariant,
+                        letterSpacing: -0.2,
+                      }}
+                    >
+                      {group.name}
+                    </Text>
+                    <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}>
+                      {group.description}
+                    </Text>
+                  </View>
+                  <GroupBalanceBadge
+                    balanceData={{
+                      group_id: group.id,
+                      balances: [{ user_id: "u-you", amount: -12, currency: "USD", full_name: "You" }],
                     }}
-                  >
-                    {group.name}
-                  </Text>
-                  <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}>
-                    {group.description}
-                  </Text>
-                </View>
-                <GroupBalanceBadge
-                  balanceData={{
-                    group_id: group.id,
-                    balances: [{ user_id: "u-you", amount: -12, currency: "USD", full_name: "You" }],
-                  }}
-                  currentUserId="u-you"
-                />
-              </Surface>
+                    currentUserId="u-you"
+                  />
+                </Surface>
+              </View>
             ))}
           </View>
         </List.Accordion>
@@ -565,7 +567,9 @@ const styles = StyleSheet.create({
   },
   formerAccordionContent: {
     paddingTop: 8,
-    gap: 9,
+  },
+  formerCardGap: {
+    height: 9,
   },
   formerGroupItem: {
     marginBottom: 0,

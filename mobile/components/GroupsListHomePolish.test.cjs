@@ -66,7 +66,7 @@ test("nested Archived rows are indented hairlines; Former uses active flat cards
   assert.equal(styles.groupItem.marginBottom, 9);
   assert.notEqual(styles.nestedGroupRow.borderRadius, 14);
   assert.equal(styles.formerAccordionContent.paddingTop, 8);
-  assert.equal(styles.formerAccordionContent.gap, 9);
+  assert.equal(styles.formerCardGap.height, 9);
   assert.equal(styles.formerGroupItem.marginBottom, 0);
 });
 
@@ -83,7 +83,7 @@ test("preview mirror keeps Archived nested chrome + accordion minHeight", () => 
   assert.equal(styles.groupRow.borderRadius, 14);
   assert.equal(styles.groupRow.marginBottom, 9);
   assert.equal(styles.formerAccordionContent.paddingTop, 8);
-  assert.equal(styles.formerAccordionContent.gap, 9);
+  assert.equal(styles.formerCardGap.height, 9);
   assert.equal(styles.formerGroupItem.marginBottom, 0);
 });
 
@@ -299,8 +299,13 @@ test("expanded Former children render flat Surface cards like active, not hairli
   );
   assert.ok(formerSurface, "Former child must be wrapped in Surface");
   assert.equal(flatten(formerSurface.props.style).borderRadius, 14);
-  // Accordion gap owns spacing; former cards zero marginBottom.
+  // Explicit spacer owns spacing; former cards zero marginBottom.
   assert.equal(flatten(formerSurface.props.style).marginBottom, 0);
+  const formerGap = nodes(tree).find(
+    (n) => n.props?.testID === "former-card-gap-g-former"
+  );
+  // Single former in harness → no gap before first card.
+  assert.equal(formerGap, undefined);
 
   const activeCard = nodes(tree).find(
     (n) => n.props?.testID === "group-card-g-active"

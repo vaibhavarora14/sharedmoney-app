@@ -567,9 +567,17 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                       { backgroundColor: theme.colors.background },
                     ]}
                   >
-                    {formerGroups.map((group) =>
-                      renderGroupItem(group, { formerCard: true })
-                    )}
+                    {formerGroups.map((group, index) => (
+                      <View key={group.id}>
+                        {index > 0 ? (
+                          <View
+                            style={styles.formerCardGap}
+                            testID={`former-card-gap-${group.id}`}
+                          />
+                        ) : null}
+                        {renderGroupItem(group, { formerCard: true })}
+                      </View>
+                    ))}
                   </View>
                 </List.Accordion>
               )}
@@ -812,11 +820,15 @@ const styles = StyleSheet.create({
     marginHorizontal: -4,
   },
   // Former children: match active card rhythm under the mute accordion chip.
+  // Explicit spacer height (not margin/gap) — Paper Accordion on web collapses
+  // sibling margins and flex gap, which re-crushed Former into one slab.
   formerAccordionContent: {
     paddingTop: 8,
-    gap: 9,
   },
-  // Accordion gap owns Former vertical rhythm; don't also stack groupItem margin.
+  formerCardGap: {
+    height: 9,
+  },
+  // Accordion spacer owns Former vertical rhythm; don't also stack groupItem margin.
   formerGroupItem: {
     marginBottom: 0,
   },
