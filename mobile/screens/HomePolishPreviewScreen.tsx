@@ -9,6 +9,7 @@ import {
   SegmentedButtons,
   Surface,
   Text,
+  TouchableRipple,
   useTheme,
 } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -20,7 +21,7 @@ import { WEB_MAX_WIDTH } from "../constants/layout";
 import { lightTheme } from "../theme";
 import { Balance, GroupStatsResponse } from "../types";
 
-type SurfaceId = "home-empty" | "home-list" | "group-home" | "stats";
+type SurfaceId = "home-empty" | "home-list" | "group-home" | "group-loading" | "stats";
 
 const SAMPLE_BALANCES: Balance[] = [
   {
@@ -168,6 +169,21 @@ const FORMER_GROUPS = [
     name: "Old flatmates",
     description: "You left this group",
   },
+  {
+    id: "g-notif-test",
+    name: "Notification Test",
+    description: "You left this group",
+  },
+  {
+    id: "g-sushma",
+    name: "Sushma Cloth press",
+    description: "You left this group",
+  },
+  {
+    id: "g-weekend",
+    name: "Weekend",
+    description: "You left this group",
+  },
 ];
 
 const ARCHIVED_GROUPS = [
@@ -180,7 +196,7 @@ const ARCHIVED_GROUPS = [
 
 function HomeListPreview() {
   const theme = useTheme();
-  // Expand Former by default so Design can re-score nested demoted chrome.
+  // Expand Former by default so Design can re-score comfortable Former cards.
   const [formerExpanded, setFormerExpanded] = useState(true);
   const [archivedExpanded, setArchivedExpanded] = useState(true);
   return (
@@ -294,35 +310,58 @@ function HomeListPreview() {
           </View>
         </List.Accordion>
 
-        <List.Accordion
-          title={`Former (${FORMER_GROUPS.length})`}
-          titleStyle={[styles.sectionAccordionTitle, { color: theme.colors.onSurfaceVariant }]}
-          style={[styles.sectionAccordion, { backgroundColor: theme.colors.surface }]}
-          left={(props) => (
-            <List.Icon
-              {...props}
-              icon="history"
-              color={theme.colors.onSurfaceVariant}
-              style={styles.sectionAccordionIcon}
-            />
-          )}
-          expanded={formerExpanded}
-          onPress={() => setFormerExpanded(!formerExpanded)}
+        <View
+          style={[
+            styles.sectionAccordion,
+            { backgroundColor: theme.colors.surface },
+          ]}
           testID="preview-former-accordion"
         >
-          <View style={[styles.accordionContent, { backgroundColor: theme.colors.background }]}>
-            {FORMER_GROUPS.map((group) => (
-              <View
-                key={group.id}
-                style={[styles.nestedGroupRow, { borderBottomColor: theme.colors.outlineVariant }]}
-                testID={`preview-nested-${group.id}`}
+          <TouchableRipple
+            onPress={() => setFormerExpanded(!formerExpanded)}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: formerExpanded }}
+            style={styles.formerAccordionHeader}
+          >
+            <View style={styles.formerAccordionHeaderRow}>
+              <List.Icon
+                icon="history"
+                color={theme.colors.onSurfaceVariant}
+                style={styles.sectionAccordionIcon}
+              />
+              <Text
+                style={[
+                  styles.sectionAccordionTitle,
+                  { color: theme.colors.onSurfaceVariant, flex: 1 },
+                ]}
               >
-                <View style={styles.nestedGroupTouchable}>
-                  <View style={{ flex: 1 }}>
+                {`Former (${FORMER_GROUPS.length})`}
+              </Text>
+              <List.Icon
+                icon={formerExpanded ? "chevron-up" : "chevron-down"}
+                color={theme.colors.onSurfaceVariant}
+              />
+            </View>
+          </TouchableRipple>
+          {formerExpanded ? (
+            <View
+              style={[
+                styles.formerAccordionContent,
+                { backgroundColor: theme.colors.background },
+              ]}
+            >
+              {FORMER_GROUPS.map((group) => (
+                <Surface
+                  key={group.id}
+                  style={[styles.groupRow, { backgroundColor: theme.colors.surface }]}
+                  elevation={0}
+                  testID={`preview-former-card-${group.id}`}
+                >
+                  <View style={{ flex: 1, paddingRight: 12 }}>
                     <Text
                       variant="titleMedium"
                       style={{
-                        fontWeight: "600",
+                        fontWeight: "700",
                         color: theme.colors.onSurfaceVariant,
                         letterSpacing: -0.2,
                       }}
@@ -340,38 +379,40 @@ function HomeListPreview() {
                     }}
                     currentUserId="u-you"
                   />
-                </View>
-              </View>
-            ))}
-          </View>
-        </List.Accordion>
+                </Surface>
+              ))}
+            </View>
+          ) : null}
+        </View>
       </View>
     </PreviewShell>
   );
 }
 
-function GroupHomePreview() {
+function GroupHomePreview({ loading = false }: { loading?: boolean }) {
   const theme = useTheme();
   return (
     <PreviewShell
       title="Roommates"
       fab={
-        <FAB
-          icon="plus"
-          label="Add expense"
-          style={[styles.fab, { backgroundColor: theme.colors.primary }]}
-          color={theme.colors.onPrimary}
-          onPress={() => {}}
-        />
+        loading ? null : (
+          <FAB
+            icon="plus"
+            label="Add expense"
+            style={[styles.fab, { backgroundColor: theme.colors.primary }]}
+            color={theme.colors.onPrimary}
+            onPress={() => {}}
+          />
+        )
       }
     >
-      <View testID="preview-group-home">
+      <View testID={loading ? "preview-group-loading" : "preview-group-home"}>
         <GroupDashboard
           balances={SAMPLE_BALANCES}
-          groupStats={SAMPLE_GROUP_STATS}
+          groupStats={loading ? null : SAMPLE_GROUP_STATS}
           currentUserId="u-you"
           currentUserParticipantId="p-you"
-          loading={false}
+          loading={loading}
           activeMemberCount={3}
           defaultCurrency="USD"
         />
@@ -454,7 +495,7 @@ export const HomePolishPreviewScreen: React.FC = () => {
           }}
         >
           <Text variant="labelLarge" style={{ marginBottom: 8, fontWeight: "700" }}>
-            Home polish preview — nested Former + loading badge
+            Home polish preview — Former flat cards + Archived nested
           </Text>
           <SegmentedButtons
             value={surface}
@@ -462,6 +503,7 @@ export const HomePolishPreviewScreen: React.FC = () => {
             buttons={[
               { value: "home-empty", label: "Empty" },
               { value: "home-list", label: "Home" },
+              { value: "group-loading", label: "Loading" },
               { value: "group-home", label: "Group" },
               { value: "stats", label: "Stats" },
             ]}
@@ -469,6 +511,7 @@ export const HomePolishPreviewScreen: React.FC = () => {
         </View>
         {surface === "home-empty" ? <HomeEmptyPreview /> : null}
         {surface === "home-list" ? <HomeListPreview /> : null}
+        {surface === "group-loading" ? <GroupHomePreview loading /> : null}
         {surface === "group-home" ? <GroupHomePreview /> : null}
         {surface === "stats" ? <StatsPreview /> : null}
       </SafeAreaView>
@@ -533,6 +576,20 @@ const styles = StyleSheet.create({
   },
   accordionContent: {
     paddingTop: 4,
+    marginHorizontal: -4,
+  },
+  formerAccordionHeader: {
+    minHeight: 44,
+    justifyContent: "center",
+  },
+  formerAccordionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: 44,
+    paddingRight: 4,
+  },
+  formerAccordionContent: {
+    paddingTop: 8,
     marginHorizontal: -4,
   },
   nestedGroupRow: {

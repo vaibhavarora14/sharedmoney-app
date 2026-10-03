@@ -185,7 +185,8 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
   }, [loading, groups.length]);
 
   // Helper function to render a group item.
-  // nested=true: Former/Archived children — indented hairline rows (not twin active cards).
+  // nested=true: Archived children — indented hairline rows (not twin active cards).
+  // Former uses the same non-nested Surface cards as active (marginBottom 9).
   const renderGroupItem = (group: Group, options?: { nested?: boolean }) => {
     const nested = Boolean(options?.nested);
     const isNew =
@@ -529,41 +530,59 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                 </List.Accordion>
               )}
 
-              {/* Former Groups — mute chip + demoted nested hairline children */}
+              {/* Former Groups — mute chip header (not List.Accordion): Paper
+                  Accordion clones children and collapses card gaps on web.
+                  Flat Surface cards with the same padding/gap as active. */}
               {formerGroups.length > 0 && (
-                <List.Accordion
-                  title={`Former (${formerGroups.length})`}
-                  titleStyle={[
-                    styles.sectionAccordionTitle,
-                    { color: theme.colors.onSurfaceVariant },
-                  ]}
+                <View
                   style={[
                     styles.sectionAccordion,
                     { backgroundColor: theme.colors.surface },
                   ]}
-                  left={(props) => (
-                    <List.Icon
-                      {...props}
-                      icon="history"
-                      color={theme.colors.onSurfaceVariant}
-                      style={styles.sectionAccordionIcon}
-                    />
-                  )}
-                  expanded={formerGroupsExpanded}
-                  onPress={() => setFormerGroupsExpanded(!formerGroupsExpanded)}
                   testID="former-groups-accordion"
                 >
-                  <View
-                    style={[
-                      styles.accordionContent,
-                      { backgroundColor: theme.colors.background },
-                    ]}
+                  <TouchableRipple
+                    onPress={() =>
+                      setFormerGroupsExpanded(!formerGroupsExpanded)
+                    }
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded: formerGroupsExpanded }}
+                    accessibilityLabel={`Former, ${formerGroups.length} groups`}
+                    style={styles.formerAccordionHeader}
                   >
-                    {formerGroups.map((group) =>
-                      renderGroupItem(group, { nested: true })
-                    )}
-                  </View>
-                </List.Accordion>
+                    <View style={styles.formerAccordionHeaderRow}>
+                      <List.Icon
+                        icon="history"
+                        color={theme.colors.onSurfaceVariant}
+                        style={styles.sectionAccordionIcon}
+                      />
+                      <Text
+                        style={[
+                          styles.sectionAccordionTitle,
+                          { color: theme.colors.onSurfaceVariant, flex: 1 },
+                        ]}
+                      >
+                        {`Former (${formerGroups.length})`}
+                      </Text>
+                      <List.Icon
+                        icon={
+                          formerGroupsExpanded ? "chevron-up" : "chevron-down"
+                        }
+                        color={theme.colors.onSurfaceVariant}
+                      />
+                    </View>
+                  </TouchableRipple>
+                  {formerGroupsExpanded ? (
+                    <View
+                      style={[
+                        styles.formerAccordionContent,
+                        { backgroundColor: theme.colors.background },
+                      ]}
+                    >
+                      {formerGroups.map((group) => renderGroupItem(group))}
+                    </View>
+                  ) : null}
+                </View>
               )}
             </>
           )}
@@ -772,7 +791,8 @@ const styles = StyleSheet.create({
     maxWidth: "100%",
   },
   // Secondary Home sections (Former / Archived): mute 13/600 labels + light
-  // surface chip. Expanded body uses indented hairline rows — not twin cards.
+  // surface chip. Archived expands to indented hairlines; Former expands to
+  // the same flat surface cards as active (comfortable padding, not crushed).
   sectionAccordion: {
     marginTop: 20,
     marginBottom: 8,
@@ -802,7 +822,23 @@ const styles = StyleSheet.create({
     // Pull nested rows onto page canvas under the mute chip.
     marginHorizontal: -4,
   },
-  // Nested Former/Archived children: indent + hairline on canvas (no surface/r14 cards).
+  // Former: custom expand (not List.Accordion) so Surface card margins paint.
+  formerAccordionHeader: {
+    minHeight: 44,
+    justifyContent: "center",
+  },
+  formerAccordionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: 44,
+    paddingRight: 4,
+  },
+  formerAccordionContent: {
+    paddingTop: 8,
+    // Pull cards onto page canvas under the mute chip (same as #357).
+    marginHorizontal: -4,
+  },
+  // Nested Archived children: indent + hairline on canvas (no surface/r14 cards).
   nestedGroupRow: {
     marginLeft: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
