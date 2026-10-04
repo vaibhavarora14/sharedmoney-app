@@ -113,9 +113,51 @@
           "value": "noindex, follow"
         }
       ]
+    },
+    {
+      "source": "/split",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "no-referrer"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        }
+      ]
+    },
+    {
+      "source": "/split/:path*",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "no-referrer"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        }
+      ]
     }
   ],
   "rewrites": [
+    {
+      "source": "/split/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/split",
+      "destination": "/index.html"
+    },
     {
       "source": "/privacy",
       "destination": "/privacy.html"

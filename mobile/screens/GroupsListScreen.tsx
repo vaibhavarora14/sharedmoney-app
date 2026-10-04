@@ -38,6 +38,7 @@ import { getSeenGroupIds, markGroupSeen } from "../utils/seenGroups";
 import { partitionGroupsBySection } from "../utils/groupListSections";
 import { recordSentryListCounts } from "../utils/sentryTelemetry";
 import { CreateGroupScreen } from "./CreateGroupScreen";
+import { SplitBillScreen } from "./SplitBillScreen";
 
 interface GroupsListScreenProps {
   onGroupPress: (group: Group) => void;
@@ -59,6 +60,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
   onNotificationsPress,
 }) => {
   const [showCreateGroup, setShowCreateGroup] = useState<boolean>(false);
+  const [showSplitBill, setShowSplitBill] = useState(false);
   const [newGroupHeight, setNewGroupHeight] = useState(56);
   const [formerGroupsExpanded, setFormerGroupsExpanded] = useState<boolean>(false);
   const [archivedGroupsExpanded, setArchivedGroupsExpanded] = useState<boolean>(false);
@@ -374,6 +376,10 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
         ) : null}
       </Appbar.Header>
 
+      <Button mode="outlined" icon="call-split" testID="split-bill-entry"
+        style={{ marginHorizontal: 16, marginTop: 12, marginBottom: 4 }}
+        onPress={() => setShowSplitBill(true)}>Split a bill</Button>
+
       {isInitialLoading ? (
         <ScrollView
           style={styles.scrollView}
@@ -478,7 +484,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                   maxWidth: 280,
                 }}
               >
-                Create a group to start splitting expenses.
+                Split a one-time bill, or create a group for ongoing expenses.
               </Text>
               <Button
                 mode="contained"
@@ -622,6 +628,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
         </View>
       ) : null}
 
+      {showSplitBill ? <SplitBillScreen onDismiss={() => setShowSplitBill(false)} /> : null}
       <CreateGroupScreen
         visible={showCreateGroup}
         onCreateGroup={async (groupData) => {

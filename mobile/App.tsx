@@ -87,6 +87,8 @@ import { AuthScreen } from "./screens/AuthScreen";
 import { GroupDetailsScreen } from "./screens/GroupDetailsScreen";
 import { GroupStatsMode, GroupStatsScreen } from "./screens/GroupStatsScreen";
 import { GroupsListScreen } from "./screens/GroupsListScreen";
+import { SplitBillScreen } from "./screens/SplitBillScreen";
+import { extractBillSplitToken } from "./utils/billSplit";
 import { NotificationDetailScreen } from "./screens/NotificationDetailScreen";
 import { NotificationsScreen } from "./screens/NotificationsScreen";
 import { CurrencyMergePreviewScreen } from "./screens/CurrencyMergePreviewScreen";
@@ -209,6 +211,10 @@ const queryClient = new QueryClient({
 // ... imports
 
 function AppContent() {
+  const [billSplitToken, setBillSplitToken] = useState<string | null>(() =>
+    Platform.OS === "web" && typeof window !== "undefined"
+      ? extractBillSplitToken(window.location.href) : null
+  );
   const { session, loading, signOut, user } = useAuth();
   const theme = useTheme();
   const dimensions = useWindowDimensions();
@@ -640,6 +646,11 @@ function AppContent() {
   // Handle deep links: initial URL (cold start / web navigation) + url events.
   useEffect(() => {
     const handleUrl = async (url: string | null) => {
+      const billToken = extractBillSplitToken(url);
+      if (billToken) {
+        setBillSplitToken(billToken);
+        return;
+      }
       if (isSentryDiagnosticUrl(url, SENTRY_DIAGNOSTICS_ENABLED)) {
         captureSentrySourceMapDiagnostic();
         return;
@@ -1157,6 +1168,14 @@ function AppContent() {
         <StatusBar style="dark" />
       </>
     );
+  }
+
+  // Bill links are session acknowledgements, independent of group/auth gates.
+  if (billSplitToken) {
+    return <SplitBillScreen key={billSplitToken} token={billSplitToken} onDismiss={() => {
+      setBillSplitToken(null);
+      clearJoinPathFromWebUrl();
+    }} />;
   }
 
   // One full-screen bootstrap spinner until auth is resolved and, when signed

@@ -141,18 +141,20 @@ module.exports = ({ config }) => {
           backgroundColor: "#F7F9FC"
         },
         // edgeToEdgeEnabled removed in SDK 57 — edge-to-edge is mandatory.
-        // App Links for invite links; requires assetlinks.json hosted at
+        // App Links for invites and one-time bills; requires assetlinks.json at
         // https://<host>/.well-known/assetlinks.json
         intentFilters: appLinkHosts.length > 0
           ? [
               {
                 action: "VIEW",
                 autoVerify: true,
-                data: appLinkHosts.map((host) => ({
-                  scheme: "https",
-                  host,
-                  pathPrefix: appLinkPathPrefix
-                })),
+                data: appLinkHosts.flatMap((host) =>
+                  [appLinkPathPrefix, "/split", "/app/split"].map((pathPrefix) => ({
+                    scheme: "https",
+                    host,
+                    pathPrefix
+                  }))
+                ),
                 category: ["BROWSABLE", "DEFAULT"]
               }
             ]

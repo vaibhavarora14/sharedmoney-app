@@ -114,6 +114,19 @@ function text(tree) {
   return React.Children.toArray(tree?.props?.children).map(text).join("");
 }
 
+test("bill editor keeps the creator included while reusing all expense modes", () => {
+  for (const mode of ["equal", "shares", "unequal"]) {
+    const editor = createEditor({ mode, requiredIds: ["a"], modeTestID: "split-bill-mode", showEqualSummary: false });
+    const tree = editor.render();
+    assert.equal(byId(tree, "split-mode-menu").props.anchor.props.testID, "split-bill-mode");
+    assert.equal(byId(tree, "split-among-chip-alice@example.com").props.disabled, true);
+    assert.equal(byId(tree, "split-among-chip-bob@example.com").props.disabled, false);
+    if (mode !== "equal") assert.equal(byId(tree, "split-remove-alice@example.com").props.disabled, true);
+    if (mode === "shares") assert.equal(byId(tree, "split-share-minus-alice@example.com").props.disabled, true);
+    if (mode === "equal") assert.equal(text(tree).includes("Each person pays:"), false);
+  }
+});
+
 test("split trigger puts expanded state on the actionable ripple, and options expose selection", () => {
   const editor = createEditor();
   let menu = byId(editor.render(), "split-mode-menu");

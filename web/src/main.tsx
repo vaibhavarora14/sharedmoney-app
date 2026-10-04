@@ -5,8 +5,10 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import App from "./App.tsx";
 import "./index.css";
+import { billSplitRoute } from "./billSplitApi";
 
-initializeAnalytics();
+// Bearer bill links and guest names must not enter marketing analytics.
+if (billSplitRoute(window.location.pathname) === undefined) initializeAnalytics();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

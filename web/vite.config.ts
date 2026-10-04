@@ -9,6 +9,7 @@ const require = createRequire(import.meta.url)
 
 // https://vite.dev/config/
 export default defineConfig({
+  envPrefix: ['VITE_', 'EXPO_PUBLIC_SUPABASE_'],
   plugins: [react()],
   resolve: {
     alias: {

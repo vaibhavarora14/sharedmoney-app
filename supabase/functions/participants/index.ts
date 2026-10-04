@@ -173,7 +173,7 @@ function toPersonIdentity(
 
 async function fetchReusablePeople(
   supabase: Awaited<ReturnType<typeof verifyAuth>>["supabase"],
-  targetGroupId: string,
+  targetGroupId: string | null,
   userId: string,
   currentUserEmail: string | null,
 ): Promise<ReusablePerson[]> {
@@ -989,6 +989,13 @@ Deno.serve(async (req: Request) => {
         undefined,
         req,
       );
+    }
+
+    // One-time bill creation reuses the same known-people directory without a
+    // target group. The source groups remain scoped to the authenticated user.
+    if (url.searchParams.get("directory") === "true") {
+      const people = await fetchReusablePeople(supabase, null, user.id, user.email);
+      return createSuccessResponse(people, 200, 0, req);
     }
 
     const reusableForGroupId = url.searchParams.get("available_for_group_id");
