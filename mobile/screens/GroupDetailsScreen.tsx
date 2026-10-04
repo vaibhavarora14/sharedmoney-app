@@ -1233,10 +1233,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     settlements.length === 0;
   const listDataLoading =
     listMode === "transactions" ? txLoading || settlementsLoading : activityLoading;
-  const listContentEmpty =
-    listMode === "transactions"
-      ? transactions.length === 0 && settlements.length === 0
-      : (activityData?.activities?.length ?? 0) === 0;
+  const listContentEmpty = listRows.length === 0;
   const fetchingNextPage =
     listMode === "transactions" ? txIsFetchingNextPage : activityFetchingNextPage;
   const loadingTreatment = resolveGroupDetailsLoadingTreatment({
@@ -1988,7 +1985,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
             listMode === "transactions" ? (
               groupOpenShellLoading ? (
                 <ActivityIndicator size="small" style={{ marginVertical: 24 }} />
-              ) : (
+              ) : loadingTreatment.showListEmptyState ? (
                 <View style={{ paddingHorizontal: 16 }}>
                   <TransactionsEmptyState
                     filter={transactionsFilter}
@@ -1998,10 +1995,10 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                     onAddExpense={onAddTransaction}
                   />
                 </View>
-              )
+              ) : null
             ) : groupOpenShellLoading ? (
               <ActivityIndicator size="small" style={{ marginVertical: 16 }} />
-            ) : (
+            ) : loadingTreatment.showListEmptyState ? (
               <View style={{ paddingHorizontal: 16 }}>
                 <ActivityFeedEmptyState
                   isFiltered={
@@ -2010,7 +2007,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                   }
                 />
               </View>
-            )
+            ) : null
           }
           ListFooterComponent={
             <View style={{ alignItems: "center", paddingTop: 8, paddingBottom: 80 }}>

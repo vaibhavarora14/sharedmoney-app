@@ -34,8 +34,6 @@ export function useSettlements(groupId?: string | null) {
     queryKey: groupId ? queryKeys.settlements(groupId) : queryKeys.settlements(""),
     queryFn: () => fetchSettlements(groupId as string),
     enabled: !!user?.id && !!groupId,
-    // Use placeholderData so initial load still reports isLoading=true
-    placeholderData: { settlements: [] },
     staleTime: 30_000,
   });
 
