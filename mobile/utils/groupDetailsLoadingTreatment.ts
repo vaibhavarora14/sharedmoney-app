@@ -10,6 +10,7 @@ export interface GroupDetailsLoadingTreatmentInput {
 export interface GroupDetailsLoadingTreatment {
   showBalancesUpdatingBanner: boolean;
   showListInitialLoader: boolean;
+  showListEmptyState: boolean;
   showRefreshControlLoader: boolean;
   showFooterLoader: boolean;
 }
@@ -29,6 +30,8 @@ export function resolveGroupDetailsLoadingTreatment({
   return {
     showBalancesUpdatingBanner,
     showListInitialLoader,
+    // Suppressing a duplicate spinner does not mean the list has finished loading.
+    showListEmptyState: !listDataLoading && listContentEmpty,
     showRefreshControlLoader: listRefreshing && !showBalancesUpdatingBanner,
     showFooterLoader: fetchingNextPage && !showBalancesUpdatingBanner,
   };
