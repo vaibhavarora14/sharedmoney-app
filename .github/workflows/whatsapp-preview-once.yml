@@ -1,0 +1,118 @@
+name: WhatsApp preview once
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  whatsapp-preview:
+    runs-on: ubuntu-latest
+    environment: Production
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      WHATSAPP_TOKEN: ${{ secrets.WHATSAPP_TOKEN }}
+      WHATSAPP_PHONE_NUMBER_ID: ${{ secrets.WHATSAPP_PHONE_NUMBER_ID }}
+      WHATSAPP_WABA_ID: ${{ secrets.WHATSAPP_WABA_ID }}
+      WHATSAPP_REMINDER_TEMPLATE_NAME: ${{ secrets.WHATSAPP_REMINDER_TEMPLATE_NAME }}
+      WHATSAPP_REMINDER_TEMPLATE_LANG: ${{ secrets.WHATSAPP_REMINDER_TEMPLATE_LANG }}
+      WHATSAPP_DRY_RUN_SECRET: ${{ secrets.WHATSAPP_DRY_RUN_SECRET }}
+      WHATSAPP_TEST_TO: ${{ secrets.WHATSAPP_TEST_TO }}
+
+    steps:
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Verify required secrets are present
+        run: |
+          missing=0
+          for name in \
+            SUPABASE_ACCESS_TOKEN \
+            SUPABASE_PROJECT_REF \
+            WHATSAPP_TOKEN \
+            WHATSAPP_PHONE_NUMBER_ID \
+            WHATSAPP_WABA_ID \
+            WHATSAPP_REMINDER_TEMPLATE_NAME \
+            WHATSAPP_REMINDER_TEMPLATE_LANG \
+            WHATSAPP_DRY_RUN_SECRET \
+            WHATSAPP_TEST_TO
+          do
+            if [ -z "${!name}" ]; then
+              echo "Missing required secret: $name"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+          echo "Required secrets are configured (values not shown)."
+
+      - name: Set Supabase edge function secrets
+        run: |
+          set -euo pipefail
+          # Values come from GitHub Production secrets only; never echo them.
+          ENV_FILE="$(mktemp)"
+          trap 'rm -f "$ENV_FILE"' EXIT
+          chmod 600 "$ENV_FILE"
+          {
+            printf 'WHATSAPP_TOKEN=%s\n' "$WHATSAPP_TOKEN"
+            printf 'WHATSAPP_PHONE_NUMBER_ID=%s\n' "$WHATSAPP_PHONE_NUMBER_ID"
+            printf 'WHATSAPP_WABA_ID=%s\n' "$WHATSAPP_WABA_ID"
+            printf 'WHATSAPP_REMINDER_TEMPLATE_NAME=%s\n' "$WHATSAPP_REMINDER_TEMPLATE_NAME"
+            printf 'WHATSAPP_REMINDER_TEMPLATE_LANG=%s\n' "$WHATSAPP_REMINDER_TEMPLATE_LANG"
+            printf 'WHATSAPP_DRY_RUN_SECRET=%s\n' "$WHATSAPP_DRY_RUN_SECRET"
+          } > "$ENV_FILE"
+          supabase secrets set --project-ref "$SUPABASE_PROJECT_REF" --env-file "$ENV_FILE"
+          echo "Edge secrets updated (values not shown)."
+
+      - name: Call whatsapp-dry-run (dryRun true only)
+        run: |
+          set -euo pipefail
+
+          REQUEST_BODY="$(mktemp)"
+          RESPONSE_BODY="$(mktemp)"
+          trap 'rm -f "$REQUEST_BODY" "$RESPONSE_BODY"' EXIT
+
+          # dryRun must be the boolean true — never false.
+          # Never call the Meta Graph API from this workflow.
+          jq -n \
+            --arg to "$WHATSAPP_TEST_TO" \
+            '{to: $to, template: "reminder", dryRun: true}' \
+            > "$REQUEST_BODY"
+
+          HTTP_STATUS="$(curl -sS -o "$RESPONSE_BODY" -w "%{http_code}" \
+            -X POST \
+            "https://${SUPABASE_PROJECT_REF}.supabase.co/functions/v1/whatsapp-dry-run" \
+            -H "Content-Type: application/json" \
+            -H "x-whatsapp-dry-run-secret: ${WHATSAPP_DRY_RUN_SECRET}" \
+            --data-binary @"$REQUEST_BODY")"
+
+          if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 300 ]; then
+            # Redacted success only: status, dry_run, template name, graph host check.
+            # Strip phone number, token, and full payload from the log.
+            jq -n \
+              --argjson status "$HTTP_STATUS" \
+              --slurpfile body "$RESPONSE_BODY" \
+              '
+              ($body[0]) as $r
+              | {
+                  http_status: $status,
+                  dry_run: $r.dry_run,
+                  template_name: ($r.payload.template.name // $r.template // null),
+                  graph_host_is_facebook: (
+                    ($r.graph_url_preview // "")
+                    | test("^https://graph\\.facebook\\.com(/|$)")
+                  )
+                }
+              '
+          else
+            # Failure: status and error code only — not the response body
+            # (body may contain a secret or phone number).
+            ERROR_CODE="$(jq -r '.code // "unknown"' "$RESPONSE_BODY" 2>/dev/null || echo "unknown")"
+            echo "http_status=${HTTP_STATUS} error_code=${ERROR_CODE}"
+            exit 1
+          fi
