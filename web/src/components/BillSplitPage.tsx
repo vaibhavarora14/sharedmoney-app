@@ -72,6 +72,14 @@ export function BillSplitPage({ token }: { token: string | null }) {
           </li>)}
         </ul>
         <p role="status">{notice}</p>
+        <label className="bill-split-share">Share this bill
+          <input aria-label="Bill share link" readOnly value={`${window.location.origin}/split/${token}`} onFocus={(event) => event.target.select()} />
+        </label>
+        <button className="text-button" onClick={() => {
+          void (navigator.clipboard?.writeText(`${window.location.origin}/split/${token}`) ?? Promise.reject(new Error("Clipboard unavailable")))
+            .then(() => setNotice("Link copied."))
+            .catch(() => setNotice("Select and copy the link above to share this bill."));
+        }}>Copy link</button>
         <p className="bill-split-note">Confirmation is an acknowledgement only. SharedMoney does not move money. Anyone with this link can see the bill and acknowledge a share. The link expires 30 days after creation.</p>
         <button className="text-button" disabled={busy || loading} onClick={() => void refresh()}>Refresh confirmations</button>
       </> : null}

@@ -23,6 +23,7 @@ test("issue 319: real RPCs, allocation, token boundaries, RLS, expiry, acknowled
       SELECT set_config('request.jwt.claim.sub', '11111111-1111-4111-8111-111111111111', false);
     `);
     await db.exec(readFileSync(require("node:path").join(__dirname, "../migrations/20261003100000_add_bill_split_sessions.sql"), "utf8"));
+    await db.exec(readFileSync(require("node:path").join(__dirname, "../migrations/20261004100000_add_guest_bill_split_create.sql"), "utf8"));
     const rpc = async (sql, args = []) => (await db.query(sql, args)).rows[0]?.value;
     const create = (mode, values, amount = 1001) => rpc(
       "SELECT public.create_bill_split_session($1, 'USD', ARRAY['Guest A','Guest B'], $2, $3) AS value",
@@ -58,6 +59,31 @@ test("issue 319: real RPCs, allocation, token boundaries, RLS, expiry, acknowled
 
     await db.exec("RESET ROLE; SET ROLE anon");
     await assert.rejects(create("equal", null));
+    const guestCreate = (mode = "equal", values = null, names = [" Alex ", "Sam", "Lee"], amount = 1001) => rpc(
+      "SELECT public.create_guest_bill_split_session($1, 'USD', $2, $3, $4) AS value", [amount, names, mode, values]);
+    const guestToken = await guestCreate();
+    assert.match(guestToken, /^[a-f0-9]{64}$/);
+    for (const [token, expected] of [[guestToken, [334, 334, 333]],
+      [await guestCreate("shares", [1, 2, 3]), [167, 334, 500]],
+      [await guestCreate("unequal", [201, 300, 500]), [201, 300, 500]]]) {
+      const guestBill = await get(token);
+      assert.deepEqual(guestBill.participants.map((p) => p.amount_minor), expected);
+      assert.deepEqual(guestBill.participants.map((p) => p.display_name), ["Alex", "Sam", "Lee"]);
+      assert.equal(guestBill.participants.every((p) => !p.confirmed), true);
+    }
+    for (const names of [[], ["Only"], [null, "Sam"], [" ", "Sam"], ["a".repeat(101), "Sam"], Array(51).fill("Name")]) {
+      await assert.rejects(guestCreate("equal", null, names));
+    }
+    await assert.rejects(guestCreate("unequal", [201, 300, 499]));
+    await assert.rejects(guestCreate("shares", [0, 1, 2]));
+    await assert.rejects(guestCreate("shares", [1, 100, 2]));
+    await assert.rejects(guestCreate("equal", null, ["Alex", "Sam"], 1));
+    await assert.rejects(guestCreate("equal", null, ["Alex", "Sam"], 1000000001));
+    const guestPerson = (await get(guestToken)).participants[0];
+    assert.equal(await confirm(equalToken, guestPerson.id), null);
+    const guestConfirmed = await confirm(guestToken, guestPerson.id);
+    assert.equal(guestConfirmed.participants[0].confirmed, true);
+    assert.deepEqual(await confirm(guestToken, guestPerson.id), guestConfirmed);
     await assert.rejects(db.query("SELECT * FROM public.bill_split_sessions"));
     await assert.rejects(db.query("UPDATE public.bill_split_participants SET confirmed_at = now()"));
     assert.equal(await get(null), null);
@@ -72,6 +98,12 @@ test("issue 319: real RPCs, allocation, token boundaries, RLS, expiry, acknowled
     assert.equal(acknowledged.participants[0].confirmed, false);
     assert.deepEqual(await confirm(equalToken, person.id), acknowledged);
 
+    await db.exec("RESET ROLE");
+    assert.equal(await rpc("SELECT created_by AS value FROM public.bill_split_sessions WHERE token = $1", [guestToken]), null);
+    await db.query("UPDATE public.bill_split_sessions SET expires_at = now() - interval '1 day' WHERE token = $1", [guestToken]);
+    await db.exec("SET ROLE anon");
+    assert.equal(await get(guestToken), null);
+    assert.equal(await confirm(guestToken, guestPerson.id), null);
     await db.exec("RESET ROLE");
     const before = await rpc("SELECT confirmed_at AS value FROM public.bill_split_participants WHERE id = $1", [person.id]);
     await confirm(equalToken, person.id);

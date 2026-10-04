@@ -14,6 +14,7 @@ import { getPrimaryDestination, getSecondaryDestinations } from "./landingConten
 import { pageByPath, relatedPages, normalizeSeoPath, type SeoPage } from "./seoPages";
 import { detectDevice } from "./utils/deviceDetection";
 import { BillSplitPage } from "./components/BillSplitPage";
+import { BillSplitStartPage } from "./components/BillSplitStartPage";
 import { billSplitRoute } from "./billSplitApi";
 
 function ToolDirectory({ page }: { page: SeoPage }) {
@@ -60,6 +61,7 @@ function App() {
     trackPageView(seoPage);
   }, [seoPage]);
 
+  if (billToken === "start") return <BillSplitStartPage />;
   if (billToken !== undefined) return <BillSplitPage token={billToken} />;
 
   if (!seoPage) {

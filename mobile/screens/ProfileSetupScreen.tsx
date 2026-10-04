@@ -35,6 +35,7 @@ import {
 import { useCurrencyPreferences } from "../hooks/useCurrencyPreferences";
 import { useDeleteAccount } from "../hooks/useDeleteAccount";
 import { useProfile } from "../hooks/useProfile";
+import { SplitBillScreen } from "./SplitBillScreen";
 import { CURRENCIES, getCurrencyName } from "../utils/currency";
 import { openAppExternalUrl } from "../utils/openAppExternalUrl";
 import {
@@ -77,6 +78,7 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
   );
   const [showCountryPicker, setShowCountryPicker] = useState(false);
   const [supportSheetVisible, setSupportSheetVisible] = useState(false);
+  const [showSplitBill, setShowSplitBill] = useState(false);
   const [loading, setLoading] = useState(false);
   const [notificationWorking, setNotificationWorking] = useState(false);
   const theme = useTheme();
@@ -579,6 +581,18 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
             </Button>
           </Surface>
 
+          <Surface style={[styles.supportCard, { backgroundColor: theme.colors.surfaceVariant }]} elevation={0}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Split a bill"
+              onPress={() => setShowSplitBill(true)}
+              style={[styles.supportButton, { borderColor: theme.colors.outline, backgroundColor: theme.colors.surface }]}
+            >
+              <Text variant="labelLarge" style={{ color: theme.colors.onSurface, fontWeight: "700" }}>Split a bill</Text>
+              <Icon source="chevron-right" size={20} color={theme.colors.onSurfaceVariant} />
+            </Pressable>
+          </Surface>
+
           <Surface
             style={[
               styles.supportCard,
@@ -784,6 +798,7 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
         onSelect={setSelectedCountry}
         selectedCountry={selectedCountry}
       />
+      {showSplitBill ? <SplitBillScreen onDismiss={() => setShowSplitBill(false)} /> : null}
       <Portal>
         <Modal
           visible={showPreferredCurrencyPicker}
