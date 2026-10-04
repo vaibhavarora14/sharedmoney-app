@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { formatBillAmount, type BillSplitSession } from "../../../mobile/utils/billSplit";
+import { formatBillAmount, type BillSplitSession } from "../../../shared/billSplit";
 import { requestBillSplit } from "../billSplitApi";
 import "./BillSplitPage.css";
 
@@ -30,10 +30,14 @@ export function BillSplitPage({ token }: { token: string | null }) {
 
   useEffect(() => {
     document.title = "Split a bill · SharedMoney";
-    void refresh();
+    const initialRefresh = window.setTimeout(() => { void refresh(); }, 0);
     const onFocus = () => { void refresh(); };
     window.addEventListener("focus", onFocus);
-    return () => { cancelPendingReads(); window.removeEventListener("focus", onFocus); };
+    return () => {
+      window.clearTimeout(initialRefresh);
+      cancelPendingReads();
+      window.removeEventListener("focus", onFocus);
+    };
   }, [refresh, cancelPendingReads]);
 
   const confirm = async (id: string) => {

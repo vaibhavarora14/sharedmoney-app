@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { allocateBillSplit, billAmountMinor, formatBillAmount, type BillSplitMode } from "../../../mobile/utils/billSplit";
+import { allocateBillSplit, billAmountMinor, formatBillAmount, type BillSplitMode } from "../../../shared/billSplit";
 import { createGuestBillSplit } from "../billSplitApi";
 import "./BillSplitPage.css";
 
