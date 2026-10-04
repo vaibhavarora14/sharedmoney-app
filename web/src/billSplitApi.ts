@@ -1,4 +1,4 @@
-import { BILL_TOKEN_PATTERN, type BillSplitMode, type BillSplitSession } from "../../mobile/utils/billSplit";
+import { BILL_TOKEN_PATTERN, type BillSplitMode, type BillSplitSession } from "../../shared/billSplit";
 
 /** undefined = another site route; start = public form; null = malformed token. */
 export function billSplitRoute(path: string): string | null | undefined {
