@@ -13,6 +13,8 @@ import { WorkflowSection } from "./components/landing/WorkflowSection";
 import { getPrimaryDestination, getSecondaryDestinations } from "./landingContent";
 import { pageByPath, relatedPages, normalizeSeoPath, type SeoPage } from "./seoPages";
 import { detectDevice } from "./utils/deviceDetection";
+import { BillSplitPage } from "./components/BillSplitPage";
+import { billSplitRoute } from "./billSplitApi";
 
 function ToolDirectory({ page }: { page: SeoPage }) {
   return (
@@ -46,6 +48,7 @@ function App() {
   const primaryDestination = getPrimaryDestination(device);
   const secondaryDestinations = getSecondaryDestinations(primaryDestination.platform);
   const seoPage = seoPath ? pageByPath.get(seoPath) : undefined;
+  const billToken = typeof window === "undefined" ? undefined : billSplitRoute(window.location.pathname);
 
   useEffect(() => {
     if (!seoPage || lastTrackedPath.current === seoPage.path) {
@@ -56,6 +59,8 @@ function App() {
     lastTrackedPath.current = seoPage.path;
     trackPageView(seoPage);
   }, [seoPage]);
+
+  if (billToken !== undefined) return <BillSplitPage token={billToken} />;
 
   if (!seoPage) {
     return (

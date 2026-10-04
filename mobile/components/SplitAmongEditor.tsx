@@ -46,6 +46,10 @@ interface SplitAmongEditorProps {
   onAmountChange: (participantId: string, text: string) => void;
   onShareChange: (participantId: string, shares: number) => void;
   onSplitRemaining: () => void;
+  /** One-time bills always include their creator. Group expense defaults stay unchanged. */
+  requiredIds?: string[];
+  modeTestID?: string;
+  showEqualSummary?: boolean;
 }
 
 function displayName(participant: Participant): string {
@@ -73,6 +77,9 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
   onAmountChange,
   onShareChange,
   onSplitRemaining,
+  requiredIds = [],
+  modeTestID = "split-mode-dropdown",
+  showEqualSummary = true,
 }) => {
   const theme = useTheme();
   const [modeMenuVisible, setModeMenuVisible] = useState(false);
@@ -161,7 +168,7 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
                 accessibilityRole="button"
                 accessibilityLabel={`Split method: ${modeLabel}`}
                 accessibilityState={{ expanded: modeMenuVisible && !disabled, disabled: !!disabled }}
-                testID="split-mode-dropdown"
+                testID={modeTestID}
               >
                 <View style={styles.modeButtonContent}>
                   <Text variant="labelLarge" style={{ color: disabled ? theme.colors.onSurfaceDisabled : theme.colors.primary }}>{modeLabel}</Text>
@@ -218,7 +225,7 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
                 !selected && { backgroundColor: theme.colors.surfaceVariant },
               ]}
               theme={selectionTheme}
-              disabled={disabled}
+              disabled={disabled || requiredIds.includes(participant.id)}
               showSelectedCheck
               testID={`split-among-chip-${participant.email || participant.id}`}
             >
@@ -229,7 +236,7 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
         })}
       </View>
 
-      {mode === "equal" && hasTotal && selectedIds.length > 0 ? (
+      {showEqualSummary && mode === "equal" && hasTotal && selectedIds.length > 0 ? (
         <View style={[styles.summary, { backgroundColor: theme.colors.surfaceVariant }]}>
           <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
             Each person pays:{" "}
@@ -297,7 +304,7 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
                     <IconButton
                       icon={shareCount === 1 ? "close" : "minus"}
                       size={20}
-                      disabled={!!disabled}
+                      disabled={!!disabled || (shareCount === 1 && requiredIds.includes(participant.id))}
                       onPress={() => {
                         if (shareCount === 1) {
                           onToggleMember(participant.id);
@@ -338,7 +345,7 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
                 <IconButton
                   icon="account-remove"
                   size={20}
-                  disabled={!!disabled}
+                  disabled={!!disabled || requiredIds.includes(participant.id)}
                   onPress={() => onToggleMember(participant.id)}
                   accessibilityLabel={`Remove ${name} from split`}
                   testID={`split-remove-${participant.email || participant.id}`}

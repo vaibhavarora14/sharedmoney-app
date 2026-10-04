@@ -4,7 +4,7 @@
     "details": [
       {
         "appID": "BQ8LZKL6TG.com.vaibhavarora.sharemoney",
-        "paths": ["/app/join/*", "/join/*"]
+        "paths": ["/app/join/*", "/join/*", "/split/*", "/app/split/*"]
       }
     ]
   }
