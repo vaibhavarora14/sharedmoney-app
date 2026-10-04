@@ -1,1 +1,1 @@
-export * from "../../shared/billSplit.ts";
+export * from "../../shared/billSplit";
