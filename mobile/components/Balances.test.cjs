@@ -9,9 +9,11 @@ const React = require("react");
 // preference hook are opaque boundaries. No API or native runtime is required.
 function components(preferences = {}, theme = { colors: {} }, dimensions = { width: 402, fontScale: 1 }) {
   const cache = new Map();
+  let state;
+  let initialized = false;
   const paper = Object.fromEntries(["ActivityIndicator", "Button", "Divider", "Surface", "Text", "TouchableRipple"].map(name => [name, name]));
   paper.Avatar = { Text: "Avatar.Text" };
-  paper.useTheme = () => theme;
+  paper.useTheme = () => ({ ...theme, fonts: { labelLarge: { lineHeight: 20 }, bodySmall: { lineHeight: 16 } } });
   function load(filename) {
     if (cache.has(filename)) return cache.get(filename).exports;
     const module = { exports: {} };
@@ -20,9 +22,13 @@ function components(preferences = {}, theme = { colors: {} }, dimensions = { wid
       compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true },
     }).outputText;
     const localRequire = (id) => {
-      if (id === "react") return { ...React, useMemo: fn => fn() };
+      if (id === "react") return { ...React, useMemo: fn => fn(), useState: initial => {
+        if (!initialized) { state = typeof initial === "function" ? initial() : initial; initialized = true; }
+        return [state, () => {}];
+      } };
       if (id === "react-native") return { View: "View", useWindowDimensions: () => dimensions, StyleSheet: { create: styles => styles, hairlineWidth: 1 } };
       if (id === "react-native-paper") return paper;
+      if (id === "./Skeleton") return { Skeleton: "Skeleton", SkeletonGroup: "SkeletonGroup" };
       if (id === "@expo/vector-icons/MaterialCommunityIcons") return "Icon";
       if (id === "../hooks/useCurrencyPreferences") return { useCurrencyPreferences: () => ({ rateBook: {}, ...preferences }) };
       if (["./UnifiedBalanceHero", "./UnifyPromptCard"].includes(id)) return { [id.slice(2)]: id.slice(2) };
@@ -258,24 +264,156 @@ test("solo group does not gain settlement chrome", () => {
   assert.equal(nodes(tree).find(n => n.props.testID === "group-settlement-rows"), undefined);
 });
 
-test("dashboard loading shows updating copy without settlement rows or insight skeletons", () => {
-  const tree = dashboard([balance("me", 50), balance("Alice", -50)], { loading: true });
-  assert.equal(settlementRows(tree).length, 0);
-  assert.match(text(tree), /Updating balances\.\.\./);
-  assert.doesNotMatch(text(tree), /Alice owes you|You owe Alice|\$50/);
-  // Single loading treatment: banner only — no My spending / Group summary "..." cards.
-  assert.doesNotMatch(text(tree), /My spending|Group summary/);
+test("dashboard reserves settlement and both stat cards while balances load", () => {
+  for (const loading of [{ loading: true }, { statsLoading: true }]) {
+    const tree = dashboard([balance("me", 50), balance("Alice", -50)], loading);
+    assert.equal(settlementRows(tree).length, 0);
+    assert.ok(byId(tree, "group-dashboard-skeleton"));
+    assert.ok(byId(tree, "group-settlement-skeleton"));
+    assert.equal(nodes(tree).filter(n => n.props.testID === "group-stat-skeleton").length, 2);
+    assert.doesNotMatch(text(tree), /Updating balances|Alice owes you|All settled|\$50/);
+  }
 });
 
-test("dashboard quietLoading hides settlement + insight chrome while shell loader is elsewhere", () => {
-  const tree = dashboard([balance("me", 50), balance("Alice", -50)], {
-    loading: true,
-    quietLoading: true,
-  });
-  assert.equal(settlementRows(tree).length, 0);
-  assert.equal(nodes(tree).find(n => n.props.testID === "group-settlement-rows"), undefined);
-  assert.doesNotMatch(text(tree), /Updating balances\.\.\./);
-  assert.doesNotMatch(text(tree), /Alice owes you|You owe Alice|\$50|My spending|Group summary/);
+test("settled unified dashboard keeps the same region geometry as its skeleton at both font scales", () => {
+  for (const fontScale of [1, 1.5]) {
+    const { GroupDashboard } = components({
+      groupSettings: { enabled: true, settlementCurrency: "INR" },
+    }, { colors: {} }, { width: 402, fontScale });
+    const props = { balances: [], currentUserId: "me", activeMemberCount: 3 };
+    const skeleton = GroupDashboard({ ...props, loading: true });
+    const loaded = GroupDashboard({ ...props, loading: false });
+    assert.deepEqual(skeleton.props.style, loaded.props.style);
+    // The currency subhead and its margin/gap occupy identical space.
+    const pendingSubhead = React.Children.toArray(skeleton.props.children)[0];
+    const loadedSubhead = React.Children.toArray(loaded.props.children)[0];
+    assert.deepEqual(flatten(pendingSubhead.props.style), flatten(loadedSubhead.props.style));
+    const pendingCards = nodes(skeleton).filter(n => n.type === "Surface");
+    const loadedCards = nodes(loaded).filter(n => n.type === "Surface");
+    assert.equal(pendingCards.length, 2);
+    assert.equal(loadedCards.length, 2);
+    pendingCards.forEach((card, i) => {
+      assert.deepEqual(flatten(card.props.style), flatten(loadedCards[i].props.style));
+      assert.equal(flatten(card.props.style).minHeight, 110 * fontScale);
+    });
+    assert.deepEqual(byId(skeleton, "group-settlement-skeleton").props.style,
+      byId(loaded, "group-settled-inline").props.style);
+  }
+});
+
+// Missing members are unknown; later counts must not change the loading shell.
+test("dashboard skeleton geometry survives member and currency hydration in either order", () => {
+  for (const fontScale of [1, 1.5]) {
+    const preferences = { groupSettings: null };
+    const { GroupDashboard } = components(preferences, { colors: {} }, { width: 402, fontScale });
+    const props = { balances: [], currentUserId: "me", loading: true };
+    const geometry = tree => React.Children.toArray(tree.props.children).map(node => flatten(node.props.style));
+    const firstFrame = geometry(GroupDashboard({ ...props, membersKnown: false, activeMemberCount: 0 }));
+    assert.equal(firstFrame.length, 3, "reserve the header, settlement line and cards on first paint");
+    for (const activeMemberCount of [0, 1, 3]) {
+      for (const groupSettings of [null, { enabled: false }, { enabled: true, settlementCurrency: "INR" }]) {
+        preferences.groupSettings = groupSettings;
+        const frame = GroupDashboard({ ...props, activeMemberCount });
+        assert.deepEqual(geometry(frame), firstFrame);
+        assert.ok(byId(frame, "group-settlement-skeleton"));
+      }
+    }
+  }
+});
+
+test("known solo and non-unified groups have no unused rows during or after loading", () => {
+  for (const fontScale of [1, 1.5]) {
+    for (const enabled of [true, false]) {
+      for (const activeMemberCount of [0, 1, 3]) {
+        const { GroupDashboard } = components({
+          groupSettings: { enabled, settlementCurrency: "INR" },
+        }, { colors: {} }, { width: 402, fontScale });
+        const props = { balances: [], currentUserId: "me", activeMemberCount };
+        const pending = GroupDashboard({ ...props, loading: true });
+        const loaded = GroupDashboard({ ...props, loading: false });
+        const pendingRows = React.Children.toArray(pending.props.children);
+        const loadedRows = React.Children.toArray(loaded.props.children);
+        const expectedRows = 1 + (activeMemberCount > 1 ? 1 + Number(enabled) : 0);
+        assert.equal(pendingRows.length, expectedRows);
+        assert.equal(loadedRows.length, expectedRows);
+        assert.deepEqual(pendingRows.map(row => flatten(row.props.style)), loadedRows.map(row => flatten(row.props.style)));
+        assert.equal(text(loaded).includes("In one currency"), enabled && activeMemberCount > 1);
+        assert.equal(text(loaded).includes("All settled"), activeMemberCount > 1);
+      }
+    }
+  }
+});
+
+test("navigation unify flag predicts the header before local preferences hydrate", () => {
+  for (const unifyBalances of [true, false]) {
+    const preferences = { groupSettings: null };
+    const { GroupDashboard } = components(preferences);
+    const props = { balances: [], currentUserId: "me", activeMemberCount: 3, unifyBalances };
+    const pending = GroupDashboard({ ...props, loading: true });
+    preferences.groupSettings = { enabled: unifyBalances, settlementCurrency: "INR" };
+    const loaded = GroupDashboard({ ...props, loading: false });
+    const geometry = tree => React.Children.toArray(tree.props.children).map(row => flatten(row.props.style));
+    assert.deepEqual(geometry(pending), geometry(loaded));
+    assert.equal(geometry(pending).length, unifyBalances ? 3 : 2);
+  }
+});
+
+test("cached effective currency settings take precedence over stale navigation flags", () => {
+  for (const enabled of [true, false]) {
+    const { GroupDashboard } = components({ groupSettings: { enabled, settlementCurrency: "INR" } });
+    const props = { balances: [], currentUserId: "me", activeMemberCount: 3, unifyBalances: !enabled };
+    const pending = GroupDashboard({ ...props, loading: true });
+    const loaded = GroupDashboard({ ...props, loading: false });
+    const geometry = tree => React.Children.toArray(tree.props.children).map(row => flatten(row.props.style));
+    assert.deepEqual(geometry(pending), geometry(loaded));
+    assert.equal(geometry(loaded).length, enabled ? 3 : 2);
+  }
+});
+
+test("unknown-to-solo reserves during loading but leaves no empty slot once members resolve", () => {
+  const props = { balances: [], currentUserId: "me", activeMemberCount: 0, unifyBalances: false };
+  const { GroupDashboard } = components();
+  const pending = GroupDashboard({ ...props, membersKnown: false, loading: true });
+  const loaded = GroupDashboard({ ...props, membersKnown: true, loading: false });
+  const rows = tree => React.Children.toArray(tree.props.children).length;
+  assert.equal(rows(pending), 2);
+  assert.equal(rows(loaded), 1);
+  const reopened = components().GroupDashboard({ ...props, membersKnown: true, loading: false });
+  assert.equal(rows(reopened), 1);
+});
+
+test("a cached multi-member prediction cannot leave empty slots after membership changes", () => {
+  const { GroupDashboard } = components({ groupSettings: { enabled: true, settlementCurrency: "INR" } });
+  const props = { balances: [], currentUserId: "me", membersKnown: true };
+  const pending = GroupDashboard({ ...props, activeMemberCount: 2, loading: true });
+  const stillPending = GroupDashboard({ ...props, activeMemberCount: 1, loading: true });
+  const loaded = GroupDashboard({ ...props, activeMemberCount: 1, loading: false });
+  const rows = tree => React.Children.toArray(tree.props.children).length;
+  assert.equal(rows(pending), 3);
+  assert.equal(rows(stillPending), 3);
+  assert.equal(rows(loaded), 1);
+  assert.doesNotMatch(text(loaded), /In one currency|All settled/);
+});
+
+test("stale known-solo metadata does not hide real multi-member content after load", () => {
+  const { GroupDashboard } = components({ groupSettings: { enabled: true, settlementCurrency: "INR" } });
+  const props = { balances: [], currentUserId: "me" };
+  const pending = GroupDashboard({ ...props, activeMemberCount: 1, loading: true });
+  const stillPending = GroupDashboard({ ...props, activeMemberCount: 3, loading: true });
+  assert.equal(React.Children.toArray(pending.props.children).length, 1);
+  assert.equal(React.Children.toArray(stillPending.props.children).length, 1);
+  const loaded = GroupDashboard({ ...props, activeMemberCount: 3, loading: false });
+  assert.match(text(loaded), /In one currency/);
+  assert.match(text(loaded), /All settled/);
+});
+
+test("App preserves unknown membership and GroupDetails resets predictions per group", () => {
+  const app = readFileSync(path.join(__dirname, "../App.tsx"), "utf8");
+  assert.match(app, /const groupToDisplay: GroupWithMembers = selectedGroupDetails \|\| selectedGroup;/);
+  const screen = readFileSync(path.join(__dirname, "../screens/GroupDetailsScreen.tsx"), "utf8");
+  assert.match(screen, /<GroupDashboard\s+key=\{group.id\}/);
+  assert.match(screen, /membersKnown=\{group.members !== undefined\}/);
+  assert.match(screen, /unifyBalances=\{group.unify_balances\}/);
 });
 
 test("balance summary adds only matching currencies on both sides", () => {
@@ -439,19 +577,13 @@ test("GroupDetailsScreen wires balanceError and gates onSettlePress for active m
   assert.match(source, /if\s*\(\s*!isActiveMember\s*\|\|\s*balancesError\s*\)\s*return/);
 });
 
-test("GroupDetailsScreen uses one loading treatment for balances banner versus list spinners", () => {
+test("GroupDetailsScreen wires independent dashboard and ledger skeletons", () => {
   const source = readFileSync(path.join(__dirname, "../screens/GroupDetailsScreen.tsx"), "utf8");
-  const policy = readFileSync(path.join(__dirname, "../utils/groupDetailsLoadingTreatment.ts"), "utf8");
-
-  assert.match(source, /resolveGroupDetailsLoadingTreatment/);
-  assert.match(source, /quietLoading=\{groupOpenShellLoading\}/);
+  assert.match(source, /loading=\{loadingTreatment\.showDashboardSkeleton\}/);
   assert.match(source, /refreshing=\{loadingTreatment\.showRefreshControlLoader\}/);
   assert.match(source, /loadingTreatment\.showFooterLoader/);
-  assert.match(source, /const groupOpenShellLoading = loadingTreatment\.showListInitialLoader/);
-  assert.match(policy, /showBalancesUpdatingBanner/);
-  assert.match(policy, /showListInitialLoader\s*=[\s\S]*!showBalancesUpdatingBanner[\s\S]*listDataLoading[\s\S]*listContentEmpty/);
-  assert.match(policy, /showRefreshControlLoader:\s*listRefreshing && !showBalancesUpdatingBanner/);
-  assert.match(policy, /showFooterLoader:\s*fetchingNextPage && !showBalancesUpdatingBanner/);
+  assert.match(source, /<LedgerSkeleton \/>/);
+  assert.doesNotMatch(source, /quietLoading|Loading group details/);
 });
 
 test("App prefetchGroupData fetches balances with include_stats for shared key", () => {

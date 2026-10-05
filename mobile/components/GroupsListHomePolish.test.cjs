@@ -87,7 +87,7 @@ test("preview mirror keeps Archived nested chrome + accordion minHeight", () => 
   assert.ok((styles.formerAccordionHeader.minHeight ?? 0) >= 44);
 });
 
-function harnessWithFormer() {
+function harnessWithFormer(loading = false) {
   let stateIndex = 0;
   const state = [];
   const theme = {
@@ -99,7 +99,7 @@ function harnessWithFormer() {
       outlineVariant: "#ccc",
       primary: "#0a7",
     },
-    fonts: {},
+    fonts: { titleMedium: { lineHeight: 24 } },
   };
   const active = {
     id: "g-active",
@@ -134,7 +134,7 @@ function harnessWithFormer() {
     "@tanstack/react-query": { useQueryClient: () => ({}) },
     "../contexts/AuthContext": { useAuth: () => ({ user: { id: "me" } }) },
     "../hooks/useGroups": {
-      useGroups: () => ({ data: [active, former], isLoading: false }),
+      useGroups: () => ({ data: loading ? [] : [active, former], isLoading: loading }),
     },
     "../hooks/useBalances": {
       useBalances: () => ({
@@ -184,6 +184,8 @@ function harnessWithFormer() {
     "../utils/posthogAnalytics": { captureIdentifiedAnalyticsEvent: () => {} },
     "../utils/posthogEvents": { ANALYTICS_EVENTS: {} },
     "../components/NotificationBell": { NotificationBell: "NotificationBell" },
+    "../components/Skeleton": { Skeleton: "Skeleton", SkeletonGroup: "SkeletonGroup" },
+    "./SplitBillScreen": { SplitBillScreen: "SplitBillScreen" },
     "../components/GroupBalanceBadge": { GroupBalanceBadge: "GroupBalanceBadge" },
     "./CreateGroupScreen": { CreateGroupScreen: "CreateGroupScreen" },
   };
@@ -263,10 +265,15 @@ function harnessWithFormer() {
         path.join(__dirname, "../screens/GroupsListScreen.tsx")
       ).GroupsListScreen({});
     },
+    skeleton() {
+      return load(path.join(__dirname, "../screens/GroupsListScreen.tsx")).GroupsHomeSkeleton();
+    },
+    skeletonRows() {
+      return load(path.join(__dirname, "../screens/GroupsListScreen.tsx")).GroupsHomeSkeletonRows();
+    },
     setFormerExpanded(expanded) {
-      // formerGroupsExpanded is the 4th useState after showCreateGroup,
-      // newGroupHeight, formerGroupsExpanded — indices 0,1,2
-      state[2] = expanded;
+      // showCreateGroup, showSplitBill, newGroupHeight, formerGroupsExpanded.
+      state[3] = expanded;
     },
   };
 }
@@ -310,4 +317,28 @@ test("expanded Former children render flat Surface cards like active, not hairli
     (n) => n.type === "GroupBalanceBadge"
   );
   assert.equal(activeBadge.props.loading, true);
+});
+
+test("bootstrap and initial Groups query share the same loading rows and header position", () => {
+  const app = harnessWithFormer(true);
+  const initial = app.render();
+  const bootstrap = app.skeleton();
+  for (const tree of [initial, bootstrap]) {
+    const rows = nodes(tree).find(node => node.type?.name === "GroupsHomeSkeletonRows");
+    assert.ok(rows);
+    const header = nodes(tree).find(node => node.type === "Header");
+    assert.ok(header);
+    const split = nodes(tree).find(node => node.type === "Button" && node.props.children === "Split a bill");
+    assert.deepEqual(split.props.style, { marginHorizontal: 16, marginTop: 12, marginBottom: 4 });
+    assert.equal(nodes(tree).some(node => node.type === "ActivityIndicator"), false);
+  }
+  const rows = app.skeletonRows();
+  const surfaces = nodes(rows).filter(node => node.type === "Surface");
+  assert.equal(surfaces.length, 6);
+  const realStyles = loadStyles(path.join(__dirname, "../screens/GroupsListScreen.tsx"));
+  for (const row of surfaces) {
+    assert.equal(flatten(row.props.style).borderRadius, realStyles.groupItem.borderRadius);
+    assert.equal(flatten(row.props.style).marginBottom, realStyles.groupItem.marginBottom);
+    assert.deepEqual(flatten(row.props.children.props.style), realStyles.groupTouchable);
+  }
 });
