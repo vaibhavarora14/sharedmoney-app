@@ -95,6 +95,15 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
   // Match the two-line currency breakdown in the existing cards; allow larger
   // content and Dynamic Type to grow rather than clipping financial amounts.
   const insightMinHeight = 110 * fontScale;
+  // These slots exist before member counts or currency preferences are known.
+  // Keep unused slots in the loaded layout too, so hydration cannot move the
+  // cards/ledger. Solo and non-unified groups trade compactness for stability.
+  const currencyHeaderStyle = [styles.unifiedSubhead, {
+    minHeight: theme.fonts.labelLarge.lineHeight * fontScale,
+  }];
+  const settlementSlotStyle = {
+    minHeight: Math.max(16, theme.fonts.bodySmall.lineHeight * fontScale) + 4,
+  };
 
   const usedCurrencies = useMemo(
     () => collectCurrencies([...balances, ...currenciesFromGroupStats(groupStats)]),
@@ -362,20 +371,18 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
   if ((dashboardLoading || !currentUserId) && !balanceError) {
     return (
       <SkeletonGroup style={styles.container} testID="group-dashboard-skeleton">
-        {unifyEnabled && activeMemberCount > 1 ? (
-          <View style={[styles.unifiedSubhead, { minHeight: theme.fonts.labelLarge.lineHeight * fontScale }]}>
-            <Skeleton width="48%" height={12} />
-            <Skeleton width={48} height={14} />
-          </View>
-        ) : null}
-        {activeMemberCount > 1 ? (
+        <View style={currencyHeaderStyle}>
+          <Skeleton width="48%" height={12} />
+          <Skeleton width={48} height={14} />
+        </View>
+        <View style={settlementSlotStyle}>
           <View style={styles.settledInline} testID="group-settlement-skeleton">
             <Skeleton width={16} height={16} borderRadius={8} />
             <View style={{ height: theme.fonts.bodySmall.lineHeight * fontScale, justifyContent: "center" }}>
               <Skeleton width={104} height={12} />
             </View>
           </View>
-        ) : null}
+        </View>
         <View style={[styles.compactStatsRow, stackInsights && styles.stackedStats]}>
           {[0, 1].map((key) => (
             <Surface key={key} elevation={0} testID="group-stat-skeleton"
@@ -416,37 +423,41 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
         />
       ) : null}
 
-      {unifyEnabled && !balanceError && activeMemberCount > 1 ? (
-        <View style={[styles.unifiedSubhead, { minHeight: theme.fonts.labelLarge.lineHeight * fontScale }]}>
-          <Text variant="labelMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-            {`In one currency · ${settlementCurrency}`}
-          </Text>
-          {onOpenCurrencySettings ? (
-            <TouchableRipple
-              onPress={onOpenCurrencySettings}
-              accessibilityRole="button"
-              accessibilityLabel="Rates"
-              testID="group-rates-button"
-            >
-              <Text variant="labelLarge" style={{ color: theme.colors.primary, fontWeight: "600" }}>
-                Rates ›
-              </Text>
-            </TouchableRipple>
-          ) : null}
-        </View>
-      ) : null}
+      <View style={currencyHeaderStyle}>
+        {unifyEnabled && !balanceError && activeMemberCount > 1 ? (
+          <>
+            <Text variant="labelMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+              {`In one currency · ${settlementCurrency}`}
+            </Text>
+            {onOpenCurrencySettings ? (
+              <TouchableRipple
+                onPress={onOpenCurrencySettings}
+                accessibilityRole="button"
+                accessibilityLabel="Rates"
+                testID="group-rates-button"
+              >
+                <Text variant="labelLarge" style={{ color: theme.colors.primary, fontWeight: "600" }}>
+                  Rates ›
+                </Text>
+              </TouchableRipple>
+            ) : null}
+          </>
+        ) : null}
+      </View>
 
-      {(balanceError || dashboardLoading || activeMemberCount > 1) ? isSettled ? (
-        <View testID="group-settlement-rows">{renderSettlementRows()}</View>
-      ) : (
-        <Surface
-          style={[styles.settlementList, { borderColor: theme.colors.outlineVariant, backgroundColor: theme.colors.surface }]}
-          elevation={0}
-          testID="group-settlement-rows"
-        >
-          {renderSettlementRows()}
-        </Surface>
-      ) : null}
+      <View style={settlementSlotStyle}>
+        {(balanceError || dashboardLoading || activeMemberCount > 1) ? isSettled ? (
+          <View testID="group-settlement-rows">{renderSettlementRows()}</View>
+        ) : (
+          <Surface
+            style={[styles.settlementList, { borderColor: theme.colors.outlineVariant, backgroundColor: theme.colors.surface }]}
+            elevation={0}
+            testID="group-settlement-rows"
+          >
+            {renderSettlementRows()}
+          </Surface>
+        ) : null}
+      </View>
 
       {unifyEnabled && !balanceError && !dashboardLoading && activeMemberCount > 1 && myUnified && myUnified.missing.length > 0 && settlementRows.length > 0 ? (
         <Text
