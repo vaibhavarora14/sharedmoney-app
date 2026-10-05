@@ -358,16 +358,41 @@ test("navigation unify flag predicts the header before local preferences hydrate
   }
 });
 
-test("unknown-to-solo keeps its reservation for this visit, reopening with known members removes it", () => {
+test("cached effective currency settings take precedence over stale navigation flags", () => {
+  for (const enabled of [true, false]) {
+    const { GroupDashboard } = components({ groupSettings: { enabled, settlementCurrency: "INR" } });
+    const props = { balances: [], currentUserId: "me", activeMemberCount: 3, unifyBalances: !enabled };
+    const pending = GroupDashboard({ ...props, loading: true });
+    const loaded = GroupDashboard({ ...props, loading: false });
+    const geometry = tree => React.Children.toArray(tree.props.children).map(row => flatten(row.props.style));
+    assert.deepEqual(geometry(pending), geometry(loaded));
+    assert.equal(geometry(loaded).length, enabled ? 3 : 2);
+  }
+});
+
+test("unknown-to-solo reserves during loading but leaves no empty slot once members resolve", () => {
   const props = { balances: [], currentUserId: "me", activeMemberCount: 0, unifyBalances: false };
   const { GroupDashboard } = components();
   const pending = GroupDashboard({ ...props, membersKnown: false, loading: true });
   const loaded = GroupDashboard({ ...props, membersKnown: true, loading: false });
   const rows = tree => React.Children.toArray(tree.props.children).length;
   assert.equal(rows(pending), 2);
-  assert.equal(rows(loaded), 2);
+  assert.equal(rows(loaded), 1);
   const reopened = components().GroupDashboard({ ...props, membersKnown: true, loading: false });
   assert.equal(rows(reopened), 1);
+});
+
+test("a cached multi-member prediction cannot leave empty slots after membership changes", () => {
+  const { GroupDashboard } = components({ groupSettings: { enabled: true, settlementCurrency: "INR" } });
+  const props = { balances: [], currentUserId: "me", membersKnown: true };
+  const pending = GroupDashboard({ ...props, activeMemberCount: 2, loading: true });
+  const stillPending = GroupDashboard({ ...props, activeMemberCount: 1, loading: true });
+  const loaded = GroupDashboard({ ...props, activeMemberCount: 1, loading: false });
+  const rows = tree => React.Children.toArray(tree.props.children).length;
+  assert.equal(rows(pending), 3);
+  assert.equal(rows(stillPending), 3);
+  assert.equal(rows(loaded), 1);
+  assert.doesNotMatch(text(loaded), /In one currency|All settled/);
 });
 
 test("stale known-solo metadata does not hide real multi-member content after load", () => {
