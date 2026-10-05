@@ -1387,11 +1387,8 @@ function AppContent() {
   if (selectedGroup && shouldKeepGroupDetailsMounted(currentRoute)) {
     // Use fetched group details if available, otherwise use selectedGroup as initial data
     // GroupDetailsScreen will handle loading state while fetching full details
-    const groupToDisplay: GroupWithMembers = selectedGroupDetails || {
-      ...selectedGroup,
-      members: [],
-      invitations: [],
-    };
+    // Missing members means unknown; a real empty array means known zero.
+    const groupToDisplay: GroupWithMembers = selectedGroupDetails || selectedGroup;
     const transactionFormVisible = isTransactionFormCoveringGroupDetails(currentRoute);
 
     return (

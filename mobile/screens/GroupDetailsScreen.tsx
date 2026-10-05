@@ -1657,6 +1657,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           ListHeaderComponent={
             <View>
               <GroupDashboard
+                key={group.id}
                 groupId={group.id}
                 balances={balancesData?.group_balances?.[0]?.balances || []}
                 groupStats={groupStats}
@@ -1666,6 +1667,8 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                 statsLoading={groupStatsLoading}
                 defaultCurrency={getDefaultCurrency()}
                 activeMemberCount={activeMemberCount}
+                membersKnown={group.members !== undefined}
+                unifyBalances={group.unify_balances}
                 balanceError={!!balancesError}
                 onSettlePress={isActiveMember && !balancesError ? handleSettleUp : undefined}
                 onSharePress={isActiveMember && !balancesError ? handleShareBalance : undefined}
