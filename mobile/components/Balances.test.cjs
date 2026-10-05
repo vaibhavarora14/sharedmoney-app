@@ -296,6 +296,52 @@ test("settled unified dashboard keeps the same region geometry as its skeleton a
   }
 });
 
+// Initial GroupDetails props include App's synthetic members: [], so the
+// count is zero even though the eventual group has several active members.
+test("dashboard skeleton geometry survives member and currency hydration in either order", () => {
+  for (const fontScale of [1, 1.5]) {
+    const preferences = { groupSettings: null };
+    const { GroupDashboard } = components(preferences, { colors: {} }, { width: 402, fontScale });
+    const props = { balances: [], currentUserId: "me", loading: true };
+    const geometry = tree => React.Children.toArray(tree.props.children).map(node => flatten(node.props.style));
+    const firstFrame = geometry(GroupDashboard({ ...props, activeMemberCount: 0 }));
+    assert.equal(firstFrame.length, 3, "reserve the header, settlement line and cards on first paint");
+    for (const activeMemberCount of [0, 1, 3]) {
+      for (const groupSettings of [null, { enabled: false }, { enabled: true, settlementCurrency: "INR" }]) {
+        preferences.groupSettings = groupSettings;
+        const frame = GroupDashboard({ ...props, activeMemberCount });
+        assert.deepEqual(geometry(frame), firstFrame);
+        assert.ok(byId(frame, "group-settlement-skeleton"));
+      }
+    }
+  }
+});
+
+test("unified, non-unified and solo settled groups retain the reserved header and settlement space", () => {
+  for (const fontScale of [1, 1.5]) {
+    for (const enabled of [true, false]) {
+      for (const activeMemberCount of [1, 3]) {
+        const { GroupDashboard } = components({
+          groupSettings: { enabled, settlementCurrency: "INR" },
+        }, { colors: {} }, { width: 402, fontScale });
+        const props = { balances: [], currentUserId: "me", activeMemberCount };
+        const pending = GroupDashboard({ ...props, loading: true });
+        const loaded = GroupDashboard({ ...props, loading: false });
+        const pendingRows = React.Children.toArray(pending.props.children);
+        const loadedRows = React.Children.toArray(loaded.props.children);
+        assert.equal(pendingRows.length, 3);
+        assert.equal(loadedRows.length, 3);
+        assert.deepEqual(flatten(pendingRows[0].props.style), flatten(loadedRows[0].props.style));
+        assert.equal(flatten(pendingRows[1].props.style).minHeight, 16 * fontScale + 4);
+        assert.equal(flatten(loadedRows[1].props.style).minHeight, 16 * fontScale + 4);
+        assert.deepEqual(flatten(pendingRows[2].props.style), flatten(loadedRows[2].props.style));
+        assert.equal(text(loaded).includes("In one currency"), enabled && activeMemberCount > 1);
+        assert.equal(text(loaded).includes("All settled"), activeMemberCount > 1);
+      }
+    }
+  }
+});
+
 test("balance summary adds only matching currencies on both sides", () => {
   const { BalancesSection } = components();
   const balances = [balance("Alice", 100), balance("Bob", 100, "INR"), balance("Cara", 20), balance("Dan", -40), balance("Eve", -60, "EUR"), balance("Frank", -10, "EUR")];
