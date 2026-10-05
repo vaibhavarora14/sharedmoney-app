@@ -1,4 +1,6 @@
 import React from 'react';
+import { Skeleton, SkeletonGroup } from './Skeleton';
+import { GROUP_BALANCE_SLOT_WIDTH } from '../constants/layout';
 import { StyleSheet, View, ViewStyle } from 'react-native';
 import { Text, useTheme } from 'react-native-paper';
 import {
@@ -57,18 +59,12 @@ export const GroupBalanceBadge: React.FC<GroupBalanceBadgeProps> = ({
   );
 
   const renderLoading = () => (
-    <View
+    <SkeletonGroup
       style={[styles.balanceStatus, style]}
       testID="group-balance-loading"
-      accessibilityLabel="Loading balance"
     >
-      <View
-        style={[
-          styles.loadingPlaceholder,
-          { backgroundColor: theme.colors.surfaceVariant },
-        ]}
-      />
-    </View>
+      <Skeleton width="100%" height={12} />
+    </SkeletonGroup>
   );
 
   // Cold Home paint: list rows appear before deferred all-balances finishes.
@@ -156,7 +152,8 @@ const styles = StyleSheet.create({
   balanceStatus: {
     paddingHorizontal: 2,
     paddingVertical: 2,
-    minWidth: 48,
+    width: GROUP_BALANCE_SLOT_WIDTH,
+    flexShrink: 0,
     alignItems: 'flex-end',
     justifyContent: 'center',
   },
@@ -164,11 +161,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
     letterSpacing: -0.1,
-  },
-  loadingPlaceholder: {
-    width: 48,
-    height: 12,
-    borderRadius: 6,
-    opacity: 0.7,
+    textAlign: 'right',
   },
 });

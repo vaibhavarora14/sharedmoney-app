@@ -8,6 +8,7 @@ import {
   TouchableRipple,
   useTheme
 } from "react-native-paper";
+import { Skeleton, SkeletonGroup } from "./Skeleton";
 import { Balance, GroupStatsResponse } from "../types";
 import { UnifyPromptCard } from "./UnifyPromptCard";
 import { useCurrencyPreferences } from "../hooks/useCurrencyPreferences";
@@ -34,8 +35,6 @@ interface GroupDashboardProps {
   currentUserParticipantId?: string;
   loading: boolean;
   statsLoading?: boolean;
-  /** When true with loading, hide settlement + insight chrome (list shell spinner is the only loader). */
-  quietLoading?: boolean;
   balanceError?: boolean;
   defaultCurrency?: string;
   /** Opens SettlementFormScreen for a viewer-involved settlement edge. Does not mutate data. */
@@ -74,7 +73,6 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
   currentUserParticipantId,
   loading,
   statsLoading = false,
-  quietLoading = false,
   balanceError = false,
   defaultCurrency = getDefaultCurrency(),
   onSettlePress,
@@ -94,6 +92,9 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
     setGroupSettings,
   } = useCurrencyPreferences(groupId);
   const dashboardLoading = loading || statsLoading;
+  // Match the two-line currency breakdown in the existing cards; allow larger
+  // content and Dynamic Type to grow rather than clipping financial amounts.
+  const insightMinHeight = 110 * fontScale;
 
   const usedCurrencies = useMemo(
     () => collectCurrencies([...balances, ...currenciesFromGroupStats(groupStats)]),
@@ -203,25 +204,12 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
     && settlementRows.length === 0
     && !(unifyEnabled && myUnified && myUnified.missing.length > 0);
 
-  // While GroupDetails ListEmpty spinner is up, hide settlement + insight chrome
-  // entirely so an empty Surface / "..." does not stack with the spinner.
-  const deferChromeToShell = quietLoading && (dashboardLoading || !currentUserId);
-
   const renderSettlementRows = () => {
     if (balanceError) {
       return (
         <View style={styles.settlementStatus}>
           <Text accessibilityLiveRegion="polite" variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
             Couldn't load balances. Reopen the group to try again.
-          </Text>
-        </View>
-      );
-    }
-    if (dashboardLoading || !currentUserId) {
-      return (
-        <View style={styles.settlementStatus}>
-          <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-            Updating balances...
           </Text>
         </View>
       );
@@ -327,9 +315,9 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
 
   const renderCompactInsights = () => (
     <View style={[styles.compactStatsRow, stackInsights && styles.stackedStats]}>
-      <Surface style={[styles.compactStat, { backgroundColor: theme.colors.surface, borderColor: theme.colors.outlineVariant }]} elevation={0}>
+      <Surface style={[styles.compactStat, { minHeight: insightMinHeight, backgroundColor: theme.colors.surface, borderColor: theme.colors.outlineVariant }]} elevation={0}>
         <TouchableRipple onPress={onMyCostsPress} style={{ flex: 1 }}>
-          <View style={styles.compactStatContent}>
+          <View style={[styles.compactStatContent, { minHeight: insightMinHeight - 2 }]}>
             <View style={[styles.miniIcon, { backgroundColor: theme.colors.surfaceVariant }]}>
               <MaterialCommunityIcons name="wallet" size={18} color={theme.colors.onSurfaceVariant} />
             </View>
@@ -348,9 +336,9 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
         </TouchableRipple>
       </Surface>
 
-      <Surface style={[styles.compactStat, { backgroundColor: theme.colors.surface, borderColor: theme.colors.outlineVariant }]} elevation={0}>
+      <Surface style={[styles.compactStat, { minHeight: insightMinHeight, backgroundColor: theme.colors.surface, borderColor: theme.colors.outlineVariant }]} elevation={0}>
         <TouchableRipple onPress={onTotalCostsPress} style={{ flex: 1 }}>
-          <View style={styles.compactStatContent}>
+          <View style={[styles.compactStatContent, { minHeight: insightMinHeight - 2 }]}>
              <View style={[styles.miniIcon, { backgroundColor: theme.colors.surfaceVariant }]}>
               <MaterialCommunityIcons name="chart-pie" size={18} color={theme.colors.onSurfaceVariant} />
             </View>
@@ -371,9 +359,46 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
     </View>
   );
 
+  if ((dashboardLoading || !currentUserId) && !balanceError) {
+    return (
+      <SkeletonGroup style={styles.container} testID="group-dashboard-skeleton">
+        {unifyEnabled && activeMemberCount > 1 ? (
+          <View style={[styles.unifiedSubhead, { minHeight: theme.fonts.labelLarge.lineHeight * fontScale }]}>
+            <Skeleton width="48%" height={12} />
+            <Skeleton width={48} height={14} />
+          </View>
+        ) : null}
+        {activeMemberCount > 1 ? (
+          <View style={styles.settledInline} testID="group-settlement-skeleton">
+            <Skeleton width={16} height={16} borderRadius={8} />
+            <View style={{ height: theme.fonts.bodySmall.lineHeight * fontScale, justifyContent: "center" }}>
+              <Skeleton width={104} height={12} />
+            </View>
+          </View>
+        ) : null}
+        <View style={[styles.compactStatsRow, stackInsights && styles.stackedStats]}>
+          {[0, 1].map((key) => (
+            <Surface key={key} elevation={0} testID="group-stat-skeleton"
+              style={[styles.compactStat, { minHeight: insightMinHeight, backgroundColor: theme.colors.surface, borderColor: theme.colors.outlineVariant }]}>
+              <View style={[styles.compactStatContent, { minHeight: insightMinHeight - 2 }]}>
+                <Skeleton width={32} height={32} borderRadius={16} />
+                <View style={{ flex: 1, gap: 8 }}>
+                  <Skeleton width="90%" height={12} />
+                  <Skeleton width="100%" height={18} />
+                  <Skeleton width="85%" height={12} />
+                  <Skeleton width="70%" height={12} />
+                </View>
+              </View>
+            </Surface>
+          ))}
+        </View>
+      </SkeletonGroup>
+    );
+  }
+
   return (
     <View style={styles.container}>
-      {hasMultipleCurrencies && !unifyEnabled && !balanceError && !dashboardLoading && !deferChromeToShell ? (
+      {hasMultipleCurrencies && !unifyEnabled && !balanceError && !dashboardLoading ? (
         <UnifyPromptCard
           currencies={usedCurrencies}
           suggestedCurrency={settlementCurrency}
@@ -391,8 +416,8 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
         />
       ) : null}
 
-      {unifyEnabled && !balanceError && !dashboardLoading && activeMemberCount > 1 && !deferChromeToShell ? (
-        <View style={styles.unifiedSubhead}>
+      {unifyEnabled && !balanceError && activeMemberCount > 1 ? (
+        <View style={[styles.unifiedSubhead, { minHeight: theme.fonts.labelLarge.lineHeight * fontScale }]}>
           <Text variant="labelMedium" style={{ color: theme.colors.onSurfaceVariant }}>
             {`In one currency · ${settlementCurrency}`}
           </Text>
@@ -411,7 +436,7 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
         </View>
       ) : null}
 
-      {!deferChromeToShell && (balanceError || dashboardLoading || activeMemberCount > 1) ? isSettled ? (
+      {(balanceError || dashboardLoading || activeMemberCount > 1) ? isSettled ? (
         <View testID="group-settlement-rows">{renderSettlementRows()}</View>
       ) : (
         <Surface
@@ -423,7 +448,7 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
         </Surface>
       ) : null}
 
-      {!deferChromeToShell && unifyEnabled && !balanceError && !dashboardLoading && activeMemberCount > 1 && myUnified && myUnified.missing.length > 0 && settlementRows.length > 0 ? (
+      {unifyEnabled && !balanceError && !dashboardLoading && activeMemberCount > 1 && myUnified && myUnified.missing.length > 0 && settlementRows.length > 0 ? (
         <Text
           variant="labelSmall"
           style={{ color: theme.colors.error, marginTop: -8, marginHorizontal: 4 }}
@@ -435,9 +460,7 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
         </Text>
       ) : null}
 
-      {/* One loading treatment: while balances/stats load, settlement shows
-          "Updating balances..." alone — do not also paint insight "..." cards. */}
-      {deferChromeToShell || dashboardLoading ? null : renderCompactInsights()}
+      {renderCompactInsights()}
     </View>
   );
 };

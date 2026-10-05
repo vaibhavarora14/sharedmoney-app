@@ -12,6 +12,8 @@ import {
   TouchableRipple,
   useTheme,
 } from "react-native-paper";
+import { Skeleton, SkeletonGroup } from "../components/Skeleton";
+import { GROUP_BALANCE_SLOT_WIDTH } from "../constants/layout";
 import { GroupBalanceBadge } from "../components/GroupBalanceBadge";
 import { NotificationBell } from "../components/NotificationBell";
 import { useAuth } from "../contexts/AuthContext";
@@ -381,45 +383,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
         onPress={() => setShowSplitBill(true)}>Split a bill</Button>
 
       {isInitialLoading ? (
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-          testID="groups-loading-placeholders"
-        >
-          {[0, 1, 2, 3].map((key) => (
-            <Surface
-              key={key}
-              style={[
-                styles.groupItem,
-                styles.placeholderRow,
-                { backgroundColor: theme.colors.surface },
-              ]}
-              elevation={0}
-            >
-              <View style={styles.placeholderCopy}>
-                <View
-                  style={[
-                    styles.placeholderLineWide,
-                    { backgroundColor: theme.colors.surfaceVariant },
-                  ]}
-                />
-                <View
-                  style={[
-                    styles.placeholderLine,
-                    { backgroundColor: theme.colors.surfaceVariant },
-                  ]}
-                />
-              </View>
-              <View
-                style={[
-                  styles.placeholderBadge,
-                  { backgroundColor: theme.colors.surfaceVariant },
-                ]}
-              />
-            </Surface>
-          ))}
-        </ScrollView>
+        <GroupsHomeSkeletonRows />
       ) : (
         <ScrollView
           style={styles.scrollView}
@@ -641,6 +605,50 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
   );
 };
 
+/** Shared by the groups query and the auth/profile bootstrap gate. */
+export function GroupsHomeSkeletonRows() {
+  const theme = useTheme();
+  const { fontScale } = useWindowDimensions();
+  const expandedText = fontScale > 1;
+  return (
+    <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}
+      showsVerticalScrollIndicator={false} testID="groups-loading-placeholders">
+      <SkeletonGroup>
+        {[0, 1, 2, 3, 4, 5].map((key) => (
+          <Surface key={key} style={[styles.groupItem, { backgroundColor: theme.colors.surface }]} elevation={0}>
+            <View style={[styles.groupTouchable, expandedText && styles.groupTouchableExpanded]}>
+              <View style={[styles.groupMainContent, expandedText && styles.groupMainContentExpanded]}>
+                <View style={styles.groupInfo}>
+                  <View style={{ height: theme.fonts.titleMedium.lineHeight * fontScale, justifyContent: "center" }}>
+                    <Skeleton width={key % 2 ? "80%" : "60%"} height={16} />
+                  </View>
+                </View>
+              </View>
+              <View style={[{ width: GROUP_BALANCE_SLOT_WIDTH, paddingHorizontal: 2, paddingVertical: 2 }, expandedText && styles.balanceBadgeExpanded]}>
+                <Skeleton width="100%" height={12} />
+              </View>
+            </View>
+          </Surface>
+        ))}
+      </SkeletonGroup>
+    </ScrollView>
+  );
+}
+
+export function GroupsHomeSkeleton() {
+  const theme = useTheme();
+  return (
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <Appbar.Header style={{ backgroundColor: theme.colors.background }}>
+        <Appbar.Content title="Your Groups" titleStyle={{ fontWeight: "bold" }} />
+      </Appbar.Header>
+      <Button mode="outlined" icon="call-split" disabled
+        style={{ marginHorizontal: 16, marginTop: 12, marginBottom: 4 }}>Split a bill</Button>
+      <GroupsHomeSkeletonRows />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -661,34 +669,6 @@ const styles = StyleSheet.create({
     paddingVertical: 64,
     alignItems: "center",
     justifyContent: "center",
-  },
-  placeholderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 16,
-    paddingHorizontal: 14,
-    gap: 12,
-  },
-  placeholderCopy: {
-    flex: 1,
-    gap: 8,
-    paddingRight: 8,
-  },
-  placeholderLineWide: {
-    width: "70%",
-    height: 14,
-    borderRadius: 7,
-  },
-  placeholderLine: {
-    width: "42%",
-    height: 12,
-    borderRadius: 6,
-  },
-  placeholderBadge: {
-    width: 72,
-    height: 28,
-    borderRadius: 8,
   },
   groupItem: {
     marginBottom: 9,

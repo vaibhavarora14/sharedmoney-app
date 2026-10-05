@@ -11,7 +11,7 @@ function components(preferences = {}, theme = { colors: {} }, dimensions = { wid
   const cache = new Map();
   const paper = Object.fromEntries(["ActivityIndicator", "Button", "Divider", "Surface", "Text", "TouchableRipple"].map(name => [name, name]));
   paper.Avatar = { Text: "Avatar.Text" };
-  paper.useTheme = () => theme;
+  paper.useTheme = () => ({ ...theme, fonts: { labelLarge: { lineHeight: 20 }, bodySmall: { lineHeight: 16 } } });
   function load(filename) {
     if (cache.has(filename)) return cache.get(filename).exports;
     const module = { exports: {} };
@@ -23,6 +23,7 @@ function components(preferences = {}, theme = { colors: {} }, dimensions = { wid
       if (id === "react") return { ...React, useMemo: fn => fn() };
       if (id === "react-native") return { View: "View", useWindowDimensions: () => dimensions, StyleSheet: { create: styles => styles, hairlineWidth: 1 } };
       if (id === "react-native-paper") return paper;
+      if (id === "./Skeleton") return { Skeleton: "Skeleton", SkeletonGroup: "SkeletonGroup" };
       if (id === "@expo/vector-icons/MaterialCommunityIcons") return "Icon";
       if (id === "../hooks/useCurrencyPreferences") return { useCurrencyPreferences: () => ({ rateBook: {}, ...preferences }) };
       if (["./UnifiedBalanceHero", "./UnifyPromptCard"].includes(id)) return { [id.slice(2)]: id.slice(2) };
@@ -258,24 +259,41 @@ test("solo group does not gain settlement chrome", () => {
   assert.equal(nodes(tree).find(n => n.props.testID === "group-settlement-rows"), undefined);
 });
 
-test("dashboard loading shows updating copy without settlement rows or insight skeletons", () => {
-  const tree = dashboard([balance("me", 50), balance("Alice", -50)], { loading: true });
-  assert.equal(settlementRows(tree).length, 0);
-  assert.match(text(tree), /Updating balances\.\.\./);
-  assert.doesNotMatch(text(tree), /Alice owes you|You owe Alice|\$50/);
-  // Single loading treatment: banner only — no My spending / Group summary "..." cards.
-  assert.doesNotMatch(text(tree), /My spending|Group summary/);
+test("dashboard reserves settlement and both stat cards while balances load", () => {
+  for (const loading of [{ loading: true }, { statsLoading: true }]) {
+    const tree = dashboard([balance("me", 50), balance("Alice", -50)], loading);
+    assert.equal(settlementRows(tree).length, 0);
+    assert.ok(byId(tree, "group-dashboard-skeleton"));
+    assert.ok(byId(tree, "group-settlement-skeleton"));
+    assert.equal(nodes(tree).filter(n => n.props.testID === "group-stat-skeleton").length, 2);
+    assert.doesNotMatch(text(tree), /Updating balances|Alice owes you|All settled|\$50/);
+  }
 });
 
-test("dashboard quietLoading hides settlement + insight chrome while shell loader is elsewhere", () => {
-  const tree = dashboard([balance("me", 50), balance("Alice", -50)], {
-    loading: true,
-    quietLoading: true,
-  });
-  assert.equal(settlementRows(tree).length, 0);
-  assert.equal(nodes(tree).find(n => n.props.testID === "group-settlement-rows"), undefined);
-  assert.doesNotMatch(text(tree), /Updating balances\.\.\./);
-  assert.doesNotMatch(text(tree), /Alice owes you|You owe Alice|\$50|My spending|Group summary/);
+test("settled unified dashboard keeps the same region geometry as its skeleton at both font scales", () => {
+  for (const fontScale of [1, 1.5]) {
+    const { GroupDashboard } = components({
+      groupSettings: { enabled: true, settlementCurrency: "INR" },
+    }, { colors: {} }, { width: 402, fontScale });
+    const props = { balances: [], currentUserId: "me", activeMemberCount: 3 };
+    const skeleton = GroupDashboard({ ...props, loading: true });
+    const loaded = GroupDashboard({ ...props, loading: false });
+    assert.deepEqual(skeleton.props.style, loaded.props.style);
+    // The currency subhead and its margin/gap occupy identical space.
+    const pendingSubhead = React.Children.toArray(skeleton.props.children)[0];
+    const loadedSubhead = React.Children.toArray(loaded.props.children)[0];
+    assert.deepEqual(flatten(pendingSubhead.props.style), flatten(loadedSubhead.props.style));
+    const pendingCards = nodes(skeleton).filter(n => n.type === "Surface");
+    const loadedCards = nodes(loaded).filter(n => n.type === "Surface");
+    assert.equal(pendingCards.length, 2);
+    assert.equal(loadedCards.length, 2);
+    pendingCards.forEach((card, i) => {
+      assert.deepEqual(flatten(card.props.style), flatten(loadedCards[i].props.style));
+      assert.equal(flatten(card.props.style).minHeight, 110 * fontScale);
+    });
+    assert.deepEqual(byId(skeleton, "group-settlement-skeleton").props.style,
+      byId(loaded, "group-settled-inline").props.style);
+  }
 });
 
 test("balance summary adds only matching currencies on both sides", () => {
@@ -439,19 +457,13 @@ test("GroupDetailsScreen wires balanceError and gates onSettlePress for active m
   assert.match(source, /if\s*\(\s*!isActiveMember\s*\|\|\s*balancesError\s*\)\s*return/);
 });
 
-test("GroupDetailsScreen uses one loading treatment for balances banner versus list spinners", () => {
+test("GroupDetailsScreen wires independent dashboard and ledger skeletons", () => {
   const source = readFileSync(path.join(__dirname, "../screens/GroupDetailsScreen.tsx"), "utf8");
-  const policy = readFileSync(path.join(__dirname, "../utils/groupDetailsLoadingTreatment.ts"), "utf8");
-
-  assert.match(source, /resolveGroupDetailsLoadingTreatment/);
-  assert.match(source, /quietLoading=\{groupOpenShellLoading\}/);
+  assert.match(source, /loading=\{loadingTreatment\.showDashboardSkeleton\}/);
   assert.match(source, /refreshing=\{loadingTreatment\.showRefreshControlLoader\}/);
   assert.match(source, /loadingTreatment\.showFooterLoader/);
-  assert.match(source, /const groupOpenShellLoading = loadingTreatment\.showListInitialLoader/);
-  assert.match(policy, /showBalancesUpdatingBanner/);
-  assert.match(policy, /showListInitialLoader\s*=[\s\S]*!showBalancesUpdatingBanner[\s\S]*listDataLoading[\s\S]*listContentEmpty/);
-  assert.match(policy, /showRefreshControlLoader:\s*listRefreshing && !showBalancesUpdatingBanner/);
-  assert.match(policy, /showFooterLoader:\s*fetchingNextPage && !showBalancesUpdatingBanner/);
+  assert.match(source, /<LedgerSkeleton \/>/);
+  assert.doesNotMatch(source, /quietLoading|Loading group details/);
 });
 
 test("App prefetchGroupData fetches balances with include_stats for shared key", () => {

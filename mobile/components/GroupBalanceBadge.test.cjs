@@ -20,6 +20,7 @@ function loadBadge(theme = { dark: false, colors: {} }) {
       },
     }).outputText;
     const localRequire = (id) => {
+      if (id === "./Skeleton") return { Skeleton: "Skeleton", SkeletonGroup: "SkeletonGroup" };
       if (id === "react") return { ...React, useMemo: (fn) => fn() };
       if (id === "react-native") {
         return {
@@ -97,4 +98,18 @@ test("group list non-zero balance is color + label without Settled", () => {
   assert.doesNotMatch(text(tree), /Settled|Even/i);
   assert.match(text(tree), /\+/);
   assert.equal(nodes(tree).some((n) => n.props?.testID === "group-balance-amount"), true);
+});
+
+test("loading, Even and amount reserve the same fixed right-aligned slot", () => {
+  const Badge = loadBadge(lightTheme);
+  const balanceData = { group_id: "g", balances: [{ user_id: "me", amount: 3000, currency: "INR" }] };
+  const trees = [Badge({ loading: true }), Badge({ loading: false }), Badge({ balanceData, currentUserId: "me" })];
+  const slots = trees.map(tree => Object.assign({}, ...tree.props.style.filter(Boolean)));
+  slots.forEach(slot => {
+    assert.equal(slot.width, 120);
+    assert.equal(slot.flexShrink, 0);
+    assert.equal(slot.alignItems, "flex-end");
+  });
+  assert.deepEqual(slots[0], slots[1]);
+  assert.deepEqual(slots[1], slots[2]);
 });

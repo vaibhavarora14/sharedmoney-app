@@ -39,6 +39,7 @@ import { MembersList } from "../components/MembersList";
 import { SafetyAction, SafetyActionModal } from "../components/SafetyActionModal";
 import {
   LedgerRow,
+  LedgerSkeleton,
   TransactionsEmptyState,
 } from "../components/TransactionsSection";
 import { useAuth } from "../contexts/AuthContext";
@@ -1231,13 +1232,14 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     !settlementsLoading &&
     transactions.length === 0 &&
     settlements.length === 0;
-  const listDataLoading =
-    listMode === "transactions" ? txLoading || settlementsLoading : activityLoading;
+  const listDataLoading = groupLoading || (
+    listMode === "transactions" ? txLoading || settlementsLoading : activityLoading
+  );
   const listContentEmpty = listRows.length === 0;
   const fetchingNextPage =
     listMode === "transactions" ? txIsFetchingNextPage : activityFetchingNextPage;
   const loadingTreatment = resolveGroupDetailsLoadingTreatment({
-    balancesLoading: balancesLoading || groupStatsLoading,
+    balancesLoading: groupLoading || balancesLoading || groupStatsLoading,
     balancesError: !!balancesError,
     listDataLoading,
     listContentEmpty,
@@ -1373,22 +1375,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
       onStatsPress(mode);
     }
   };
-
-  if (groupLoading && !group.members) {
-    return (
-      <View
-        style={[
-          styles.centerContainer,
-          { backgroundColor: theme.colors.background },
-        ]}
-      >
-        <ActivityIndicator size="large" />
-        <Text variant="bodyLarge" style={{ marginTop: 16 }}>
-          Loading group details...
-        </Text>
-      </View>
-    );
-  }
 
   if (groupError) {
     // Don't show Retry button for session expiration - user will be signed out automatically
@@ -1676,11 +1662,10 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                 groupStats={groupStats}
                 currentUserId={session?.user?.id}
                 currentUserParticipantId={participants.find((p) => p.user_id === session?.user?.id)?.id}
-                loading={balancesLoading}
+                loading={loadingTreatment.showDashboardSkeleton}
                 statsLoading={groupStatsLoading}
-                quietLoading={groupOpenShellLoading}
                 defaultCurrency={getDefaultCurrency()}
-                activeMemberCount={activeMemberCount}
+                activeMemberCount={groupLoading && !group.members ? 2 : activeMemberCount}
                 balanceError={!!balancesError}
                 onSettlePress={isActiveMember && !balancesError ? handleSettleUp : undefined}
                 onSharePress={isActiveMember && !balancesError ? handleShareBalance : undefined}
@@ -1984,7 +1969,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           ListEmptyComponent={
             listMode === "transactions" ? (
               groupOpenShellLoading ? (
-                <ActivityIndicator size="small" style={{ marginVertical: 24 }} />
+                <LedgerSkeleton />
               ) : loadingTreatment.showListEmptyState ? (
                 <View style={{ paddingHorizontal: 16 }}>
                   <TransactionsEmptyState
@@ -1997,7 +1982,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                 </View>
               ) : null
             ) : groupOpenShellLoading ? (
-              <ActivityIndicator size="small" style={{ marginVertical: 16 }} />
+              <LedgerSkeleton />
             ) : loadingTreatment.showListEmptyState ? (
               <View style={{ paddingHorizontal: 16 }}>
                 <ActivityFeedEmptyState

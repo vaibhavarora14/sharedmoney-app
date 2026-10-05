@@ -86,7 +86,7 @@ import { AllSettlementsScreen } from "./screens/AllSettlementsScreen";
 import { AuthScreen } from "./screens/AuthScreen";
 import { GroupDetailsScreen } from "./screens/GroupDetailsScreen";
 import { GroupStatsMode, GroupStatsScreen } from "./screens/GroupStatsScreen";
-import { GroupsListScreen } from "./screens/GroupsListScreen";
+import { GroupsHomeSkeleton, GroupsListScreen } from "./screens/GroupsListScreen";
 import { SplitBillScreen } from "./screens/SplitBillScreen";
 import { extractBillSplitToken } from "./utils/billSplit";
 import { NotificationDetailScreen } from "./screens/NotificationDetailScreen";
@@ -1178,10 +1178,21 @@ function AppContent() {
     }} />;
   }
 
-  // One full-screen bootstrap spinner until auth is resolved and, when signed
-  // in, profile has finished loading. Avoid stacking auth then profile gates.
+  // Keep the Groups layout in place through the auth/profile bootstrap gate.
   const bootstrapping = loading || (!!session && profileLoading);
   if (bootstrapping) {
+    if (currentRoute === "groups") {
+      return (
+        <>
+          <GroupsHomeSkeleton />
+          <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+            <BottomNavBar currentRoute="groups" onGroupsPress={() => {}}
+              onSettlementsPress={() => {}} onProfilePress={() => {}} onLogoutPress={() => {}} />
+          </View>
+          <StatusBar style={theme.dark ? "light" : "dark"} />
+        </>
+      );
+    }
     return (
       <View
         style={[
