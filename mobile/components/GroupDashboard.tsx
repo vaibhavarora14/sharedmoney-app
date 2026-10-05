@@ -9,7 +9,7 @@ import {
   useTheme
 } from "react-native-paper";
 import { Skeleton, SkeletonGroup } from "./Skeleton";
-import { predictGroupDashboardReservation } from "../utils/groupDashboardReservation";
+import { resolveGroupDashboardSlots } from "../utils/groupDashboardReservation";
 import { Balance, GroupStatsResponse } from "../types";
 import { UnifyPromptCard } from "./UnifyPromptCard";
 import { useCurrencyPreferences } from "../hooks/useCurrencyPreferences";
@@ -48,7 +48,7 @@ interface GroupDashboardProps {
   activeMemberCount?: number;
   /** False for navigation/list data without a complete member list. */
   membersKnown?: boolean;
-  /** Synchronous group metadata; local cached preferences are the fallback. */
+  /** Synchronous fallback when effective cached currency settings are absent. */
   unifyBalances?: boolean;
 }
 
@@ -100,16 +100,20 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
   } = useCurrencyPreferences(groupId);
   // Freeze the first-paint prediction: hydration must not resize the skeleton.
   // GroupDetails keys this component by group ID so another group gets a fresh prediction.
-  const [reservation] = useState(() => predictGroupDashboardReservation({
+  const [reservation] = useState(() => resolveGroupDashboardSlots({
     activeMemberCount: membersKnown ? activeMemberCount : undefined,
-    unifyEnabled: groupUnifyBalances ?? groupSettings?.enabled,
+    // Cached effective preferences must agree with the loaded renderer, even
+    // when navigation metadata still contains an older unify flag.
+    unifyEnabled: groupSettings
+      ? groupSettings.enabled && !!groupSettings.settlementCurrency
+      : groupUnifyBalances,
   }));
   const dashboardLoading = loading || statsLoading;
   // Match the two-line currency breakdown in the existing cards; allow larger
   // content and Dynamic Type to grow rather than clipping financial amounts.
   const insightMinHeight = 110 * fontScale;
-  // Only predicted/unknown slots retain space after loading. Known solo and
-  // non-unified groups do not acquire permanent empty rows.
+  // These minimums size visible content only. Frozen loading reservations must
+  // not leave blank slots when authoritative membership/preferences arrive.
   const currencyHeaderStyle = [styles.unifiedSubhead, {
     minHeight: theme.fonts.labelLarge.lineHeight * fontScale,
   }];
@@ -123,6 +127,7 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
   );
   const hasMultipleCurrencies = isMultiCurrency(usedCurrencies);
   const unifyEnabled = groupSettings?.enabled === true && !!groupSettings.settlementCurrency;
+  const contentSlots = resolveGroupDashboardSlots({ activeMemberCount, unifyEnabled, balanceError });
   const settlementCurrency = groupSettings?.settlementCurrency || preferredCurrency || defaultCurrency;
 
   const debts = useMemo(() => {
@@ -435,30 +440,26 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
         />
       ) : null}
 
-      {reservation.currencyHeader || (unifyEnabled && !balanceError && activeMemberCount > 1) ? <View style={currencyHeaderStyle}>
-        {unifyEnabled && !balanceError && activeMemberCount > 1 ? (
-          <>
-            <Text variant="labelMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-              {`In one currency · ${settlementCurrency}`}
+      {contentSlots.currencyHeader ? <View style={currencyHeaderStyle}>
+        <Text variant="labelMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+          {`In one currency · ${settlementCurrency}`}
+        </Text>
+        {onOpenCurrencySettings ? (
+          <TouchableRipple
+            onPress={onOpenCurrencySettings}
+            accessibilityRole="button"
+            accessibilityLabel="Rates"
+            testID="group-rates-button"
+          >
+            <Text variant="labelLarge" style={{ color: theme.colors.primary, fontWeight: "600" }}>
+              Rates ›
             </Text>
-            {onOpenCurrencySettings ? (
-              <TouchableRipple
-                onPress={onOpenCurrencySettings}
-                accessibilityRole="button"
-                accessibilityLabel="Rates"
-                testID="group-rates-button"
-              >
-                <Text variant="labelLarge" style={{ color: theme.colors.primary, fontWeight: "600" }}>
-                  Rates ›
-                </Text>
-              </TouchableRipple>
-            ) : null}
-          </>
+          </TouchableRipple>
         ) : null}
       </View> : null}
 
-      {reservation.settlement || balanceError || activeMemberCount > 1 ? <View style={settlementSlotStyle}>
-        {(balanceError || dashboardLoading || activeMemberCount > 1) ? isSettled ? (
+      {contentSlots.settlement ? <View style={settlementSlotStyle}>
+        {isSettled ? (
           <View testID="group-settlement-rows">{renderSettlementRows()}</View>
         ) : (
           <Surface
@@ -468,7 +469,7 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
           >
             {renderSettlementRows()}
           </Surface>
-        ) : null}
+        )}
       </View> : null}
 
       {unifyEnabled && !balanceError && !dashboardLoading && activeMemberCount > 1 && myUnified && myUnified.missing.length > 0 && settlementRows.length > 0 ? (
