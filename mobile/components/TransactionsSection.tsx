@@ -1,5 +1,5 @@
 import React from "react";
-import { Pressable, View } from "react-native";
+import { Pressable, useWindowDimensions, View } from "react-native";
 import {
   ActivityIndicator,
   Button,
@@ -8,6 +8,7 @@ import {
   Text,
   useTheme,
 } from "react-native-paper";
+import { Skeleton, SkeletonGroup } from "./Skeleton";
 import { useAuth } from "../contexts/AuthContext";
 import { Participant, Settlement, Transaction } from "../types";
 import { formatCurrency, getDefaultCurrency } from "../utils/currency";
@@ -330,6 +331,35 @@ export const LedgerRow: React.FC<LedgerRowProps> = ({
     </Surface>
   );
 };
+
+/** Same row padding, icon, text line boxes and list gaps as the real ledger. */
+export function LedgerSkeleton() {
+  const theme = useTheme();
+  const { fontScale } = useWindowDimensions();
+  return (
+    <SkeletonGroup style={{ paddingTop: 8, gap: 8 }} testID="ledger-skeleton">
+      {[0, 1, 2, 3, 4].map((key) => (
+        <View key={key} style={styles.pressable}>
+          <View style={styles.row}>
+            <View style={styles.iconContainer}>
+              <Skeleton width={40} height={40} borderRadius={20} />
+            </View>
+            <View style={styles.content}>
+              <View style={[styles.headerRow, { height: theme.fonts.titleMedium.lineHeight * fontScale }]}>
+                <View style={styles.title}><Skeleton width="80%" height={16} /></View>
+                <Skeleton width={80} height={16} />
+              </View>
+              <View style={[styles.subRow, { height: Math.max(18, theme.fonts.bodySmall.lineHeight * fontScale) }]}>
+                <View style={{ flex: 1 }}><Skeleton width={64} height={12} /></View>
+                <View style={{ marginRight: 26 }}><Skeleton width={40} height={12} /></View>
+              </View>
+            </View>
+          </View>
+        </View>
+      ))}
+    </SkeletonGroup>
+  );
+}
 
 export interface TransactionsEmptyStateProps {
   filter?: "all" | "expenses" | "payments";

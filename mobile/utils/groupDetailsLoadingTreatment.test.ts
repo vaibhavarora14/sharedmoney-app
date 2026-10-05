@@ -1,7 +1,7 @@
 import { assertEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
 import { resolveGroupDetailsLoadingTreatment } from "./groupDetailsLoadingTreatment.ts";
 
-Deno.test("group details loading treatment keeps balances banner as the only loader", () => {
+Deno.test("group details loading treatment reserves both independent regions while data loads", () => {
   const treatment = resolveGroupDetailsLoadingTreatment({
     balancesLoading: true,
     balancesError: false,
@@ -12,8 +12,8 @@ Deno.test("group details loading treatment keeps balances banner as the only loa
   });
 
   assertEquals(treatment, {
-    showBalancesUpdatingBanner: true,
-    showListInitialLoader: false,
+    showDashboardSkeleton: true,
+    showListInitialLoader: true,
     showListEmptyState: false,
     showRefreshControlLoader: false,
     showFooterLoader: false,
@@ -31,7 +31,7 @@ Deno.test("group details loading treatment falls back to the list shell when bal
   });
 
   assertEquals(treatment, {
-    showBalancesUpdatingBanner: false,
+    showDashboardSkeleton: false,
     showListInitialLoader: true,
     showListEmptyState: false,
     showRefreshControlLoader: false,
@@ -50,7 +50,7 @@ Deno.test("group details loading treatment allows list refresh and pagination wi
   });
 
   assertEquals(treatment, {
-    showBalancesUpdatingBanner: false,
+    showDashboardSkeleton: false,
     showListInitialLoader: false,
     showListEmptyState: false,
     showRefreshControlLoader: true,
@@ -71,8 +71,8 @@ Deno.test("group details suppresses empty copy until both ledger sources finish"
       });
 
       assertEquals(treatment.showListEmptyState, false);
-      assertEquals(treatment.showBalancesUpdatingBanner, balancesLoading);
-      assertEquals(treatment.showListInitialLoader, !balancesLoading);
+      assertEquals(treatment.showDashboardSkeleton, balancesLoading);
+      assertEquals(treatment.showListInitialLoader, true);
     }
   }
 });
@@ -119,7 +119,22 @@ Deno.test("group details shows the list loader instead of empty copy when balanc
     fetchingNextPage: false,
   });
 
-  assertEquals(treatment.showBalancesUpdatingBanner, false);
+  assertEquals(treatment.showDashboardSkeleton, false);
   assertEquals(treatment.showListInitialLoader, true);
   assertEquals(treatment.showListEmptyState, false);
+});
+
+Deno.test("loaded rows can refresh and paginate while dashboard skeleton is visible", () => {
+  const treatment = resolveGroupDetailsLoadingTreatment({
+    balancesLoading: true,
+    balancesError: false,
+    listDataLoading: true,
+    listContentEmpty: false,
+    listRefreshing: true,
+    fetchingNextPage: true,
+  });
+  assertEquals(treatment.showDashboardSkeleton, true);
+  assertEquals(treatment.showListInitialLoader, false);
+  assertEquals(treatment.showRefreshControlLoader, true);
+  assertEquals(treatment.showFooterLoader, true);
 });

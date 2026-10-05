@@ -44,6 +44,9 @@ function harness(fontScale = 1) {
     '../utils/posthogEvents': { ANALYTICS_EVENTS: {} },
     '../components/NotificationBell': { NotificationBell: 'NotificationBell' },
     '../components/GroupBalanceBadge': { GroupBalanceBadge: 'GroupBalanceBadge' },
+    '../components/Skeleton': { Skeleton: 'Skeleton', SkeletonGroup: 'SkeletonGroup' },
+    './Skeleton': { Skeleton: 'Skeleton', SkeletonGroup: 'SkeletonGroup' },
+    './SplitBillScreen': { SplitBillScreen: 'SplitBillScreen' },
     './CreateGroupScreen': { CreateGroupScreen: 'CreateGroupScreen' },
     './ProfileIcon': { ProfileIcon: 'ProfileIcon' },
   };

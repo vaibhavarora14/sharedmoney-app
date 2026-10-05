@@ -8,7 +8,7 @@ export interface GroupDetailsLoadingTreatmentInput {
 }
 
 export interface GroupDetailsLoadingTreatment {
-  showBalancesUpdatingBanner: boolean;
+  showDashboardSkeleton: boolean;
   showListInitialLoader: boolean;
   showListEmptyState: boolean;
   showRefreshControlLoader: boolean;
@@ -23,16 +23,15 @@ export function resolveGroupDetailsLoadingTreatment({
   listRefreshing,
   fetchingNextPage,
 }: GroupDetailsLoadingTreatmentInput): GroupDetailsLoadingTreatment {
-  const showBalancesUpdatingBanner = balancesLoading && !balancesError;
-  const showListInitialLoader =
-    !showBalancesUpdatingBanner && listDataLoading && listContentEmpty;
+  const showDashboardSkeleton = balancesLoading && !balancesError;
+  const showListInitialLoader = listDataLoading && listContentEmpty;
 
   return {
-    showBalancesUpdatingBanner,
+    showDashboardSkeleton,
     showListInitialLoader,
-    // Suppressing a duplicate spinner does not mean the list has finished loading.
+    // Both ledger sources must finish before we can claim the list is empty (#371).
     showListEmptyState: !listDataLoading && listContentEmpty,
-    showRefreshControlLoader: listRefreshing && !showBalancesUpdatingBanner,
-    showFooterLoader: fetchingNextPage && !showBalancesUpdatingBanner,
+    showRefreshControlLoader: listRefreshing && !showListInitialLoader,
+    showFooterLoader: fetchingNextPage && !showListInitialLoader,
   };
 }
