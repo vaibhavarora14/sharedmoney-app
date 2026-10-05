@@ -1,5 +1,5 @@
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { StyleSheet, useWindowDimensions, View } from "react-native";
 import {
   Button,
@@ -9,6 +9,7 @@ import {
   useTheme
 } from "react-native-paper";
 import { Skeleton, SkeletonGroup } from "./Skeleton";
+import { predictGroupDashboardReservation } from "../utils/groupDashboardReservation";
 import { Balance, GroupStatsResponse } from "../types";
 import { UnifyPromptCard } from "./UnifyPromptCard";
 import { useCurrencyPreferences } from "../hooks/useCurrencyPreferences";
@@ -45,6 +46,10 @@ interface GroupDashboardProps {
   onOpenCurrencySettings?: () => void;
   /** Active members in the group (for calm solo/zero chrome). */
   activeMemberCount?: number;
+  /** False for navigation/list data without a complete member list. */
+  membersKnown?: boolean;
+  /** Synchronous group metadata; local cached preferences are the fallback. */
+  unifyBalances?: boolean;
 }
 
 function shortName(full?: string | null, email?: string | null): string {
@@ -80,6 +85,8 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
   onTotalCostsPress,
   onOpenCurrencySettings,
   activeMemberCount = 2,
+  membersKnown = true,
+  unifyBalances: groupUnifyBalances,
   onSharePress,
 }) => {
   const theme = useTheme();
@@ -91,13 +98,18 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
     rateBook,
     setGroupSettings,
   } = useCurrencyPreferences(groupId);
+  // Freeze the first-paint prediction: hydration must not resize the skeleton.
+  // GroupDetails keys this component by group ID so another group gets a fresh prediction.
+  const [reservation] = useState(() => predictGroupDashboardReservation({
+    activeMemberCount: membersKnown ? activeMemberCount : undefined,
+    unifyEnabled: groupUnifyBalances ?? groupSettings?.enabled,
+  }));
   const dashboardLoading = loading || statsLoading;
   // Match the two-line currency breakdown in the existing cards; allow larger
   // content and Dynamic Type to grow rather than clipping financial amounts.
   const insightMinHeight = 110 * fontScale;
-  // These slots exist before member counts or currency preferences are known.
-  // Keep unused slots in the loaded layout too, so hydration cannot move the
-  // cards/ledger. Solo and non-unified groups trade compactness for stability.
+  // Only predicted/unknown slots retain space after loading. Known solo and
+  // non-unified groups do not acquire permanent empty rows.
   const currencyHeaderStyle = [styles.unifiedSubhead, {
     minHeight: theme.fonts.labelLarge.lineHeight * fontScale,
   }];
@@ -371,18 +383,18 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
   if ((dashboardLoading || !currentUserId) && !balanceError) {
     return (
       <SkeletonGroup style={styles.container} testID="group-dashboard-skeleton">
-        <View style={currencyHeaderStyle}>
+        {reservation.currencyHeader ? <View style={currencyHeaderStyle}>
           <Skeleton width="48%" height={12} />
           <Skeleton width={48} height={14} />
-        </View>
-        <View style={settlementSlotStyle}>
+        </View> : null}
+        {reservation.settlement ? <View style={settlementSlotStyle}>
           <View style={styles.settledInline} testID="group-settlement-skeleton">
             <Skeleton width={16} height={16} borderRadius={8} />
             <View style={{ height: theme.fonts.bodySmall.lineHeight * fontScale, justifyContent: "center" }}>
               <Skeleton width={104} height={12} />
             </View>
           </View>
-        </View>
+        </View> : null}
         <View style={[styles.compactStatsRow, stackInsights && styles.stackedStats]}>
           {[0, 1].map((key) => (
             <Surface key={key} elevation={0} testID="group-stat-skeleton"
@@ -423,7 +435,7 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
         />
       ) : null}
 
-      <View style={currencyHeaderStyle}>
+      {reservation.currencyHeader || (unifyEnabled && !balanceError && activeMemberCount > 1) ? <View style={currencyHeaderStyle}>
         {unifyEnabled && !balanceError && activeMemberCount > 1 ? (
           <>
             <Text variant="labelMedium" style={{ color: theme.colors.onSurfaceVariant }}>
@@ -443,9 +455,9 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
             ) : null}
           </>
         ) : null}
-      </View>
+      </View> : null}
 
-      <View style={settlementSlotStyle}>
+      {reservation.settlement || balanceError || activeMemberCount > 1 ? <View style={settlementSlotStyle}>
         {(balanceError || dashboardLoading || activeMemberCount > 1) ? isSettled ? (
           <View testID="group-settlement-rows">{renderSettlementRows()}</View>
         ) : (
@@ -457,7 +469,7 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
             {renderSettlementRows()}
           </Surface>
         ) : null}
-      </View>
+      </View> : null}
 
       {unifyEnabled && !balanceError && !dashboardLoading && activeMemberCount > 1 && myUnified && myUnified.missing.length > 0 && settlementRows.length > 0 ? (
         <Text

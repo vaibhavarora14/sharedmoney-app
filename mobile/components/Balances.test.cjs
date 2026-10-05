@@ -9,6 +9,8 @@ const React = require("react");
 // preference hook are opaque boundaries. No API or native runtime is required.
 function components(preferences = {}, theme = { colors: {} }, dimensions = { width: 402, fontScale: 1 }) {
   const cache = new Map();
+  let state;
+  let initialized = false;
   const paper = Object.fromEntries(["ActivityIndicator", "Button", "Divider", "Surface", "Text", "TouchableRipple"].map(name => [name, name]));
   paper.Avatar = { Text: "Avatar.Text" };
   paper.useTheme = () => ({ ...theme, fonts: { labelLarge: { lineHeight: 20 }, bodySmall: { lineHeight: 16 } } });
@@ -20,7 +22,10 @@ function components(preferences = {}, theme = { colors: {} }, dimensions = { wid
       compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true },
     }).outputText;
     const localRequire = (id) => {
-      if (id === "react") return { ...React, useMemo: fn => fn() };
+      if (id === "react") return { ...React, useMemo: fn => fn(), useState: initial => {
+        if (!initialized) { state = typeof initial === "function" ? initial() : initial; initialized = true; }
+        return [state, () => {}];
+      } };
       if (id === "react-native") return { View: "View", useWindowDimensions: () => dimensions, StyleSheet: { create: styles => styles, hairlineWidth: 1 } };
       if (id === "react-native-paper") return paper;
       if (id === "./Skeleton") return { Skeleton: "Skeleton", SkeletonGroup: "SkeletonGroup" };
@@ -296,15 +301,14 @@ test("settled unified dashboard keeps the same region geometry as its skeleton a
   }
 });
 
-// Initial GroupDetails props include App's synthetic members: [], so the
-// count is zero even though the eventual group has several active members.
+// Missing members are unknown; later counts must not change the loading shell.
 test("dashboard skeleton geometry survives member and currency hydration in either order", () => {
   for (const fontScale of [1, 1.5]) {
     const preferences = { groupSettings: null };
     const { GroupDashboard } = components(preferences, { colors: {} }, { width: 402, fontScale });
     const props = { balances: [], currentUserId: "me", loading: true };
     const geometry = tree => React.Children.toArray(tree.props.children).map(node => flatten(node.props.style));
-    const firstFrame = geometry(GroupDashboard({ ...props, activeMemberCount: 0 }));
+    const firstFrame = geometry(GroupDashboard({ ...props, membersKnown: false, activeMemberCount: 0 }));
     assert.equal(firstFrame.length, 3, "reserve the header, settlement line and cards on first paint");
     for (const activeMemberCount of [0, 1, 3]) {
       for (const groupSettings of [null, { enabled: false }, { enabled: true, settlementCurrency: "INR" }]) {
@@ -317,10 +321,10 @@ test("dashboard skeleton geometry survives member and currency hydration in eith
   }
 });
 
-test("unified, non-unified and solo settled groups retain the reserved header and settlement space", () => {
+test("known solo and non-unified groups have no unused rows during or after loading", () => {
   for (const fontScale of [1, 1.5]) {
     for (const enabled of [true, false]) {
-      for (const activeMemberCount of [1, 3]) {
+      for (const activeMemberCount of [0, 1, 3]) {
         const { GroupDashboard } = components({
           groupSettings: { enabled, settlementCurrency: "INR" },
         }, { colors: {} }, { width: 402, fontScale });
@@ -329,17 +333,62 @@ test("unified, non-unified and solo settled groups retain the reserved header an
         const loaded = GroupDashboard({ ...props, loading: false });
         const pendingRows = React.Children.toArray(pending.props.children);
         const loadedRows = React.Children.toArray(loaded.props.children);
-        assert.equal(pendingRows.length, 3);
-        assert.equal(loadedRows.length, 3);
-        assert.deepEqual(flatten(pendingRows[0].props.style), flatten(loadedRows[0].props.style));
-        assert.equal(flatten(pendingRows[1].props.style).minHeight, 16 * fontScale + 4);
-        assert.equal(flatten(loadedRows[1].props.style).minHeight, 16 * fontScale + 4);
-        assert.deepEqual(flatten(pendingRows[2].props.style), flatten(loadedRows[2].props.style));
+        const expectedRows = 1 + (activeMemberCount > 1 ? 1 + Number(enabled) : 0);
+        assert.equal(pendingRows.length, expectedRows);
+        assert.equal(loadedRows.length, expectedRows);
+        assert.deepEqual(pendingRows.map(row => flatten(row.props.style)), loadedRows.map(row => flatten(row.props.style)));
         assert.equal(text(loaded).includes("In one currency"), enabled && activeMemberCount > 1);
         assert.equal(text(loaded).includes("All settled"), activeMemberCount > 1);
       }
     }
   }
+});
+
+test("navigation unify flag predicts the header before local preferences hydrate", () => {
+  for (const unifyBalances of [true, false]) {
+    const preferences = { groupSettings: null };
+    const { GroupDashboard } = components(preferences);
+    const props = { balances: [], currentUserId: "me", activeMemberCount: 3, unifyBalances };
+    const pending = GroupDashboard({ ...props, loading: true });
+    preferences.groupSettings = { enabled: unifyBalances, settlementCurrency: "INR" };
+    const loaded = GroupDashboard({ ...props, loading: false });
+    const geometry = tree => React.Children.toArray(tree.props.children).map(row => flatten(row.props.style));
+    assert.deepEqual(geometry(pending), geometry(loaded));
+    assert.equal(geometry(pending).length, unifyBalances ? 3 : 2);
+  }
+});
+
+test("unknown-to-solo keeps its reservation for this visit, reopening with known members removes it", () => {
+  const props = { balances: [], currentUserId: "me", activeMemberCount: 0, unifyBalances: false };
+  const { GroupDashboard } = components();
+  const pending = GroupDashboard({ ...props, membersKnown: false, loading: true });
+  const loaded = GroupDashboard({ ...props, membersKnown: true, loading: false });
+  const rows = tree => React.Children.toArray(tree.props.children).length;
+  assert.equal(rows(pending), 2);
+  assert.equal(rows(loaded), 2);
+  const reopened = components().GroupDashboard({ ...props, membersKnown: true, loading: false });
+  assert.equal(rows(reopened), 1);
+});
+
+test("stale known-solo metadata does not hide real multi-member content after load", () => {
+  const { GroupDashboard } = components({ groupSettings: { enabled: true, settlementCurrency: "INR" } });
+  const props = { balances: [], currentUserId: "me" };
+  const pending = GroupDashboard({ ...props, activeMemberCount: 1, loading: true });
+  const stillPending = GroupDashboard({ ...props, activeMemberCount: 3, loading: true });
+  assert.equal(React.Children.toArray(pending.props.children).length, 1);
+  assert.equal(React.Children.toArray(stillPending.props.children).length, 1);
+  const loaded = GroupDashboard({ ...props, activeMemberCount: 3, loading: false });
+  assert.match(text(loaded), /In one currency/);
+  assert.match(text(loaded), /All settled/);
+});
+
+test("App preserves unknown membership and GroupDetails resets predictions per group", () => {
+  const app = readFileSync(path.join(__dirname, "../App.tsx"), "utf8");
+  assert.match(app, /const groupToDisplay: GroupWithMembers = selectedGroupDetails \|\| selectedGroup;/);
+  const screen = readFileSync(path.join(__dirname, "../screens/GroupDetailsScreen.tsx"), "utf8");
+  assert.match(screen, /<GroupDashboard\s+key=\{group.id\}/);
+  assert.match(screen, /membersKnown=\{group.members !== undefined\}/);
+  assert.match(screen, /unifyBalances=\{group.unify_balances\}/);
 });
 
 test("balance summary adds only matching currencies on both sides", () => {
