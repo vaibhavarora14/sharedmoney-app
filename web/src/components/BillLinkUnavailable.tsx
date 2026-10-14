@@ -21,7 +21,7 @@ export function BillLinkUnavailable({ friendName }: { friendName?: string | null
     }
   };
   return <div className="bill-split-unavailable" data-testid="bill-link-unavailable">
-    <h2>This bill link isn’t working</h2>
+    <h1 id="bill-title">This bill link isn’t working</h1>
     <p>It may have expired or been deleted by the person who shared it. Links last 30 days. SharedMoney never moves money, so nothing has been paid.</p>
     <div className="bill-split-actions">
       <button type="button" className="cta cta-primary" onClick={() => void ask()}>{askForNewLinkLabel(friendName)}</button>

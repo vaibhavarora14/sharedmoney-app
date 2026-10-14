@@ -1559,7 +1559,15 @@ html.dark .hero-product-shot img,
   border: 1px solid var(--color-border);
   border-radius: var(--radius-2);
   background: var(--color-surface);
-  text-align: center;
+  text-align: left;
+}
+
+.error-boundary-brand {
+  display: inline-block;
+  margin-bottom: var(--space-5);
+  color: var(--color-action);
+  font-weight: 700;
+  text-decoration: none;
 }
 
 .error-boundary-panel h2 {

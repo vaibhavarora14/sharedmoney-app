@@ -18,7 +18,7 @@ describe("404 page", () => {
 describe("dead bill link", () => {
   it("explains the likely cause and offers next steps", () => {
     const html = renderToStaticMarkup(<BillLinkUnavailable />);
-    expect(html).toContain("This bill link isn’t working");
+    expect(html).toMatch(/<h1[^>]*>This bill link isn’t working<\/h1>/);
     expect(html).toContain("expired or been deleted by the person who shared it");
     expect(html).toContain("nothing has been paid");
     expect(html).toContain(">Ask for a new link<");
@@ -42,6 +42,8 @@ describe("crash screen", () => {
     boundary.state = ErrorBoundary.getDerivedStateFromError(new Error("boom"));
     const html = renderToStaticMarkup(<>{boundary.render()}</>);
     expect(html).toContain("This page stopped working");
+    expect(html).toMatch(/class="error-boundary-brand"[^>]*>SharedMoney</);
+    expect(html).not.toContain("<header");
     expect(html).toContain("Expenses you already saved are safe.");
     expect(html).toContain(">Reload page<");
     expect(html).not.toContain("boom");

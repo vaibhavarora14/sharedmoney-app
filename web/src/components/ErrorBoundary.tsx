@@ -33,6 +33,8 @@ export class ErrorBoundary extends Component<Props, State> {
       return (
         <div className="error-boundary">
           <div className="error-boundary-panel">
+            {/* Static wordmark only: the app shell/header may be what crashed. */}
+            <a className="error-boundary-brand" href="/" aria-label="SharedMoney home">SharedMoney</a>
             <h2>This page stopped working</h2>
             <p>
               Expenses you already saved are safe. Anything you were typing on this screen may need re-entering.
