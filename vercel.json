@@ -44,6 +44,16 @@
       "source": "/account-deletion",
       "destination": "/delete-account",
       "permanent": true
+    },
+    {
+      "source": "/help",
+      "destination": "/support",
+      "permanent": true
+    },
+    {
+      "source": "/help/",
+      "destination": "/support",
+      "permanent": true
     }
   ],
   "headers": [
