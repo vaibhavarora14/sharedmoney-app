@@ -35,3 +35,14 @@ export function resolveSentryReplaySampleRates(input: {
     ),
   };
 }
+
+/**
+ * Exchange-rate fetches are background, non-critical reads. When the auth
+ * session is missing (cold start before restore, refresh failed, sign-out
+ * race), fetchWithAuth throws "Not authenticated" — expected, not a bug.
+ * See Sentry REACT-NATIVE-24.
+ */
+export function shouldReportRatesFetchError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.trim() !== "Not authenticated";
+}
