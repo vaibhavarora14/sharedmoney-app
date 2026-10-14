@@ -440,8 +440,9 @@ and branding runbook (issues #269 / #270). Summary:
 8. Configure the Web client ID/secret in Supabase Dashboard >
     Authentication > Providers > Google
 9. Keep Supabase URL Configuration entries for `https://sharedmoney.app`,
-    `https://sharedmoney.app/app`, `sharedmoney://auth/callback`, and the legacy
-    `owewho` callbacks
+    `https://sharedmoney.app/app`, `sharedmoney://auth/callback`, and the
+    `owewho://auth/callback` app-scheme callback (the owewho.com domain is retired;
+    do not keep `https://owewho.com` entries)
 10. Run `npm run verify:google-branding` and confirm Google's rendered OAuth
     page uses `SharedMoney` as the visible app name in the sign-in heading
 

@@ -16,28 +16,6 @@
       "permanent": true
     },
     {
-      "source": "/:path((?!\\.well-known/(?:assetlinks\\.json|apple-app-site-association)$).*)",
-      "has": [
-        {
-          "type": "host",
-          "value": "owewho.com"
-        }
-      ],
-      "destination": "https://sharedmoney.app/:path",
-      "permanent": true
-    },
-    {
-      "source": "/:path((?!\\.well-known/(?:assetlinks\\.json|apple-app-site-association)$).*)",
-      "has": [
-        {
-          "type": "host",
-          "value": "www.owewho.com"
-        }
-      ],
-      "destination": "https://sharedmoney.app/:path",
-      "permanent": true
-    },
-    {
       "source": "/join/:token",
       "destination": "/app/join/:token",
       "permanent": true

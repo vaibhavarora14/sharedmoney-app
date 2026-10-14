@@ -126,8 +126,6 @@ additional_redirect_urls = [
   "https://127.0.0.1:3000",
   "https://sharedmoney.app",
   "https://sharedmoney.app/app",
-  "https://owewho.com",
-  "https://owewho.com/app",
   "sharedmoney://auth/callback",
   "owewho://auth/callback",
   "com.vaibhavarora.sharemoney://auth/callback"
