@@ -100,7 +100,7 @@ Create `.env` in the root directory (optional, mainly for scripts):
 # For Local Development
 SUPABASE_URL=http://127.0.0.1:54321
 SUPABASE_ANON_KEY=sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH
-SUPABASE_SERVICE_ROLE_KEY=sb_secret_N7UND0UgjKTVK-Uodkm0Hg_xSvEMPvz
+SUPABASE_SERVICE_ROLE_KEY=<your-local-sb_secret>
 
 # CORS Configuration for Edge Functions (required)
 # For local development with Expo dev server
