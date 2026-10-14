@@ -130,7 +130,7 @@ const root = path.resolve(__dirname, '../..');
     assert.equal(creates, 4); // Three bills, plus the deliberately failed attempt.
     await page.goto(base + '/split/'); await page.getByRole('button', { name: 'Create split', exact: true }).waitFor();
     for (const suffix of ['invalid', '00'.repeat(32)]) {
-      await page.goto(base + '/split/' + suffix); await page.getByRole('heading', { name: 'Bill not found' }).waitFor();
+      await page.goto(base + '/split/' + suffix); await page.getByRole('heading', { name: 'This bill link isn’t working', level: 1 }).waitFor();
     }
     await page.goto(base + '/'); await page.locator('.landing-page').waitFor();
     await page.goto(base + '/split-bills'); await page.locator('.route-hero').waitFor();
