@@ -7,6 +7,7 @@ import { fetchWithAuth } from "../utils/api";
 import { getDefaultCurrency } from "../utils/currency";
 import { type RateBook, type RateSource } from "../utils/currencyMerge";
 import { logError } from "../utils/logger";
+import { shouldReportRatesFetchError } from "../utils/sentryTriagePolicy";
 import {
   groupSettingsFromGroup,
   overrideMapFromResponse,
@@ -111,6 +112,7 @@ export async function fetchRates(groupId?: string): Promise<RatesResponse | null
     const response = await fetchWithAuth(path);
     return await response.json();
   } catch (error) {
+    if (!shouldReportRatesFetchError(error)) return null;
     logError(error instanceof Error ? error : new Error(String(error)), {
       context: "Fetch exchange rates",
       groupId,

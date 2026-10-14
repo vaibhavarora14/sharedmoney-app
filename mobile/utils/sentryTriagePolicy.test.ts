@@ -2,6 +2,7 @@ import { assertEquals } from "jsr:@std/assert@1";
 import {
   resolveAuthSessionTransition,
   resolveSentryReplaySampleRates,
+  shouldReportRatesFetchError,
 } from "./sentryTriagePolicy.ts";
 
 Deno.test("replay defaults keep error capture and lower iOS session sampling", () => {
@@ -43,4 +44,11 @@ Deno.test("auth session transitions stay PII-free and stable", () => {
   assertEquals(resolveAuthSessionTransition("u1", "u1"), "session_refresh");
   assertEquals(resolveAuthSessionTransition("u1", "u2"), "signed_in");
   assertEquals(resolveAuthSessionTransition(null, null), null);
+});
+
+Deno.test("rates fetch: missing session is expected noise, not a Sentry error (REACT-NATIVE-24)", () => {
+  assertEquals(shouldReportRatesFetchError(new Error("Not authenticated")), false);
+  assertEquals(shouldReportRatesFetchError("Not authenticated"), false);
+  assertEquals(shouldReportRatesFetchError(new Error("Request timed out")), true);
+  assertEquals(shouldReportRatesFetchError(new Error("Internal server error")), true);
 });
