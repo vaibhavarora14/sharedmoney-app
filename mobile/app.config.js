@@ -78,7 +78,7 @@ module.exports = ({ config }) => {
   const webExportBaseUrl =
     webBaseUrl && !/^https?:\/\//i.test(webBaseUrl) ? webBaseUrl : null;
   const appLinkHosts = Array.from(
-    new Set([appUrlHostname, "owewho.com"].filter(Boolean))
+    new Set([appUrlHostname].filter(Boolean))
   );
   const appSchemes = ["sharedmoney", "owewho"];
 
