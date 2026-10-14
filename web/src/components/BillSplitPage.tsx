@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { formatBillAmount, type BillSplitSession } from "../../../shared/billSplit";
 import { requestBillSplit } from "../billSplitApi";
+import { BillLinkUnavailable } from "./BillLinkUnavailable";
 import "./BillSplitPage.css";
 
 export function BillSplitPage({ token }: { token: string | null }) {
@@ -61,7 +62,7 @@ export function BillSplitPage({ token }: { token: string | null }) {
       <h1 id="bill-title">Split a bill</h1>
       {loading && !session ? <p role="status">Loading bill…</p> : null}
       {error ? <div role="alert"><p>{error}</p><button className="text-button" onClick={() => void refresh()} disabled={busy}>Try again</button></div> : null}
-      {!loading && !error && !session ? <><h2>Bill not found</h2><p>This link is invalid or has expired.</p></> : null}
+      {!loading && !error && !session ? <BillLinkUnavailable /> : null}
       {session ? <>
         <p className="kicker">{session.mode === "unequal" ? "Exact amounts" : session.mode === "shares" ? "Split by shares" : "Equal split"}</p>
         <p className="bill-split-total"><span>Total</span><strong>{formatBillAmount(session.amount_minor, session.currency)}</strong></p>

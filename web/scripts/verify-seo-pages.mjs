@@ -107,6 +107,7 @@ for (const page of pages) {
 
 const notFound = await readFile(path.join(distDir, "404.html"), "utf8");
 report(notFound.includes('name="robots" content="noindex,follow"'), "404 page must be noindex.");
+report(notFound.includes("We can’t find that page") && notFound.includes("/assets/"), "404 page must use the branded site shell.");
 
 if (failures.length > 0) {
   throw new Error(`SEO verification failed:\n- ${failures.join("\n- ")}`);

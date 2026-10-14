@@ -101,9 +101,12 @@ export function NotFoundPage() {
     <main id="main-content" className="not-found-page">
       <div className="container">
         <p className="kicker">404</p>
-        <h1>That page is not here.</h1>
-        <p>Try the SharedMoney home page or explore the free calculators.</p>
-        <p><a className="cta cta-primary" href="/">Return home</a></p>
+        <h1>We can’t find that page</h1>
+        <p>The link may be old or mistyped. Your groups and balances aren’t affected.</p>
+        <p className="not-found-actions">
+          <a className="cta cta-primary" href="/">Go to SharedMoney home</a>
+          <a className="cta cta-secondary" href="/app">Open web app</a>
+        </p>
       </div>
     </main>
   );

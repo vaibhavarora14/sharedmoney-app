@@ -33,9 +33,9 @@ export class ErrorBoundary extends Component<Props, State> {
       return (
         <div className="error-boundary">
           <div className="error-boundary-panel">
-            <h2>Something went wrong</h2>
+            <h2>This page stopped working</h2>
             <p>
-              We're sorry, but something unexpected happened. Please try refreshing the page.
+              Expenses you already saved are safe. Anything you were typing on this screen may need re-entering.
             </p>
             <button
               type="button"
@@ -45,7 +45,7 @@ export class ErrorBoundary extends Component<Props, State> {
               }}
               className="error-boundary-action"
             >
-              Refresh Page
+              Reload page
             </button>
           </div>
         </div>

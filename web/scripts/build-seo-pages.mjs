@@ -175,8 +175,20 @@ function renderPage(template, page) {
   return html;
 }
 
-function notFoundMarkup() {
-  return `<!doctype html><html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="robots" content="noindex,follow" /><title>Page not found | SharedMoney</title></head><body><main><h1>Page not found</h1><p>The page you requested is not available.</p><p><a href="/">Return to SharedMoney</a></p></main></body></html>`;
+// Copy mirrors NotFoundPage in src/components/seo/SeoPageContent.tsx. The page
+// reuses the built shell so it ships the site stylesheet, font and header, and
+// Vercel still serves it with HTTP 404.
+function notFoundMarkup(template) {
+  const title = "Page not found | SharedMoney";
+  const body = `<main id="main-content" class="not-found-page"><div class="container"><p class="kicker">404</p><h1>We can’t find that page</h1><p>The link may be old or mistyped. Your groups and balances aren’t affected.</p><p class="not-found-actions"><a class="cta cta-primary" href="/">Go to SharedMoney home</a><a class="cta cta-secondary" href="${appUrl}">Open web app</a></p></div></main>`;
+  let html = template
+    .replace(/<title>.*?<\/title>/is, `<title>${title}</title>`)
+    .replace(/<meta\s+name="title"[^>]*>/i, `<meta name="title" content="${title}" />`)
+    .replace(/<link\s+rel="canonical"[^>]*>\s*/i, "")
+    .replace(/<script\s+type="application\/ld\+json">.*?<\/script>\s*/is, "")
+    .replace('<div id="root"></div>', `<div id="root">${body}</div>`);
+  html = replaceMeta(html, 'name="robots"', '<meta name="robots" content="noindex,follow" />');
+  return html;
 }
 
 const template = await readFile(indexPath, "utf8");
@@ -193,4 +205,4 @@ const sitemap = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://w
   .join("\n")}\n</urlset>\n`;
 
 await writeFile(path.join(distDir, "sitemap.xml"), sitemap);
-await writeFile(path.join(distDir, "404.html"), notFoundMarkup());
+await writeFile(path.join(distDir, "404.html"), notFoundMarkup(template));

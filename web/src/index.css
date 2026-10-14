@@ -1935,6 +1935,13 @@ html.dark .hero-product-shot img,
   font-size: clamp(2.8rem, 6vw, 4.5rem);
 }
 
+.not-found-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+
 @media (max-width: 56rem) {
   .route-hero-shell,
   .seo-faq-shell,
