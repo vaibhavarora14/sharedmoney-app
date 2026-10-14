@@ -72,3 +72,11 @@ jobs:
 
       - name: Run Deno Tests
         run: deno test --allow-env tests/ supabase/functions/
+
+      - name: Install mobile dependencies (for Deno mobile/utils tests)
+        working-directory: mobile
+        run: npm ci --ignore-scripts
+
+      - name: Run Deno Tests (mobile/utils)
+        working-directory: mobile
+        run: deno test --allow-env utils/
