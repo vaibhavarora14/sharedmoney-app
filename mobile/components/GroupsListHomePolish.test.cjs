@@ -87,7 +87,7 @@ test("preview mirror keeps Archived nested chrome + accordion minHeight", () => 
   assert.ok((styles.formerAccordionHeader.minHeight ?? 0) >= 44);
 });
 
-function harnessWithFormer() {
+function harnessWithFormer(loading = false) {
   let stateIndex = 0;
   const state = [];
   const theme = {
@@ -99,7 +99,7 @@ function harnessWithFormer() {
       outlineVariant: "#ccc",
       primary: "#0a7",
     },
-    fonts: {},
+    fonts: { titleMedium: { lineHeight: 24 }, bodySmall: { lineHeight: 16 } },
   };
   const active = {
     id: "g-active",
@@ -107,6 +107,7 @@ function harnessWithFormer() {
     description: "Utilities",
     user_status: "active",
   };
+  const plain = { id: "g-plain", name: "Lunch", user_status: "active" };
   const former = {
     id: "g-former",
     name: "Old flatmates",
@@ -134,7 +135,7 @@ function harnessWithFormer() {
     "@tanstack/react-query": { useQueryClient: () => ({}) },
     "../contexts/AuthContext": { useAuth: () => ({ user: { id: "me" } }) },
     "../hooks/useGroups": {
-      useGroups: () => ({ data: [active, former], isLoading: false }),
+      useGroups: () => ({ data: loading ? [] : [active, plain, former], isLoading: loading }),
     },
     "../hooks/useBalances": {
       useBalances: () => ({
@@ -174,7 +175,7 @@ function harnessWithFormer() {
     "../utils/notificationPermission": {},
     "../utils/groupListSections": {
       partitionGroupsBySection: () => ({
-        activeGroups: [active],
+        activeGroups: [active, plain],
         archivedGroups: [],
         formerGroups: [former],
       }),
@@ -184,6 +185,8 @@ function harnessWithFormer() {
     "../utils/posthogAnalytics": { captureIdentifiedAnalyticsEvent: () => {} },
     "../utils/posthogEvents": { ANALYTICS_EVENTS: {} },
     "../components/NotificationBell": { NotificationBell: "NotificationBell" },
+    "../components/Skeleton": { Skeleton: "Skeleton", SkeletonGroup: "SkeletonGroup" },
+    "./SplitBillScreen": { SplitBillScreen: "SplitBillScreen" },
     "../components/GroupBalanceBadge": { GroupBalanceBadge: "GroupBalanceBadge" },
     "./CreateGroupScreen": { CreateGroupScreen: "CreateGroupScreen" },
   };
@@ -263,10 +266,15 @@ function harnessWithFormer() {
         path.join(__dirname, "../screens/GroupsListScreen.tsx")
       ).GroupsListScreen({});
     },
+    skeleton() {
+      return load(path.join(__dirname, "../screens/GroupsListScreen.tsx")).GroupsHomeSkeleton();
+    },
+    skeletonRows() {
+      return load(path.join(__dirname, "../screens/GroupsListScreen.tsx")).GroupsHomeSkeletonRows();
+    },
     setFormerExpanded(expanded) {
-      // formerGroupsExpanded is the 4th useState after showCreateGroup,
-      // newGroupHeight, formerGroupsExpanded — indices 0,1,2
-      state[2] = expanded;
+      // showCreateGroup, showSplitBill, newGroupHeight, formerGroupsExpanded.
+      state[3] = expanded;
     },
   };
 }
@@ -310,4 +318,44 @@ test("expanded Former children render flat Surface cards like active, not hairli
     (n) => n.type === "GroupBalanceBadge"
   );
   assert.equal(activeBadge.props.loading, true);
+});
+
+test("bootstrap and initial Groups query share the same loading rows and header position", () => {
+  const app = harnessWithFormer(true);
+  const initial = app.render();
+  const bootstrap = app.skeleton();
+  for (const tree of [initial, bootstrap]) {
+    const rows = nodes(tree).find(node => node.type?.name === "GroupsHomeSkeletonRows");
+    assert.ok(rows);
+    const header = nodes(tree).find(node => node.type === "Header");
+    assert.ok(header);
+    const split = nodes(tree).find(node => node.type === "Button" && node.props.children === "Split a bill");
+    assert.deepEqual(split.props.style, { marginHorizontal: 16, marginTop: 12, marginBottom: 4 });
+    assert.equal(nodes(tree).some(node => node.type === "ActivityIndicator"), false);
+  }
+  const rows = app.skeletonRows();
+  const surfaces = nodes(rows).filter(node => node.type === "Surface");
+  assert.equal(surfaces.length, 6);
+  const realStyles = loadStyles(path.join(__dirname, "../screens/GroupsListScreen.tsx"));
+  for (const row of surfaces) {
+    assert.equal(flatten(row.props.style).borderRadius, realStyles.groupItem.borderRadius);
+    assert.equal(flatten(row.props.style).marginBottom, realStyles.groupItem.marginBottom);
+    assert.deepEqual(flatten(row.props.children.props.style), realStyles.groupTouchable);
+    // Uncached rows reserve the common name + description height, not a name-only row.
+    const subtitle = nodes(row).find(node => node.props?.testID === "group-skeleton-subtitle");
+    assert.ok(subtitle);
+    const sub = flatten(subtitle.props.style);
+    assert.equal(sub.marginTop, realStyles.groupSubtitle.marginTop);
+    assert.equal(sub.height, 16);
+  }
+});
+
+test("top-level cards without a description keep the skeleton's description line height", () => {
+  const tree = harnessWithFormer().render();
+  const spacer = nodes(tree).find(n => n.props?.testID === "group-subtitle-spacer-g-plain");
+  assert.ok(spacer, "name-only card must reserve the subtitle line");
+  const realStyles = loadStyles(path.join(__dirname, "../screens/GroupsListScreen.tsx"));
+  assert.equal(flatten(spacer.props.style).marginTop, realStyles.groupSubtitle.marginTop);
+  assert.equal(flatten(spacer.props.style).height, 16);
+  assert.equal(nodes(tree).find(n => n.props?.testID === "group-subtitle-spacer-g-active"), undefined);
 });
