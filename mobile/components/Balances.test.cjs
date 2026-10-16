@@ -288,7 +288,7 @@ test("settled unified dashboard keeps the same region geometry as its skeleton a
     const pendingSubhead = React.Children.toArray(skeleton.props.children)[0];
     const loadedSubhead = React.Children.toArray(loaded.props.children)[0];
     assert.deepEqual(flatten(pendingSubhead.props.style), flatten(loadedSubhead.props.style));
-    const pendingCards = nodes(skeleton).filter(n => n.type === "Surface");
+    const pendingCards = nodes(skeleton).filter(n => n.type === "Surface" && n.props.testID === "group-stat-skeleton");
     const loadedCards = nodes(loaded).filter(n => n.type === "Surface");
     assert.equal(pendingCards.length, 2);
     assert.equal(loadedCards.length, 2);
@@ -296,8 +296,13 @@ test("settled unified dashboard keeps the same region geometry as its skeleton a
       assert.deepEqual(flatten(card.props.style), flatten(loadedCards[i].props.style));
       assert.equal(flatten(card.props.style).minHeight, 110 * fontScale);
     });
-    assert.deepEqual(byId(skeleton, "group-settlement-skeleton").props.style,
-      byId(loaded, "group-settled-inline").props.style);
+    // The reservation is the outstanding-balance card; a settled result keeps the
+    // painted height as a floor (onLayout) so the ledger does not move up.
+    const reserved = byId(skeleton, "group-settlement-skeleton");
+    assert.equal(reserved.type, "Surface");
+    assert.equal(flatten(reserved.props.style).borderWidth, 1);
+    assert.equal(nodes(reserved).some(n => flatten(n.props?.style)?.minHeight === 60), true);
+    assert.ok(byId(loaded, "group-settled-inline"));
   }
 });
 

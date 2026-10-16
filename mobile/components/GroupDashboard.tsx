@@ -109,6 +109,9 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
       : groupUnifyBalances,
   }));
   const dashboardLoading = loading || statsLoading;
+  // Height the loading reservation actually painted; loaded content keeps it
+  // as a floor for this mount so a short "All settled" line cannot pull the ledger up.
+  const [reservedSettlementHeight, setReservedSettlementHeight] = useState(0);
   // Match the two-line currency breakdown in the existing cards; allow larger
   // content and Dynamic Type to grow rather than clipping financial amounts.
   const insightMinHeight = 110 * fontScale;
@@ -392,13 +395,25 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
           <Skeleton width="48%" height={12} />
           <Skeleton width={48} height={14} />
         </View> : null}
-        {reservation.settlement ? <View style={settlementSlotStyle}>
-          <View style={styles.settledInline} testID="group-settlement-skeleton">
-            <Skeleton width={16} height={16} borderRadius={8} />
-            <View style={{ height: theme.fonts.bodySmall.lineHeight * fontScale, justifyContent: "center" }}>
-              <Skeleton width={104} height={12} />
+        {reservation.settlement ? <View style={settlementSlotStyle}
+          onLayout={(e) => setReservedSettlementHeight(e.nativeEvent.layout.height)}>
+          {/* Mirrors the outstanding-balance card so loaded debts do not push the ledger. */}
+          <Surface elevation={0} testID="group-settlement-skeleton"
+            style={[styles.settlementList, { borderColor: theme.colors.outlineVariant, backgroundColor: theme.colors.surface }]}>
+            <View style={styles.settlementRow}>
+              <View style={styles.settlementRowContent}>
+                <View style={{ marginRight: 12 }}><Skeleton width={36} height={36} borderRadius={18} /></View>
+                <View style={[styles.settlementDetails, { justifyContent: "space-between" }]}>
+                  <Skeleton width={104} height={14} />
+                  <Skeleton width={72} height={16} />
+                </View>
+              </View>
             </View>
-          </View>
+            {/* Share is gated on membership, which is often unknown here; reserve it. */}
+            <View style={[styles.shareInChatButton, { height: 40, justifyContent: "center", paddingLeft: 12 }]}>
+              <Skeleton width={88} height={12} />
+            </View>
+          </Surface>
         </View> : null}
         <View style={[styles.compactStatsRow, stackInsights && styles.stackedStats]}>
           {[0, 1].map((key) => (
@@ -458,7 +473,8 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
         ) : null}
       </View> : null}
 
-      {contentSlots.settlement ? <View style={settlementSlotStyle}>
+      {contentSlots.settlement ? <View style={[settlementSlotStyle,
+        reservedSettlementHeight > 0 ? { minHeight: reservedSettlementHeight } : null]}>
         {isSettled ? (
           <View testID="group-settlement-rows">{renderSettlementRows()}</View>
         ) : (

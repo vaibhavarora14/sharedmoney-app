@@ -99,7 +99,7 @@ function harnessWithFormer(loading = false) {
       outlineVariant: "#ccc",
       primary: "#0a7",
     },
-    fonts: { titleMedium: { lineHeight: 24 } },
+    fonts: { titleMedium: { lineHeight: 24 }, bodySmall: { lineHeight: 16 } },
   };
   const active = {
     id: "g-active",
@@ -107,6 +107,7 @@ function harnessWithFormer(loading = false) {
     description: "Utilities",
     user_status: "active",
   };
+  const plain = { id: "g-plain", name: "Lunch", user_status: "active" };
   const former = {
     id: "g-former",
     name: "Old flatmates",
@@ -134,7 +135,7 @@ function harnessWithFormer(loading = false) {
     "@tanstack/react-query": { useQueryClient: () => ({}) },
     "../contexts/AuthContext": { useAuth: () => ({ user: { id: "me" } }) },
     "../hooks/useGroups": {
-      useGroups: () => ({ data: loading ? [] : [active, former], isLoading: loading }),
+      useGroups: () => ({ data: loading ? [] : [active, plain, former], isLoading: loading }),
     },
     "../hooks/useBalances": {
       useBalances: () => ({
@@ -174,7 +175,7 @@ function harnessWithFormer(loading = false) {
     "../utils/notificationPermission": {},
     "../utils/groupListSections": {
       partitionGroupsBySection: () => ({
-        activeGroups: [active],
+        activeGroups: [active, plain],
         archivedGroups: [],
         formerGroups: [former],
       }),
@@ -340,5 +341,21 @@ test("bootstrap and initial Groups query share the same loading rows and header 
     assert.equal(flatten(row.props.style).borderRadius, realStyles.groupItem.borderRadius);
     assert.equal(flatten(row.props.style).marginBottom, realStyles.groupItem.marginBottom);
     assert.deepEqual(flatten(row.props.children.props.style), realStyles.groupTouchable);
+    // Uncached rows reserve the common name + description height, not a name-only row.
+    const subtitle = nodes(row).find(node => node.props?.testID === "group-skeleton-subtitle");
+    assert.ok(subtitle);
+    const sub = flatten(subtitle.props.style);
+    assert.equal(sub.marginTop, realStyles.groupSubtitle.marginTop);
+    assert.equal(sub.height, 16);
   }
+});
+
+test("top-level cards without a description keep the skeleton's description line height", () => {
+  const tree = harnessWithFormer().render();
+  const spacer = nodes(tree).find(n => n.props?.testID === "group-subtitle-spacer-g-plain");
+  assert.ok(spacer, "name-only card must reserve the subtitle line");
+  const realStyles = loadStyles(path.join(__dirname, "../screens/GroupsListScreen.tsx"));
+  assert.equal(flatten(spacer.props.style).marginTop, realStyles.groupSubtitle.marginTop);
+  assert.equal(flatten(spacer.props.style).height, 16);
+  assert.equal(nodes(tree).find(n => n.props?.testID === "group-subtitle-spacer-g-active"), undefined);
 });

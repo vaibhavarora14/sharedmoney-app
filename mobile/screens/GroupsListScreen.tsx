@@ -265,7 +265,11 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
               >
                 {description}
               </Text>
-            ) : null}
+            ) : nested ? null : (
+              // Keep every top-level card at the skeleton's name + description height.
+              <View testID={`group-subtitle-spacer-${group.id}`} accessible={false}
+                style={[styles.groupSubtitle, { height: theme.fonts.bodySmall.lineHeight * fontScale }]} />
+            )}
           </View>
         </View>
 
@@ -621,6 +625,11 @@ export function GroupsHomeSkeletonRows() {
                 <View style={styles.groupInfo}>
                   <View style={{ height: theme.fonts.titleMedium.lineHeight * fontScale, justifyContent: "center" }}>
                     <Skeleton width={key % 2 ? "80%" : "60%"} height={16} />
+                  </View>
+                  {/* Uncached first paint: assume the common row with a description line. */}
+                  <View testID="group-skeleton-subtitle" style={[styles.groupSubtitle,
+                    { height: theme.fonts.bodySmall.lineHeight * fontScale, justifyContent: "center" }]}>
+                    <Skeleton width={key % 2 ? "45%" : "35%"} height={10} />
                   </View>
                 </View>
               </View>
