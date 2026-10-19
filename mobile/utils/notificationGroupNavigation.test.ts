@@ -107,3 +107,45 @@ Deno.test("notification group navigation rejects a duplicate opening request", (
   assertEquals(started, false);
   assertEquals(events, []);
 });
+
+Deno.test("notification group navigation tolerates a missing onSettled under Hermes finally semantics", async () => {
+  // Hermes (promise npm lib) implements finally without a callable check:
+  // it invokes f() directly, unlike V8 which passes non-callables through.
+  const originalFinally = Promise.prototype.finally;
+  Promise.prototype.finally = function (this: Promise<unknown>, f: () => unknown) {
+    return this.then(
+      (value) => Promise.resolve(f()).then(() => value),
+      (err) => Promise.resolve(f()).then(() => { throw err; }),
+    );
+  } as typeof Promise.prototype.finally;
+
+  const rejections: unknown[] = [];
+  const onUnhandled = (event: PromiseRejectionEvent) => {
+    event.preventDefault();
+    rejections.push(event.reason);
+  };
+  globalThis.addEventListener("unhandledrejection", onUnhandled);
+
+  try {
+    const events: string[] = [];
+    const started = openNotificationGroupImmediately({
+      reference: groupReference,
+      cachedDetails: null,
+      cachedGroups: [cachedGroup],
+      isAlreadyOpening: false,
+      navigate: () => events.push("navigate"),
+      refresh: async () => {
+        events.push("refresh");
+      },
+      onRefreshError: () => events.push("error"),
+    });
+
+    assertEquals(started, true);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assertEquals(events, ["navigate", "refresh"]);
+    assertEquals(rejections, []);
+  } finally {
+    globalThis.removeEventListener("unhandledrejection", onUnhandled);
+    Promise.prototype.finally = originalFinally;
+  }
+});

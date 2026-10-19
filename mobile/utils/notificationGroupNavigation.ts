@@ -52,7 +52,9 @@ export function openNotificationGroupImmediately({
   void Promise.resolve()
     .then(refresh)
     .catch(onRefreshError)
-    .finally(onSettled);
+    // Hermes' Promise#finally calls its argument unconditionally, so passing an
+    // undefined onSettled throws "undefined is not a function" (REACT-NATIVE-2F).
+    .finally(() => onSettled?.());
 
   return true;
 }
