@@ -100,9 +100,9 @@ export function recentBillIdentity(input: {
   const name = input.name?.trim();
   if (name) return name.slice(0, 100);
   const payee = input.firstPayeeName?.trim();
-  if (payee) return payee.slice(0, 100);
+  if (payee) return `With ${payee.slice(0, 96)}`;
   const creator = input.creatorName?.trim();
-  if (creator) return creator.slice(0, 100);
+  if (creator) return `With ${creator.slice(0, 96)}`;
   return "Bill";
 }
 
@@ -112,7 +112,11 @@ export async function listRecentBillSplits(userId: string): Promise<RecentBillSp
     if (!raw) return [];
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
-    return parsed.map(coerceRecentBill).filter((row): row is RecentBillSplit => !!row).slice(0, MAX_STORED);
+    return parsed
+      .map(coerceRecentBill)
+      .filter((row): row is RecentBillSplit => !!row)
+      .sort((a, b) => Date.parse(b.remembered_at) - Date.parse(a.remembered_at))
+      .slice(0, MAX_STORED);
   } catch {
     return [];
   }

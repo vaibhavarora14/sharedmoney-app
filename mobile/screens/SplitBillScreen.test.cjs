@@ -251,11 +251,23 @@ test("create CTA stays a contained pill when disabled and currency is a picker",
   assert.ok(create);
   assert.equal(create.props.mode, "contained");
   assert.equal(create.props.disabled, true);
+  assert.equal(create.props.children, "Create & get share link");
   const createStyle = Object.assign({}, ...[create.props.style].flat(Infinity).filter(Boolean));
   assert.equal(createStyle.borderRadius, 24);
   assert.equal(createStyle.opacity, 0.45);
   assert.equal(tree.some((node) => node.props?.label === "Currency code"), false);
-  assert.ok(tree.find((node) => node.props?.testID === "split-bill-currency"));
+  const currency = tree.find((node) => node.props?.testID === "split-bill-currency");
+  assert.ok(currency);
+  const currencyStyle = Object.assign({}, ...[currency.props.style].flat(Infinity).filter(Boolean));
+  assert.equal(currencyStyle.borderRadius, 8);
+});
+
+test("people-directory loading keeps Create label, not Creating…", () => {
+  const tree = expandScreen(loadScreen({ directory: { isLoading: true } }).render());
+  const create = tree.find((node) => node.props?.testID === "split-bill-create");
+  assert.ok(create);
+  assert.equal(create.props.children, "Create & get share link");
+  assert.doesNotMatch(String(create.props.children), /Creating/);
 });
 
 test("Add by name is an inline row under search, not an outlined button", () => {

@@ -49,29 +49,26 @@ test("Former/Archived accordion hit target is at least 44pt", () => {
   assert.ok((styles.sectionAccordion.minHeight ?? 0) >= 44);
 });
 
-test("nested Archived rows are indented hairlines; Former uses active flat cards", () => {
+test("Archived and Former share disclosure header inset + compact divider children", () => {
   const styles = loadStyles(
     path.join(__dirname, "../screens/GroupsListScreen.tsx")
   );
   assert.ok(
     styles.nestedGroupRow.marginLeft >= 12 &&
       styles.nestedGroupRow.marginLeft <= 16,
-    "Archived indent children ~12–16px"
+    "Archived/Former indent children ~12–16px"
   );
   assert.equal(styles.nestedGroupRow.borderBottomWidth, 1);
   assert.equal(styles.nestedGroupRow.borderRadius, undefined);
   assert.equal(styles.nestedGroupName.fontWeight, "600");
-  // Active + Former cards share surface chrome; nested Archived must not.
   assert.equal(styles.groupItem.borderRadius, 14);
-  assert.equal(styles.groupItem.marginBottom, 9);
   assert.notEqual(styles.nestedGroupRow.borderRadius, 14);
-  assert.equal(styles.formerAccordionContent.paddingTop, 8);
-  assert.ok((styles.formerAccordionHeader.minHeight ?? 0) >= 44);
-  // Former cards reuse active groupItem margin (canvas gaps), not Accordion.
-  assert.equal(styles.groupItem.marginBottom, 9);
+  assert.ok((styles.sectionDisclosureHeader.minHeight ?? 0) >= 44);
+  assert.equal(styles.sectionDisclosureHeaderRow.paddingHorizontal, 14);
+  assert.ok((styles.sectionDisclosureHeaderRow.gap ?? 0) >= 8);
 });
 
-test("preview mirror keeps Archived nested chrome + accordion minHeight", () => {
+test("preview mirror keeps shared disclosure inset + nested divider chrome", () => {
   const styles = loadStyles(
     path.join(__dirname, "../screens/HomePolishPreviewScreen.tsx")
   );
@@ -83,8 +80,8 @@ test("preview mirror keeps Archived nested chrome + accordion minHeight", () => 
   assert.equal(styles.nestedGroupRow.borderBottomWidth, 1);
   assert.equal(styles.groupRow.borderRadius, 14);
   assert.equal(styles.groupRow.marginBottom, 9);
-  assert.equal(styles.formerAccordionContent.paddingTop, 8);
-  assert.ok((styles.formerAccordionHeader.minHeight ?? 0) >= 44);
+  assert.ok((styles.sectionDisclosureHeader.minHeight ?? 0) >= 44);
+  assert.equal(styles.sectionDisclosureHeaderRow.paddingHorizontal, 14);
 });
 
 function harnessWithFormer(loading = false) {
@@ -129,7 +126,6 @@ function harnessWithFormer(loading = false) {
   Object.assign(paper, {
     useTheme: () => theme,
     Appbar: { Header: "Header", Content: "Content" },
-    List: { Accordion: "Accordion", Icon: "ListIcon" },
   });
   const overrides = {
     "@tanstack/react-query": { useQueryClient: () => ({}) },
@@ -298,7 +294,7 @@ test("Home list uses Groups header New group action and clearance, not a FAB", (
   assert.equal(flatten(clearance.props.style).height, 32);
 });
 
-test("expanded Former children render flat Surface cards like active, not hairlines", () => {
+test("expanded Former children use compact divider rows like Archived", () => {
   const app = harnessWithFormer();
   app.setFormerExpanded(true);
   const tree = app.render();
@@ -308,35 +304,37 @@ test("expanded Former children render flat Surface cards like active, not hairli
   assert.ok(accordion);
   assert.ok((flatten(accordion.props.style).minHeight ?? 0) >= 44);
 
-  // Former must not use the nested hairline wrapper reserved for Archived.
   const nested = nodes(tree).find(
     (n) => n.props?.testID === "nested-group-row-g-former"
   );
-  assert.equal(nested, undefined);
+  assert.ok(nested, "Former children must use nested divider rows");
+  assert.equal(flatten(nested.props.style).borderBottomWidth, 1);
 
-  const formerCard = nodes(tree).find(
-    (n) => n.props?.testID === "group-card-g-former"
-  );
-  assert.ok(formerCard, "Former child must render the same card touch target");
-  // Walk up: card lives inside Surface with active groupItem chrome.
+  // Former must not reuse active Surface card chrome.
   const formerSurface = nodes(tree).find(
     (n) =>
       n.type === "Surface" &&
       nodes(n).some((c) => c.props?.testID === "group-card-g-former")
   );
-  assert.ok(formerSurface, "Former child must be wrapped in Surface");
-  assert.equal(flatten(formerSurface.props.style).borderRadius, 14);
-  assert.equal(flatten(formerSurface.props.style).marginBottom, 9);
+  assert.equal(formerSurface, undefined);
 
   const activeCard = nodes(tree).find(
     (n) => n.props?.testID === "group-card-g-active"
   );
   assert.ok(activeCard);
-  // Active balance badge waits for deferred enablement (useEffect noop in harness).
   const activeBadge = nodes(activeCard).find(
     (n) => n.type === "GroupBalanceBadge"
   );
   assert.equal(activeBadge.props.loading, true);
+});
+
+test("Home keeps Split a bill above Groups when there are no recent bills", () => {
+  const tree = harnessWithFormer().render();
+  const split = nodes(tree).find((n) => n.props?.testID === "split-bill-entry");
+  assert.ok(split, "Split a bill must render with groups even when recent bills are empty");
+  assert.equal(split.props.children, "Split a bill");
+  assert.equal(nodes(tree).some((n) => n.props?.testID === "recent-bills-row"), false);
+  assert.ok(nodes(tree).find((n) => n.props?.testID === "groups-section-header"));
 });
 
 test("bootstrap and initial Groups query share the same loading rows and header position", () => {
@@ -416,7 +414,6 @@ test("Home empty state keeps a single Split a bill CTA and no duplicate header e
   Object.assign(paper, {
     useTheme: () => theme,
     Appbar: { Header: "Header", Content: "Content" },
-    List: { Accordion: "Accordion", Icon: "ListIcon" },
   });
   const module = { exports: {} };
   const code = ts.transpileModule(readFileSync(overridesPath, "utf8"), {

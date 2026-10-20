@@ -5,7 +5,6 @@ import {
   Button,
   FAB,
   Icon,
-  List,
   Provider as PaperProvider,
   SegmentedButtons,
   Surface,
@@ -27,6 +26,7 @@ import { SplitBillFormPreview } from "./SplitBillScreen";
 type SurfaceId =
   | "home-empty"
   | "home-list"
+  | "home-no-bills"
   | "home-loading"
   | "group-home"
   | "group-loading"
@@ -209,57 +209,72 @@ const ARCHIVED_GROUPS = [
   },
 ];
 
-function HomeListPreview({ balancesLoading = false }: { balancesLoading?: boolean }) {
+function HomeListPreview({
+  balancesLoading = false,
+  showRecentBills = true,
+}: {
+  balancesLoading?: boolean;
+  showRecentBills?: boolean;
+}) {
   const theme = useTheme();
-  // Expand Former by default so Design can re-score comfortable Former cards.
   const [formerExpanded, setFormerExpanded] = useState(true);
   const [archivedExpanded, setArchivedExpanded] = useState(true);
+  // Newest first: Today → Yesterday → 2d ago → older.
   const recentBills = [
     { identity: "Dinner at Nora", amount: formatCurrency(42, "USD"), people: "3 people", when: "Today" },
-    { identity: "Maya Patel", amount: formatCurrency(28.5, "EUR"), people: "2 people", when: "2d ago" },
     { identity: "Cabin weekend", amount: formatCurrency(120, "USD"), people: "4 people", when: "Yesterday" },
+    { identity: "With Maya Patel", amount: formatCurrency(28.5, "EUR"), people: "2 people", when: "2d ago" },
     { identity: "Taxi home", amount: formatCurrency(18, "USD"), people: "2 people", when: "5d ago" },
   ];
+  const testID = balancesLoading
+    ? "preview-home-loading"
+    : showRecentBills
+      ? "preview-home-list"
+      : "preview-home-no-bills";
   return (
     <PreviewShell title="Your Groups">
-      <View style={{ paddingHorizontal: 16 }} testID={balancesLoading ? "preview-home-loading" : "preview-home-list"}>
+      <View style={{ paddingHorizontal: 16 }} testID={testID}>
+        {/* Split a bill is always first on Home, including when Recent bills is empty. */}
         <Button
           mode="contained"
           icon="call-split"
+          testID="preview-split-bill-entry"
           style={{ marginBottom: 12, alignSelf: "stretch" }}
           contentStyle={{ minHeight: 48 }}
         >
           Split a bill
         </Button>
-        <View style={{ marginBottom: 16 }} testID="preview-recent-bills">
-          <Text
-            variant="labelLarge"
-            style={{ color: theme.colors.onSurfaceVariant, marginBottom: 4, fontWeight: "700" }}
-          >
-            Recent bills
-          </Text>
-          {recentBills.slice(0, 3).map((bill) => (
-            <TouchableRipple
-              key={bill.identity}
-              style={[styles.recentBillRow, { borderBottomColor: theme.colors.outlineVariant }]}
+        {showRecentBills ? (
+          <View style={{ marginBottom: 16 }} testID="preview-recent-bills">
+            <Text
+              variant="labelLarge"
+              style={{ color: theme.colors.onSurfaceVariant, marginBottom: 4, fontWeight: "700" }}
             >
-              <View style={styles.recentBillContent}>
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text variant="bodyLarge" numberOfLines={1} style={{ fontWeight: "600" }}>
-                    {bill.identity}
-                  </Text>
-                  <Text variant="bodySmall" numberOfLines={1} style={{ color: theme.colors.onSurfaceVariant }}>
-                    {bill.amount} · {bill.people} · {bill.when}
-                  </Text>
+              Recent bills
+            </Text>
+            {recentBills.slice(0, 3).map((bill) => (
+              <TouchableRipple
+                key={bill.identity}
+                style={[styles.recentBillRow, { borderBottomColor: theme.colors.outlineVariant }]}
+              >
+                <View style={styles.recentBillContent}>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text variant="bodyLarge" numberOfLines={1} style={{ fontWeight: "600" }}>
+                      {bill.identity}
+                    </Text>
+                    <Text variant="bodySmall" numberOfLines={1} style={{ color: theme.colors.onSurfaceVariant }}>
+                      {bill.amount} · {bill.people} · {bill.when}
+                    </Text>
+                  </View>
+                  <Icon source="chevron-right" size={20} color={theme.colors.onSurfaceVariant} />
                 </View>
-                <Icon source="chevron-right" size={20} color={theme.colors.onSurfaceVariant} />
-              </View>
-            </TouchableRipple>
-          ))}
-          <Button mode="text" compact style={{ alignSelf: "flex-start", marginTop: 4 }}>
-            See all
-          </Button>
-        </View>
+              </TouchableRipple>
+            ))}
+            <Button mode="text" compact style={{ alignSelf: "flex-start", marginTop: 4 }}>
+              See all
+            </Button>
+          </View>
+        ) : null}
         <View style={styles.groupsSectionHeader} testID="preview-groups-header">
           <Text
             variant="labelLarge"
@@ -298,125 +313,122 @@ function HomeListPreview({ balancesLoading = false }: { balancesLoading?: boolea
           </Surface>
         ))}
 
-        <List.Accordion
-          title={`Archived (${ARCHIVED_GROUPS.length})`}
-          titleStyle={[styles.sectionAccordionTitle, { color: theme.colors.onSurfaceVariant }]}
+        <View
           style={[styles.sectionAccordion, { backgroundColor: theme.colors.surface }]}
-          left={(props) => (
-            <List.Icon
-              {...props}
-              icon="archive-outline"
-              color={theme.colors.onSurfaceVariant}
-              style={styles.sectionAccordionIcon}
-            />
-          )}
-          expanded={archivedExpanded}
-          onPress={() => setArchivedExpanded(!archivedExpanded)}
           testID="preview-archived-accordion"
         >
-          <View style={[styles.accordionContent, { backgroundColor: theme.colors.background }]}>
-            {ARCHIVED_GROUPS.map((group) => (
-              <View
-                key={group.id}
-                style={[styles.nestedGroupRow, { borderBottomColor: theme.colors.outlineVariant }]}
-                testID={`preview-nested-${group.id}`}
+          <TouchableRipple
+            onPress={() => setArchivedExpanded(!archivedExpanded)}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: archivedExpanded }}
+            style={styles.sectionDisclosureHeader}
+          >
+            <View style={styles.sectionDisclosureHeaderRow}>
+              <Icon source="archive-outline" size={20} color={theme.colors.onSurfaceVariant} />
+              <Text
+                style={[styles.sectionAccordionTitle, { color: theme.colors.onSurfaceVariant, flex: 1 }]}
               >
-                <View style={styles.nestedGroupTouchable}>
-                  <View style={{ flex: 1 }}>
-                    <Text
-                      variant="titleMedium"
-                      style={{
-                        fontWeight: "600",
-                        color: theme.colors.onSurfaceVariant,
-                        letterSpacing: -0.2,
-                      }}
-                    >
-                      {group.name}
-                    </Text>
-                    <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}>
-                      {group.description}
-                    </Text>
+                {`Archived (${ARCHIVED_GROUPS.length})`}
+              </Text>
+              <Icon
+                source={archivedExpanded ? "chevron-up" : "chevron-down"}
+                size={20}
+                color={theme.colors.onSurfaceVariant}
+              />
+            </View>
+          </TouchableRipple>
+          {archivedExpanded ? (
+            <View style={[styles.sectionDisclosureContent, { backgroundColor: theme.colors.background }]}>
+              {ARCHIVED_GROUPS.map((group) => (
+                <View
+                  key={group.id}
+                  style={[styles.nestedGroupRow, { borderBottomColor: theme.colors.outlineVariant }]}
+                  testID={`preview-nested-${group.id}`}
+                >
+                  <View style={styles.nestedGroupTouchable}>
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        variant="titleMedium"
+                        style={{
+                          fontWeight: "600",
+                          color: theme.colors.onSurfaceVariant,
+                          letterSpacing: -0.2,
+                        }}
+                      >
+                        {group.name}
+                      </Text>
+                      <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}>
+                        {group.description}
+                      </Text>
+                    </View>
+                    <GroupBalanceBadge
+                      balanceData={{ group_id: group.id, balances: [] }}
+                      currentUserId="u-you"
+                    />
                   </View>
-                  <GroupBalanceBadge
-                    balanceData={{ group_id: group.id, balances: [] }}
-                    currentUserId="u-you"
-                  />
                 </View>
-              </View>
-            ))}
-          </View>
-        </List.Accordion>
+              ))}
+            </View>
+          ) : null}
+        </View>
 
         <View
-          style={[
-            styles.sectionAccordion,
-            { backgroundColor: theme.colors.surface },
-          ]}
+          style={[styles.sectionAccordion, { backgroundColor: theme.colors.surface }]}
           testID="preview-former-accordion"
         >
           <TouchableRipple
             onPress={() => setFormerExpanded(!formerExpanded)}
             accessibilityRole="button"
             accessibilityState={{ expanded: formerExpanded }}
-            style={styles.formerAccordionHeader}
+            style={styles.sectionDisclosureHeader}
           >
-            <View style={styles.formerAccordionHeaderRow}>
-              <List.Icon
-                icon="history"
-                color={theme.colors.onSurfaceVariant}
-                style={styles.sectionAccordionIcon}
-              />
+            <View style={styles.sectionDisclosureHeaderRow}>
+              <Icon source="history" size={20} color={theme.colors.onSurfaceVariant} />
               <Text
-                style={[
-                  styles.sectionAccordionTitle,
-                  { color: theme.colors.onSurfaceVariant, flex: 1 },
-                ]}
+                style={[styles.sectionAccordionTitle, { color: theme.colors.onSurfaceVariant, flex: 1 }]}
               >
                 {`Former (${FORMER_GROUPS.length})`}
               </Text>
-              <List.Icon
-                icon={formerExpanded ? "chevron-up" : "chevron-down"}
+              <Icon
+                source={formerExpanded ? "chevron-up" : "chevron-down"}
+                size={20}
                 color={theme.colors.onSurfaceVariant}
               />
             </View>
           </TouchableRipple>
           {formerExpanded ? (
-            <View
-              style={[
-                styles.formerAccordionContent,
-                { backgroundColor: theme.colors.background },
-              ]}
-            >
+            <View style={[styles.sectionDisclosureContent, { backgroundColor: theme.colors.background }]}>
               {FORMER_GROUPS.map((group) => (
-                <Surface
+                <View
                   key={group.id}
-                  style={[styles.groupRow, { backgroundColor: theme.colors.surface }]}
-                  elevation={0}
-                  testID={`preview-former-card-${group.id}`}
+                  style={[styles.nestedGroupRow, { borderBottomColor: theme.colors.outlineVariant }]}
+                  testID={`preview-nested-former-${group.id}`}
                 >
-                  <View style={{ flex: 1, paddingRight: 12 }}>
-                    <Text
-                      variant="titleMedium"
-                      style={{
-                        fontWeight: "700",
-                        color: theme.colors.onSurfaceVariant,
-                        letterSpacing: -0.2,
+                  <View style={styles.nestedGroupTouchable}>
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        variant="titleMedium"
+                        style={{
+                          fontWeight: "600",
+                          color: theme.colors.onSurfaceVariant,
+                          letterSpacing: -0.2,
+                        }}
+                      >
+                        {group.name}
+                      </Text>
+                      <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}>
+                        {group.description}
+                      </Text>
+                    </View>
+                    <GroupBalanceBadge
+                      balanceData={{
+                        group_id: group.id,
+                        balances: [{ user_id: "u-you", amount: -12, currency: "USD", full_name: "You" }],
                       }}
-                    >
-                      {group.name}
-                    </Text>
-                    <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}>
-                      {group.description}
-                    </Text>
+                      currentUserId="u-you"
+                    />
                   </View>
-                  <GroupBalanceBadge
-                    balanceData={{
-                      group_id: group.id,
-                      balances: [{ user_id: "u-you", amount: -12, currency: "USD", full_name: "You" }],
-                    }}
-                    currentUserId="u-you"
-                  />
-                </Surface>
+                </View>
               ))}
             </View>
           ) : null}
@@ -520,6 +532,7 @@ export const HomePolishPreviewScreen: React.FC = () => {
     const allowed: SurfaceId[] = [
       "home-empty",
       "home-list",
+      "home-no-bills",
       "home-loading",
       "group-home",
       "group-loading",
@@ -554,8 +567,8 @@ export const HomePolishPreviewScreen: React.FC = () => {
             value={surface}
             onValueChange={(v) => setSurface(v as SurfaceId)}
             buttons={[
-              { value: "home-list", label: "Home" },
-              { value: "home-loading", label: "Bal…" },
+              { value: "home-no-bills", label: "CTA" },
+              { value: "home-list", label: "Bills" },
               { value: "split-form", label: "Split" },
               { value: "split-loading", label: "Load" },
               { value: "split-mode", label: "Mode" },
@@ -564,6 +577,7 @@ export const HomePolishPreviewScreen: React.FC = () => {
         </View>
         {surface === "home-empty" ? <HomeEmptyPreview /> : null}
         {surface === "home-list" ? <HomeListPreview /> : null}
+        {surface === "home-no-bills" ? <HomeListPreview showRecentBills={false} /> : null}
         {surface === "home-loading" ? <HomeListPreview balancesLoading /> : null}
         {surface === "group-loading" ? <GroupHomePreview loading /> : null}
         {surface === "group-home" ? <GroupHomePreview /> : null}
@@ -622,8 +636,6 @@ const styles = StyleSheet.create({
     marginTop: 20,
     marginBottom: 8,
     borderRadius: 12,
-    paddingVertical: 2,
-    paddingHorizontal: 4,
     minHeight: 44,
     overflow: "hidden",
   },
@@ -633,27 +645,20 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     letterSpacing: 0.2,
   },
-  sectionAccordionIcon: {
-    marginLeft: 0,
-    marginRight: 0,
-  },
-  accordionContent: {
-    paddingTop: 4,
-    marginHorizontal: -4,
-  },
-  formerAccordionHeader: {
+  sectionDisclosureHeader: {
     minHeight: 44,
     justifyContent: "center",
   },
-  formerAccordionHeaderRow: {
+  sectionDisclosureHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
     minHeight: 44,
-    paddingRight: 4,
+    paddingHorizontal: 14,
+    gap: 10,
   },
-  formerAccordionContent: {
-    paddingTop: 8,
-    marginHorizontal: -4,
+  sectionDisclosureContent: {
+    paddingTop: 0,
+    paddingBottom: 4,
   },
   nestedGroupRow: {
     marginLeft: 14,

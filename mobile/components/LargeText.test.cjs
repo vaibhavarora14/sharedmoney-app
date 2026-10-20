@@ -22,7 +22,7 @@ function harness(fontScale = 1) {
   const theme = { colors: {}, fonts: {} };
   const group = { id: 'g', name: 'Weekend trip with friends', description: 'A long description that should reflow', user_status: 'active' };
   const paper = Object.fromEntries(['ActivityIndicator', 'Button', 'FAB', 'Icon', 'IconButton', 'Surface', 'Text', 'TouchableRipple'].map(key => [key, key]));
-  Object.assign(paper, { useTheme: () => theme, Appbar: { Header: 'Header', Content: 'Content' }, List: { Accordion: 'Accordion', Icon: 'ListIcon' } });
+  Object.assign(paper, { useTheme: () => theme, Appbar: { Header: 'Header', Content: 'Content' } });
   const overrides = {
     '@tanstack/react-query': { useQueryClient: () => ({}) },
     '../contexts/AuthContext': { useAuth: () => ({ user: { id: 'me' } }) },

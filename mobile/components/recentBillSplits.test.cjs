@@ -42,11 +42,11 @@ function loadRecent() {
   return { ...module.exports, store };
 }
 
-test("recent bill identity prefers name, then payee, then creator", () => {
+test("recent bill identity prefers name, then With <person> fallbacks", () => {
   const { recentBillIdentity } = loadRecent();
   assert.equal(recentBillIdentity({ name: "Dinner" }), "Dinner");
-  assert.equal(recentBillIdentity({ firstPayeeName: "Maya" }), "Maya");
-  assert.equal(recentBillIdentity({ creatorName: "Alex" }), "Alex");
+  assert.equal(recentBillIdentity({ firstPayeeName: "Maya Patel" }), "With Maya Patel");
+  assert.equal(recentBillIdentity({ creatorName: "Alex" }), "With Alex");
   assert.equal(recentBillIdentity({}), "Bill");
 });
 

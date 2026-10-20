@@ -212,8 +212,11 @@ function BillSplitForm({ onCreated }: { onCreated: (token: string) => void }) {
         disabled={busy || !currencyHydrated}
         onPress={() => setShowCurrencyPicker(true)}
         contentStyle={styles.currencyButtonContent}
-        style={styles.currencyButton}
-        icon="chevron-down"
+        style={[styles.currencyButton, { borderRadius: 8 }]}
+        labelStyle={{ color: theme.colors.onSurface }}
+        icon={({ size }) => (
+          <Icon source="chevron-down" size={size} color={theme.colors.onSurfaceVariant} />
+        )}
       >
         {currency} ({CURRENCIES.find((item) => item.code === currency)?.symbol ?? currency})
       </Button>
@@ -310,6 +313,7 @@ function BillSplitForm({ onCreated }: { onCreated: (token: string) => void }) {
         },
       }}
     >
+      {/* "Creating…" only after tap / while submitting — not while people load. */}
       {busy ? "Creating…" : "Create & get share link"}
     </Button>
     <Portal>
@@ -492,7 +496,16 @@ export function SplitBillFormPreview({
           <Text variant="labelLarge" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 6 }}>
             Currency
           </Text>
-          <Button mode="outlined" testID="split-bill-currency" icon="chevron-down" contentStyle={styles.currencyButtonContent}>
+          <Button
+            mode="outlined"
+            testID="split-bill-currency"
+            contentStyle={styles.currencyButtonContent}
+            style={[styles.currencyButton, { borderRadius: 8 }]}
+            labelStyle={{ color: theme.colors.onSurface }}
+            icon={({ size }) => (
+              <Icon source="chevron-down" size={size} color={theme.colors.onSurfaceVariant} />
+            )}
+          >
             USD ($)
           </Button>
         </View>
@@ -561,7 +574,7 @@ export function SplitBillFormPreview({
             },
           }}
         >
-          {loadingPeople ? "Creating…" : "Create & get share link"}
+          Create & get share link
         </Button>
       </ScrollView>
     </View>

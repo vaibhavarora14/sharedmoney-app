@@ -119,12 +119,32 @@ test("bill editor keeps the creator included while reusing all expense modes", (
     const editor = createEditor({ mode, requiredIds: ["a"], modeTestID: "split-bill-mode", showEqualSummary: false });
     const tree = editor.render();
     assert.equal(byId(tree, "split-mode-menu").props.anchor.props.testID, "split-bill-mode");
-    assert.equal(byId(tree, "split-among-chip-alice@example.com").props.disabled, true);
+    const youChip = byId(tree, "split-among-chip-alice@example.com");
+    assert.equal(youChip.props.disabled, true);
+    assert.equal(youChip.props.showSelectedCheck, true);
+    assert.match(text(youChip), /^You$/);
     assert.equal(byId(tree, "split-among-chip-bob@example.com").props.disabled, false);
     if (mode !== "equal") assert.equal(byId(tree, "split-remove-alice@example.com").props.disabled, true);
     if (mode === "shares") assert.equal(byId(tree, "split-share-minus-alice@example.com").props.disabled, true);
     if (mode === "equal") assert.equal(text(tree).includes("Each person pays:"), false);
   }
+});
+
+test("busy form drops the check on non-required chips but keeps You checked", () => {
+  const editor = createEditor({
+    requiredIds: ["a"],
+    disabled: true,
+    selectedIds: ["a", "b"],
+    modeTestID: "split-bill-mode",
+    showEqualSummary: false,
+  });
+  const tree = editor.render();
+  const you = byId(tree, "split-among-chip-alice@example.com");
+  const other = byId(tree, "split-among-chip-bob@example.com");
+  assert.equal(you.props.showSelectedCheck, true);
+  assert.match(text(you), /^You$/);
+  assert.equal(other.props.showSelectedCheck, false);
+  assert.doesNotMatch(text(other), /You/);
 });
 
 test("split trigger puts expanded state on the actionable ripple, and options expose selection", () => {
