@@ -44,6 +44,7 @@ function harness(fontScale = 1) {
     '../utils/posthogEvents': { ANALYTICS_EVENTS: {} },
     '../utils/recentBillSplits': {
       listRecentBillSplits: async () => [],
+      summarizeUnsettledOneTimeBills: () => null,
       RECENT_BILLS_PREVIEW_COUNT: 3,
       formatRecentBillAmount: () => '$0.00',
       relativeBillDate: () => 'Today',
