@@ -39,8 +39,9 @@ EXPO_PUBLIC_API_URL=https://YOUR_PROJECT_REF.supabase.co/functions/v1
 | Secret | Required | Purpose |
 |---|---|---|
 | `ENABLE_WHATSAPP_OTP_LOGIN` | yes for test | Must be exactly `true` |
-| `WHATSAPP_TOKEN` | yes | Meta temporary or system-user access token |
-| `WHATSAPP_PHONE_NUMBER_ID` | yes | Test phone number ID from Meta App → WhatsApp → API Setup |
+| `WHATSAPP_TOKEN` | yes | Meta temporary or system-user access token (never commit/print) |
+| `WHATSAPP_PHONE_NUMBER_ID` | yes for live send | Test phone number ID; default `1325245927345802` in the test script |
+| `WHATSAPP_WABA_ID` | optional | Test WABA `27639098452432498` (dashboard ops; not required by OTP send) |
 | `WHATSAPP_OTP_PEPPER` | yes | Server-only pepper for hashing OTPs (long random string) |
 | `WHATSAPP_OTP_DELIVERY` | optional | `text` (default) or `template` |
 | `WHATSAPP_OTP_TEMPLATE_NAME` | optional | default `sharedmoney_otp` |
@@ -76,8 +77,54 @@ EXPO_PUBLIC_ENABLE_WHATSAPP_OTP_LOGIN=true
 ENABLE_WHATSAPP_OTP_LOGIN=true
 WHATSAPP_OTP_DELIVERY=text
 WHATSAPP_OTP_PEPPER=dev-only-long-random-pepper
-WHATSAPP_TOKEN=…
-WHATSAPP_PHONE_NUMBER_ID=…
+WHATSAPP_TOKEN=…                          # env-only; never commit/print
+WHATSAPP_PHONE_NUMBER_ID=1325245927345802 # Meta test number (non-secret)
+# WHATSAPP_WABA_ID=27639098452432498      # optional dashboard reference
+```
+
+## Meta test number (non-secret IDs)
+
+SharedMoney’s Meta **test** WhatsApp Cloud API number (safe to commit; not credentials):
+
+| Field | Value |
+|---|---|
+| Phone number ID | `1325245927345802` |
+| WABA ID | `27639098452432498` |
+| Test From number | `+1 555 636 4333` |
+
+The **access token** is secret: set only via `WHATSAPP_TOKEN` env / Supabase secrets. Never commit or print it.
+
+## Live send+verify script (token + test recipient)
+
+`scripts/whatsapp-otp-test.sh` wires everything else for a Meta **test recipient** send+verify. It:
+
+- requires `WHATSAPP_TOKEN` and `TEST_RECIPIENT_PHONE`
+- defaults `WHATSAPP_PHONE_NUMBER_ID` to the test ID above (override if needed)
+- defaults to **local** Supabase (`supabase start` + migration up + `functions serve`)
+- sets `ENABLE_WHATSAPP_OTP_LOGIN=true`, `WHATSAPP_OTP_DELIVERY=text`, and generates `WHATSAPP_OTP_PEPPER` if unset
+- **refuses** production project ref `xesuklogveedeppxbbit` (and any `SUPABASE_URL` containing it)
+- never prints the access token
+
+```bash
+export WHATSAPP_TOKEN='…'                    # Meta temporary or system-user token (env-only)
+export TEST_RECIPIENT_PHONE='+91XXXXXXXXXX'  # allowlisted + verified in Meta dashboard
+# optional override; script defaults to 1325245927345802
+# export WHATSAPP_PHONE_NUMBER_ID='1325245927345802'
+
+./scripts/whatsapp-otp-test.sh
+# After the WhatsApp message arrives:
+# enter the 6-digit code when prompted
+# or: VERIFY_CODE=123456 ./scripts/whatsapp-otp-test.sh
+```
+
+Non-local test project (still not production):
+
+```bash
+export SUPABASE_PROJECT_REF='your-non-prod-ref'
+export SUPABASE_URL='https://your-non-prod-ref.supabase.co'
+export SUPABASE_SERVICE_ROLE_KEY='…'
+# Also set WhatsApp + ENABLE_WHATSAPP_OTP_LOGIN secrets on that project and apply the OTP migration there.
+./scripts/whatsapp-otp-test.sh
 ```
 
 ## Still blocked on Meta
