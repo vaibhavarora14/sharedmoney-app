@@ -121,3 +121,34 @@ jobs:
             echo "- message: ${OTA_MESSAGE}"
             echo "- dashboard: https://expo.dev/accounts/varora1406/projects/share-money/updates"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # Upload the OTA bundle's source maps so Sentry can symbolicate JS errors
+      # from EAS Update builds (native builds upload via the Expo plugin).
+      # Per @sentry/react-native ~7.11 Expo docs: run after `eas update`, which
+      # leaves bundles + maps in ./dist. Best-effort only: never block an OTA.
+      - name: Upload source maps to Sentry
+        continue-on-error: true
+        working-directory: mobile
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: jobappagent
+          SENTRY_PROJECT: react-native
+          SENTRY_URL: https://sentry.io/
+        run: |
+          set -uo pipefail
+          if [ -z "${SENTRY_AUTH_TOKEN:-}" ]; then
+            echo "::warning title=Sentry source maps skipped::SENTRY_AUTH_TOKEN is not set; OTA published without Sentry source maps."
+            exit 0
+          fi
+          if [ ! -d dist ]; then
+            echo "::warning title=Sentry source maps skipped::mobile/dist not found after eas update; nothing to upload."
+            exit 0
+          fi
+          if npx --no-install sentry-expo-upload-sourcemaps dist; then
+            echo "✅ Uploaded OTA source maps to Sentry (${SENTRY_ORG}/${SENTRY_PROJECT})"
+            echo "- Sentry source maps: uploaded" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning title=Sentry source map upload failed::sentry-expo-upload-sourcemaps failed; OTA is published, but JS stack traces may be unsymbolicated."
+            echo "- Sentry source maps: **upload failed** (see warning)" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit 0
