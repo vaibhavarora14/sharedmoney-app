@@ -4,7 +4,7 @@ const path = require('node:path');
 const { test } = require('node:test');
 const ts = require('typescript');
 
-test('opt-in Android menu uses an isolated native window with native Back dismissal', () => {
+test('opt-in nativeModal menu uses an isolated window above parent modals on every platform', () => {
   const file = path.join(path.dirname(require.resolve('react-native-paper/package.json')), 'src/components/Menu/Menu.tsx');
   const source = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   let declaration;
@@ -22,10 +22,10 @@ test('opt-in Android menu uses an isolated native window with native Back dismis
     for (const nativeModal of [true, false]) {
       const onDismiss = () => {};
       const tree = render({ nativeModal, onDismiss, children: 'existing positioned menu' });
-      const isolated = OS === 'android' && nativeModal;
-      assert.equal(tree.type, isolated ? 'NativeModal' : 'Portal');
+      // nativeModal must beat nested RN Modals (e.g. Split a bill) on web and native.
+      assert.equal(tree.type, nativeModal ? 'NativeModal' : 'Portal');
       assert.equal(tree.props.children, 'existing positioned menu');
-      if (isolated) {
+      if (nativeModal) {
         assert.equal(tree.props.transparent, true);
         assert.equal(tree.props.visible, true);
         assert.equal(tree.props.statusBarTranslucent, true);

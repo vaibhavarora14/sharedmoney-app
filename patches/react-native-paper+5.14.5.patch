@@ -12,7 +12,7 @@ index 4dc4540..580a8fa 100644
       * The anchor to open the menu from. In most cases, it will be a button that opens the menu.
       */
 diff --git a/node_modules/react-native-paper/src/components/Menu/Menu.tsx b/node_modules/react-native-paper/src/components/Menu/Menu.tsx
-index 55922c1..09959d5 100644
+index 55922c1..4db6bf2 100644
 --- a/node_modules/react-native-paper/src/components/Menu/Menu.tsx
 +++ b/node_modules/react-native-paper/src/components/Menu/Menu.tsx
 @@ -6,22 +6,22 @@ import {
@@ -57,12 +57,15 @@ index 55922c1..09959d5 100644
    /**
     * The anchor to open the menu from. In most cases, it will be a button that opens the menu.
     */
-@@ -114,3 +117,13 @@ const DEFAULT_MODE = 'elevated';
+@@ -111,6 +114,16 @@ export const ELEVATION_LEVELS_MAP = Object.values(
+ 
+ const DEFAULT_MODE = 'elevated';
+ 
 +const MenuOverlay = ({ nativeModal, onDismiss, children }: {
 +  nativeModal: boolean;
 +  onDismiss?: () => void;
 +  children: React.ReactNode;
-+}) => nativeModal && Platform.OS === 'android' ? (
++}) => nativeModal ? (
 +  <Modal visible transparent statusBarTranslucent onRequestClose={onDismiss}>
 +    {children}
 +  </Modal>
@@ -71,14 +74,15 @@ index 55922c1..09959d5 100644
  const focusFirstDOMNode = (el: View | null | undefined) => {
    if (el && Platform.OS === 'web') {
      // When in the browser, we want to focus the first focusable item on toggle
-@@ -182,5 +195,6 @@ const isBrowser = () => Platform.OS === 'web' && 'document' in global;
+@@ -181,6 +194,7 @@ const isBrowser = () => Platform.OS === 'web' && 'document' in global;
+ 
  const Menu = ({
    visible,
 +  nativeModal = false,
    statusBarHeight,
    overlayAccessibilityLabel = 'Close menu',
    testID = 'menu',
-@@ -244,5 +258,8 @@ const Menu = ({
+@@ -244,7 +258,10 @@ const Menu = ({
    const handleDismiss = React.useCallback(() => {
      if (visible) {
        onDismiss?.();
@@ -87,6 +91,8 @@ index 55922c1..09959d5 100644
      }
 +    return false;
    }, [onDismiss, visible]);
+ 
+   const handleKeypress = React.useCallback(
 @@ -303,6 +320,10 @@ const Menu = ({
    );
  

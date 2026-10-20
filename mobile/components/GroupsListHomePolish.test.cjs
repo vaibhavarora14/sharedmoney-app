@@ -184,6 +184,9 @@ function harnessWithFormer(loading = false) {
     "../utils/groupListPerfTelemetry": {},
     "../utils/posthogAnalytics": { captureIdentifiedAnalyticsEvent: () => {} },
     "../utils/posthogEvents": { ANALYTICS_EVENTS: {} },
+    "../utils/recentBillSplits": {
+      listRecentBillSplits: async () => [],
+    },
     "../components/NotificationBell": { NotificationBell: "NotificationBell" },
     "../components/Skeleton": { Skeleton: "Skeleton", SkeletonGroup: "SkeletonGroup" },
     "./SplitBillScreen": { SplitBillScreen: "SplitBillScreen" },
@@ -273,8 +276,9 @@ function harnessWithFormer(loading = false) {
       return load(path.join(__dirname, "../screens/GroupsListScreen.tsx")).GroupsHomeSkeletonRows();
     },
     setFormerExpanded(expanded) {
-      // showCreateGroup, showSplitBill, newGroupHeight, formerGroupsExpanded.
-      state[3] = expanded;
+      // showCreateGroup, showSplitBill, splitBillToken, recentBills,
+      // newGroupHeight, formerGroupsExpanded.
+      state[5] = expanded;
     },
   };
 }
@@ -324,19 +328,22 @@ test("bootstrap and initial Groups query share the same loading rows and header 
   const app = harnessWithFormer(true);
   const initial = app.render();
   const bootstrap = app.skeleton();
+  const realStyles = loadStyles(path.join(__dirname, "../screens/GroupsListScreen.tsx"));
   for (const tree of [initial, bootstrap]) {
     const rows = nodes(tree).find(node => node.type?.name === "GroupsHomeSkeletonRows");
     assert.ok(rows);
     const header = nodes(tree).find(node => node.type === "Header");
     assert.ok(header);
-    const split = nodes(tree).find(node => node.type === "Button" && node.props.children === "Split a bill");
-    assert.deepEqual(split.props.style, { marginHorizontal: 16, marginTop: 12, marginBottom: 4 });
+    const split = nodes(tree).find(node =>
+      node.type === "Button" && node.props.testID === "split-bill-entry"
+    );
+    assert.equal(split.props.mode, "contained");
+    assert.deepEqual(flatten(split.props.style), realStyles.splitBillEntry);
     assert.equal(nodes(tree).some(node => node.type === "ActivityIndicator"), false);
   }
   const rows = app.skeletonRows();
   const surfaces = nodes(rows).filter(node => node.type === "Surface");
   assert.equal(surfaces.length, 6);
-  const realStyles = loadStyles(path.join(__dirname, "../screens/GroupsListScreen.tsx"));
   for (const row of surfaces) {
     assert.equal(flatten(row.props.style).borderRadius, realStyles.groupItem.borderRadius);
     assert.equal(flatten(row.props.style).marginBottom, realStyles.groupItem.marginBottom);
@@ -350,6 +357,17 @@ test("bootstrap and initial Groups query share the same loading rows and header 
   }
 });
 
+test("Home with groups exposes a full-width Split a bill entry above the list", () => {
+  const tree = harnessWithFormer().render();
+  const split = nodes(tree).find(node => node.props?.testID === "split-bill-entry");
+  assert.ok(split);
+  assert.equal(split.props.mode, "contained");
+  assert.equal(split.props.children, "Split a bill");
+  const realStyles = loadStyles(path.join(__dirname, "../screens/GroupsListScreen.tsx"));
+  assert.deepEqual(flatten(split.props.style), realStyles.splitBillEntry);
+  assert.equal(nodes(tree).some(node => node.props?.testID === "groups-empty-state"), false);
+});
+
 test("top-level cards without a description keep the skeleton's description line height", () => {
   const tree = harnessWithFormer().render();
   const spacer = nodes(tree).find(n => n.props?.testID === "group-subtitle-spacer-g-plain");
@@ -358,4 +376,114 @@ test("top-level cards without a description keep the skeleton's description line
   assert.equal(flatten(spacer.props.style).marginTop, realStyles.groupSubtitle.marginTop);
   assert.equal(flatten(spacer.props.style).height, 16);
   assert.equal(nodes(tree).find(n => n.props?.testID === "group-subtitle-spacer-g-active"), undefined);
+});
+
+test("Home empty state keeps a single Split a bill CTA and no duplicate header entry", () => {
+  const overridesPath = path.join(__dirname, "../screens/GroupsListScreen.tsx");
+  // Reuse the former harness wiring but with an empty group list.
+  let stateIndex = 0;
+  const state = [];
+  const theme = {
+    colors: {
+      background: "#fff",
+      surface: "#f5f5f5",
+      onSurface: "#111",
+      onSurfaceVariant: "#666",
+      outlineVariant: "#ccc",
+      primary: "#0a7",
+    },
+    fonts: { titleMedium: { lineHeight: 24 }, bodySmall: { lineHeight: 16 } },
+  };
+  const paper = Object.fromEntries(
+    ["ActivityIndicator", "Button", "FAB", "Icon", "IconButton", "Surface", "Text", "TouchableRipple"]
+      .map((key) => [key, key])
+  );
+  Object.assign(paper, {
+    useTheme: () => theme,
+    Appbar: { Header: "Header", Content: "Content" },
+    List: { Accordion: "Accordion", Icon: "ListIcon" },
+  });
+  const module = { exports: {} };
+  const code = ts.transpileModule(readFileSync(overridesPath, "utf8"), {
+    compilerOptions: {
+      target: ts.ScriptTarget.ES2022,
+      module: ts.ModuleKind.CommonJS,
+      jsx: ts.JsxEmit.ReactJSX,
+      esModuleInterop: true,
+    },
+  }).outputText;
+  new Function("require", "module", "exports", code)(
+    (id) => {
+      if (id === "react") {
+        return {
+          ...React,
+          useEffect: () => {},
+          useRef: (v) => ({ current: v }),
+          useState: (initial) => {
+            const index = stateIndex++;
+            if (!(index in state)) state[index] = initial;
+            return [state[index], (value) => {
+              state[index] = typeof value === "function" ? value(state[index]) : value;
+            }];
+          },
+        };
+      }
+      if (id === "react-native") {
+        return {
+          View: "View",
+          ScrollView: "ScrollView",
+          TouchableOpacity: "TouchableOpacity",
+          InteractionManager: { runAfterInteractions: (cb) => ({ cancel: () => {}, ...(cb(), {}) }) },
+          Platform: { OS: "android" },
+          useWindowDimensions: () => ({ width: 393, height: 851, fontScale: 1 }),
+          StyleSheet: { create: (x) => x, flatten, hairlineWidth: 1 },
+        };
+      }
+      if (id === "react-native-paper") return paper;
+      if (id === "@tanstack/react-query") return { useQueryClient: () => ({}) };
+      if (id === "../contexts/AuthContext") return { useAuth: () => ({ user: { id: "me" } }) };
+      if (id === "../hooks/useGroups") return { useGroups: () => ({ data: [], isLoading: false }) };
+      if (id === "../hooks/useBalances") return { useBalances: () => ({ data: { group_balances: [] }, isLoading: false }) };
+      if (id === "../hooks/useNotifications") {
+        return { useNotifications: () => ({}), useUpdateNotificationPreference: () => ({}) };
+      }
+      if (id === "../utils/featureFlags") return { isTransactionNotificationsEnabled: () => false };
+      if (id === "../utils/seenGroups") {
+        return { getSeenGroupIds: async () => new Set(), markGroupSeen: () => {} };
+      }
+      if (id === "../utils/groupListSections") {
+        return { partitionGroupsBySection: () => ({ activeGroups: [], archivedGroups: [], formerGroups: [] }) };
+      }
+      if (id === "../utils/recentBillSplits") return { listRecentBillSplits: async () => [] };
+      if (id === "../utils/sentryTelemetry") return { recordSentryListCounts: () => {} };
+      if (id === "../utils/posthogAnalytics") return { captureIdentifiedAnalyticsEvent: () => {} };
+      if (id === "../utils/posthogEvents") return { ANALYTICS_EVENTS: {} };
+      if (id === "../utils/errorHandling") return {};
+      if (id === "../utils/errorMessages") return {};
+      if (id === "../utils/logger") return {};
+      if (id === "../utils/notificationPermission") return {};
+      if (id === "../services/pushNotifications") return {};
+      if (id === "../components/NotificationBell") return { NotificationBell: "NotificationBell" };
+      if (id === "../components/Skeleton") return { Skeleton: "Skeleton", SkeletonGroup: "SkeletonGroup" };
+      if (id === "../components/GroupBalanceBadge") return { GroupBalanceBadge: "GroupBalanceBadge" };
+      if (id === "./SplitBillScreen") return { SplitBillScreen: "SplitBillScreen" };
+      if (id === "./CreateGroupScreen") return { CreateGroupScreen: "CreateGroupScreen" };
+      if (id.startsWith(".")) {
+        const resolved = path.resolve(path.dirname(overridesPath), id);
+        return require(existsSync(resolved) ? resolved : `${resolved}.ts`);
+      }
+      return require(id);
+    },
+    module,
+    module.exports
+  );
+  stateIndex = 0;
+  const tree = module.exports.GroupsListScreen({});
+  const empty = nodes(tree).find((n) => n.props?.testID === "groups-empty-state");
+  assert.ok(empty);
+  const splitEntries = nodes(tree).filter((n) => n.props?.testID === "split-bill-entry");
+  assert.equal(splitEntries.length, 1, "empty Home must not duplicate Split a bill");
+  assert.equal(splitEntries[0].props.children, "Split a bill");
+  assert.ok(nodes(empty).some((n) => n.props?.testID === "split-bill-entry"));
+  assert.ok(nodes(empty).some((n) => n.props?.testID === "groups-empty-create"));
 });

@@ -39,6 +39,10 @@ import { ANALYTICS_EVENTS } from "../utils/posthogEvents";
 import { getSeenGroupIds, markGroupSeen } from "../utils/seenGroups";
 import { partitionGroupsBySection } from "../utils/groupListSections";
 import { recordSentryListCounts } from "../utils/sentryTelemetry";
+import {
+  listRecentBillSplits,
+  type RecentBillSplit,
+} from "../utils/recentBillSplits";
 import { CreateGroupScreen } from "./CreateGroupScreen";
 import { SplitBillScreen } from "./SplitBillScreen";
 
@@ -63,6 +67,8 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
 }) => {
   const [showCreateGroup, setShowCreateGroup] = useState<boolean>(false);
   const [showSplitBill, setShowSplitBill] = useState(false);
+  const [splitBillToken, setSplitBillToken] = useState<string | undefined>();
+  const [recentBills, setRecentBills] = useState<RecentBillSplit[]>([]);
   const [newGroupHeight, setNewGroupHeight] = useState(56);
   const [formerGroupsExpanded, setFormerGroupsExpanded] = useState<boolean>(false);
   const [archivedGroupsExpanded, setArchivedGroupsExpanded] = useState<boolean>(false);
@@ -133,6 +139,26 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
       mounted = false;
     };
   }, [user?.id, loading, groups]);
+
+  // Recent one-time bills so closing a bill still leaves a reopen path on Home.
+  useEffect(() => {
+    if (!user?.id) {
+      setRecentBills([]);
+      return;
+    }
+    let mounted = true;
+    listRecentBillSplits(user.id).then((rows) => {
+      if (mounted) setRecentBills(rows);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [user?.id, showSplitBill]);
+
+  const openSplitBill = (token?: string) => {
+    setSplitBillToken(token);
+    setShowSplitBill(true);
+  };
 
   const handleGroupPress = (group: Group) => {
     if (user?.id) {
@@ -382,18 +408,78 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
         ) : null}
       </Appbar.Header>
 
-      <Button mode="outlined" icon="call-split" testID="split-bill-entry"
-        style={{ marginHorizontal: 16, marginTop: 12, marginBottom: 4 }}
-        onPress={() => setShowSplitBill(true)}>Split a bill</Button>
-
       {isInitialLoading ? (
-        <GroupsHomeSkeletonRows />
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          testID="groups-loading-placeholders"
+        >
+          <Button
+            mode="contained"
+            icon="call-split"
+            disabled
+            testID="split-bill-entry"
+            style={styles.splitBillEntry}
+            contentStyle={styles.splitBillEntryContent}
+          >
+            Split a bill
+          </Button>
+          <GroupsHomeSkeletonRows embedded />
+        </ScrollView>
       ) : (
         <ScrollView
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
+          {/* Home is the single Split a bill entry: full-width under header, above groups. */}
+          {hasAnyVisibleGroups ? (
+            <Button
+              mode="contained"
+              icon="call-split"
+              testID="split-bill-entry"
+              style={styles.splitBillEntry}
+              contentStyle={styles.splitBillEntryContent}
+              onPress={() => openSplitBill()}
+            >
+              Split a bill
+            </Button>
+          ) : null}
+
+          {recentBills.length > 0 ? (
+            <View style={styles.recentBills} testID="recent-bills-row">
+              <Text variant="labelLarge" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 8 }}>
+                Recent bills
+              </Text>
+              {recentBills.map((bill) => (
+                <Surface
+                  key={bill.token}
+                  style={[styles.recentBillItem, { backgroundColor: theme.colors.surface }]}
+                  elevation={0}
+                >
+                  <TouchableRipple
+                    testID={`recent-bill-${bill.token.slice(0, 8)}`}
+                    onPress={() => openSplitBill(bill.token)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Open recent bill ${bill.title}`}
+                    style={styles.recentBillTouchable}
+                  >
+                    <View style={styles.recentBillContent}>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text variant="titleMedium" numberOfLines={1}>{bill.title}</Text>
+                        <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                          {bill.mode === "unequal" ? "Exact amounts" : bill.mode === "shares" ? "Shares" : "Equal split"}
+                        </Text>
+                      </View>
+                      <Icon source="chevron-right" size={20} color={theme.colors.onSurfaceVariant} />
+                    </View>
+                  </TouchableRipple>
+                </Surface>
+              ))}
+            </View>
+          ) : null}
+
           {notificationsEnabled && shouldShowNotificationPrimer({
             platform: Platform.OS,
             activeGroupCount: activeGroups.length,
@@ -452,14 +538,24 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                   maxWidth: 280,
                 }}
               >
-                Split a one-time bill, or create a group for ongoing expenses.
+                Start with a one-time bill, or create a group for ongoing expenses.
               </Text>
               <Button
                 mode="contained"
+                icon="call-split"
+                onPress={() => openSplitBill()}
+                testID="split-bill-entry"
+                style={styles.emptySplitBill}
+                contentStyle={styles.splitBillEntryContent}
+              >
+                Split a bill
+              </Button>
+              <Button
+                mode="text"
                 onPress={() => setShowCreateGroup(true)}
                 testID="groups-empty-create"
               >
-                Create group
+                Create a group
               </Button>
             </View>
           ) : (
@@ -596,7 +692,16 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
         </View>
       ) : null}
 
-      {showSplitBill ? <SplitBillScreen onDismiss={() => setShowSplitBill(false)} /> : null}
+      {showSplitBill ? (
+        <SplitBillScreen
+          key={splitBillToken ?? "new-bill"}
+          token={splitBillToken}
+          onDismiss={() => {
+            setShowSplitBill(false);
+            setSplitBillToken(undefined);
+          }}
+        />
+      ) : null}
       <CreateGroupScreen
         visible={showCreateGroup}
         onCreateGroup={async (groupData) => {
@@ -610,36 +715,40 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
 };
 
 /** Shared by the groups query and the auth/profile bootstrap gate. */
-export function GroupsHomeSkeletonRows() {
+export function GroupsHomeSkeletonRows({ embedded = false }: { embedded?: boolean } = {}) {
   const theme = useTheme();
   const { fontScale } = useWindowDimensions();
   const expandedText = fontScale > 1;
+  const rows = (
+    <SkeletonGroup>
+      {[0, 1, 2, 3, 4, 5].map((key) => (
+        <Surface key={key} style={[styles.groupItem, { backgroundColor: theme.colors.surface }]} elevation={0}>
+          <View style={[styles.groupTouchable, expandedText && styles.groupTouchableExpanded]}>
+            <View style={[styles.groupMainContent, expandedText && styles.groupMainContentExpanded]}>
+              <View style={styles.groupInfo}>
+                <View style={{ height: theme.fonts.titleMedium.lineHeight * fontScale, justifyContent: "center" }}>
+                  <Skeleton width={key % 2 ? "80%" : "60%"} height={16} />
+                </View>
+                {/* Uncached first paint: assume the common row with a description line. */}
+                <View testID="group-skeleton-subtitle" style={[styles.groupSubtitle,
+                  { height: theme.fonts.bodySmall.lineHeight * fontScale, justifyContent: "center" }]}>
+                  <Skeleton width={key % 2 ? "45%" : "35%"} height={10} />
+                </View>
+              </View>
+            </View>
+            <View style={[{ width: GROUP_BALANCE_SLOT_WIDTH, paddingHorizontal: 2, paddingVertical: 2 }, expandedText && styles.balanceBadgeExpanded]}>
+              <Skeleton width="100%" height={12} />
+            </View>
+          </View>
+        </Surface>
+      ))}
+    </SkeletonGroup>
+  );
+  if (embedded) return rows;
   return (
     <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}
       showsVerticalScrollIndicator={false} testID="groups-loading-placeholders">
-      <SkeletonGroup>
-        {[0, 1, 2, 3, 4, 5].map((key) => (
-          <Surface key={key} style={[styles.groupItem, { backgroundColor: theme.colors.surface }]} elevation={0}>
-            <View style={[styles.groupTouchable, expandedText && styles.groupTouchableExpanded]}>
-              <View style={[styles.groupMainContent, expandedText && styles.groupMainContentExpanded]}>
-                <View style={styles.groupInfo}>
-                  <View style={{ height: theme.fonts.titleMedium.lineHeight * fontScale, justifyContent: "center" }}>
-                    <Skeleton width={key % 2 ? "80%" : "60%"} height={16} />
-                  </View>
-                  {/* Uncached first paint: assume the common row with a description line. */}
-                  <View testID="group-skeleton-subtitle" style={[styles.groupSubtitle,
-                    { height: theme.fonts.bodySmall.lineHeight * fontScale, justifyContent: "center" }]}>
-                    <Skeleton width={key % 2 ? "45%" : "35%"} height={10} />
-                  </View>
-                </View>
-              </View>
-              <View style={[{ width: GROUP_BALANCE_SLOT_WIDTH, paddingHorizontal: 2, paddingVertical: 2 }, expandedText && styles.balanceBadgeExpanded]}>
-                <Skeleton width="100%" height={12} />
-              </View>
-            </View>
-          </Surface>
-        ))}
-      </SkeletonGroup>
+      {rows}
     </ScrollView>
   );
 }
@@ -651,9 +760,24 @@ export function GroupsHomeSkeleton() {
       <Appbar.Header style={{ backgroundColor: theme.colors.background }}>
         <Appbar.Content title="Your Groups" titleStyle={{ fontWeight: "bold" }} />
       </Appbar.Header>
-      <Button mode="outlined" icon="call-split" disabled
-        style={{ marginHorizontal: 16, marginTop: 12, marginBottom: 4 }}>Split a bill</Button>
-      <GroupsHomeSkeletonRows />
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        testID="groups-loading-placeholders"
+      >
+        <Button
+          mode="contained"
+          icon="call-split"
+          disabled
+          testID="split-bill-entry"
+          style={styles.splitBillEntry}
+          contentStyle={styles.splitBillEntryContent}
+        >
+          Split a bill
+        </Button>
+        <GroupsHomeSkeletonRows embedded />
+      </ScrollView>
     </View>
   );
 }
@@ -673,6 +797,36 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
+  },
+  splitBillEntry: {
+    marginBottom: 12,
+    alignSelf: "stretch",
+  },
+  splitBillEntryContent: {
+    minHeight: 48,
+  },
+  emptySplitBill: {
+    alignSelf: "stretch",
+    marginBottom: 8,
+    maxWidth: 320,
+  },
+  recentBills: {
+    marginBottom: 12,
+  },
+  recentBillItem: {
+    borderRadius: 14,
+    marginBottom: 8,
+    overflow: "hidden",
+  },
+  recentBillTouchable: {
+    minHeight: 56,
+  },
+  recentBillContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    gap: 8,
   },
   emptyContainer: {
     paddingVertical: 64,

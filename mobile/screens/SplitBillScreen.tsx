@@ -1,21 +1,64 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import React, { useRef, useState } from "react";
 import { KeyboardAvoidingView, Modal, Platform, ScrollView, Share, StyleSheet, View } from "react-native";
-import { ActivityIndicator, Appbar, Button, List, Surface, Text, TextInput, useTheme } from "react-native-paper";
+import { Appbar, Button, List, Portal, Surface, Text, TextInput, useTheme } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { Skeleton, SkeletonGroup } from "../components/Skeleton";
 import { SplitAmongEditor } from "../components/SplitAmongEditor";
 import { WEB_MAX_WIDTH } from "../constants/layout";
+import { useAuth } from "../contexts/AuthContext";
 import { confirmBillSplit, createBillSplit, readBillSplit, useBillSplitPeople } from "../hooks/useBillSplit";
 import { useProfile } from "../hooks/useProfile";
 import type { Participant } from "../types";
 import { allocateBillSplit, billAmountMinor, billSplitUrl, formatBillAmount, type BillSplitMode } from "../utils/billSplit";
 import { existingPersonLabel, filterAndSortExistingPeople } from "../utils/peoplePicker";
+import { rememberRecentBillSplit } from "../utils/recentBillSplits";
 import { distributeRemaining, sanitizeAmountInput } from "../utils/splits";
 
 const CREATOR = "bill-creator";
+/** Match Paper List.Item title-only row height so loading does not shift the form. */
+const KNOWN_PEOPLE_ROW_HEIGHT = 56;
+const KNOWN_PEOPLE_SKELETON_ROWS = 3;
+
+function KnownPeopleSkeleton() {
+  const theme = useTheme();
+  return (
+    <SkeletonGroup style={styles.knownPeople} testID="split-bill-people-skeleton">
+      <View style={{ height: theme.fonts.labelLarge.lineHeight, justifyContent: "center" }}>
+        <Skeleton width="40%" height={12} />
+      </View>
+      {Array.from({ length: KNOWN_PEOPLE_SKELETON_ROWS }, (_, index) => (
+        <View key={index} style={[styles.knownPeopleRow, { height: KNOWN_PEOPLE_ROW_HEIGHT }]}>
+          <Skeleton width="55%" height={14} />
+          <Skeleton width={20} height={20} borderRadius={10} />
+        </View>
+      ))}
+    </SkeletonGroup>
+  );
+}
+
+function BillDetailsSkeleton() {
+  return (
+    <SkeletonGroup style={{ gap: 16 }} testID="split-bill-details-skeleton" accessibilityLabel="Loading bill">
+      <Skeleton width="28%" height={12} />
+      <Skeleton width="48%" height={36} />
+      <Skeleton width="90%" height={14} />
+      {[0, 1, 2].map((key) => (
+        <View key={key} style={styles.personSkeleton}>
+          <Skeleton width="42%" height={18} />
+          <Skeleton width="28%" height={16} />
+          <Skeleton width="55%" height={40} borderRadius={8} />
+        </View>
+      ))}
+      <Skeleton width="100%" height={44} borderRadius={8} />
+      <Skeleton width="70%" height={14} />
+    </SkeletonGroup>
+  );
+}
 
 function BillSplitForm({ onCreated }: { onCreated: (token: string) => void }) {
   const theme = useTheme();
+  const { user } = useAuth();
   const { data: profile } = useProfile();
   const directory = useBillSplitPeople();
   const [amount, setAmount] = useState("");
@@ -69,6 +112,15 @@ function BillSplitForm({ onCreated }: { onCreated: (token: string) => void }) {
     setError(null);
     try {
       const token = await createBillSplit({ amount: total, currency, mode, values, people: people.map((p) => p.full_name!) });
+      if (user?.id) {
+        await rememberRecentBillSplit(user.id, {
+          token,
+          amount_minor: total,
+          currency,
+          mode,
+          people_count: people.length + 1,
+        });
+      }
       onCreated(token);
     } catch (err) {
       setError((err as Error).message);
@@ -93,13 +145,14 @@ function BillSplitForm({ onCreated }: { onCreated: (token: string) => void }) {
       testID="split-bill-person-input" maxLength={100} disabled={busy || people.length >= 49} onChangeText={setName} />
     <Button mode="outlined" testID="split-bill-add-person" disabled={busy || !name.trim() || people.length >= 49}
       onPress={() => addPerson(`new:${nextPerson.current++}`, name)}>Add by name</Button>
-    {directory.isLoading ? <ActivityIndicator /> : null}
+    {directory.isLoading ? <KnownPeopleSkeleton /> : null}
     {directory.isError ? <><Text>Couldn’t load known people. You can still add by name.</Text>
       <Button onPress={() => void directory.refetch()}>Retry people</Button></> : null}
-    {suggestions.length > 0 && people.length < 49 ? <View>
+    {!directory.isLoading && suggestions.length > 0 && people.length < 49 ? <View style={styles.knownPeople} testID="split-bill-known-people">
       <Text variant="labelLarge">People you know</Text>
-      <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled" style={{ maxHeight: 200 }}>
+      <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled" style={{ maxHeight: KNOWN_PEOPLE_ROW_HEIGHT * KNOWN_PEOPLE_SKELETON_ROWS }}>
         {suggestions.map((person) => <List.Item key={person.id} title={existingPersonLabel(person)}
+          style={{ minHeight: KNOWN_PEOPLE_ROW_HEIGHT }}
           disabled={busy} accessibilityLabel={`Add ${existingPersonLabel(person)}`}
           onPress={() => addPerson(person.id, existingPersonLabel(person))} right={(props) => <List.Icon {...props} icon="plus" />} />)}
       </ScrollView>
@@ -118,13 +171,14 @@ function BillSplitForm({ onCreated }: { onCreated: (token: string) => void }) {
     {validation ? <Text accessibilityLiveRegion="polite" style={{ color: theme.colors.onSurfaceVariant }}>{validation}</Text> : null}
     {error ? <Text accessibilityLiveRegion="polite" style={{ color: theme.colors.error }}>{error}</Text> : null}
     <Text variant="bodySmall">The link is available for 30 days. Anyone with it can see the names and amounts and acknowledge a share. SharedMoney does not move money.</Text>
-    <Button mode="contained" testID="split-bill-create" loading={busy} disabled={busy || !!validation}
-      onPress={() => void create()}>Create & get share link</Button>
+    <Button mode="contained" testID="split-bill-create" disabled={busy || !!validation}
+      onPress={() => void create()}>{busy ? "Creating…" : "Create & get share link"}</Button>
   </>;
 }
 
 function BillSplitDetails({ token }: { token: string }) {
   const theme = useTheme();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const key = ["bill-split-session", token];
   const [busy, setBusy] = useState(false);
@@ -132,6 +186,20 @@ function BillSplitDetails({ token }: { token: string }) {
   const [message, setMessage] = useState("");
   const confirming = useRef(false);
   const url = billSplitUrl(token);
+  const remembered = useRef(false);
+
+  React.useEffect(() => {
+    if (!session.data || !user?.id || remembered.current) return;
+    remembered.current = true;
+    void rememberRecentBillSplit(user.id, {
+      token,
+      amount_minor: session.data.amount_minor,
+      currency: session.data.currency,
+      mode: session.data.mode,
+      people_count: session.data.participants.length,
+    });
+  }, [session.data, token, user?.id]);
+
   const confirm = async (id: string) => {
     if (confirming.current) return;
     confirming.current = true;
@@ -158,7 +226,7 @@ function BillSplitDetails({ token }: { token: string }) {
     }
   };
 
-  if (session.isPending) return <ActivityIndicator accessibilityLabel="Loading bill" />;
+  if (session.isPending) return <BillDetailsSkeleton />;
   if (session.isError) return <><Text>Couldn’t load this bill.</Text><Button onPress={() => void session.refetch()}>Try again</Button></>;
   if (!session.data) return <><Text variant="headlineSmall">Bill not found</Text><Text>This link is invalid or has expired.</Text></>;
   return <>
@@ -184,17 +252,20 @@ function BillSplitDetails({ token }: { token: string }) {
 export function SplitBillScreen({ token: initialToken, onDismiss }: { token?: string; onDismiss: () => void }) {
   const theme = useTheme();
   const [token, setToken] = useState(initialToken);
+  // Portal.Host keeps Paper menus (Portal) in this modal layer so they paint above the sheet on web.
   return <Modal visible animationType="slide" presentationStyle="fullScreen" onRequestClose={onDismiss}>
-    <SafeAreaView style={[styles.root, { backgroundColor: theme.colors.background }]}>
-      <Appbar.Header elevated style={{ backgroundColor: theme.colors.surface }}>
-        <Appbar.BackAction onPress={onDismiss} /><Appbar.Content title="Split a bill" />
-      </Appbar.Header>
-      <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === "ios" ? "padding" : "height"}>
-        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
-          {token ? <BillSplitDetails key={token} token={token} /> : <BillSplitForm onCreated={setToken} />}
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+    <Portal.Host>
+      <SafeAreaView style={[styles.root, { backgroundColor: theme.colors.background }]}>
+        <Appbar.Header elevated style={{ backgroundColor: theme.colors.surface }}>
+          <Appbar.BackAction onPress={onDismiss} /><Appbar.Content title="Split a bill" />
+        </Appbar.Header>
+        <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
+            {token ? <BillSplitDetails key={token} token={token} /> : <BillSplitForm onCreated={setToken} />}
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </Portal.Host>
   </Modal>;
 }
 
@@ -202,4 +273,12 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   content: { padding: 20, paddingBottom: 40, gap: 16, width: "100%", maxWidth: WEB_MAX_WIDTH, alignSelf: "center" },
   person: { padding: 16, borderRadius: 12, gap: 8 },
+  personSkeleton: { padding: 16, borderRadius: 12, gap: 8 },
+  knownPeople: { gap: 4 },
+  knownPeopleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 4,
+  },
 });
