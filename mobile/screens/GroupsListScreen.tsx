@@ -525,6 +525,80 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
               {/* Active Groups */}
               {activeGroups.map((group) => renderGroupItem(group))}
 
+              {/* Quiet one-time bills row — after active groups, above Archived/Former. */}
+              {oneTimeSummary ? (
+                <Surface
+                  style={[styles.groupItem, { backgroundColor: theme.colors.surface, marginTop: 4 }]}
+                  elevation={0}
+                >
+                  <TouchableOpacity
+                    testID="one-time-bills-row"
+                    style={[styles.groupTouchable, expandedText && styles.groupTouchableExpanded]}
+                    onPress={() => openSplitBill()}
+                    activeOpacity={0.7}
+                    accessibilityRole="button"
+                    accessibilityLabel={`One-time bills, ${
+                      oneTimeSummary.unsettled_count === 1
+                        ? "1 unsettled"
+                        : `${oneTimeSummary.unsettled_count} unsettled`
+                    }, ${groupListBalanceWords(
+                      oneTimeSummary.net_minor / 100,
+                      formatCurrency(Math.abs(oneTimeSummary.net_minor) / 100, oneTimeSummary.currency),
+                    )}`}
+                  >
+                    <View style={[styles.groupMainContent, expandedText && styles.groupMainContentExpanded]}>
+                      <View style={styles.groupInfo}>
+                        <Text
+                          variant="titleMedium"
+                          style={[styles.groupName, { color: theme.colors.onSurface }]}
+                          numberOfLines={1}
+                        >
+                          One-time bills
+                        </Text>
+                        <Text
+                          variant="bodySmall"
+                          style={[styles.groupSubtitle, { color: theme.colors.onSurfaceVariant }]}
+                          numberOfLines={1}
+                        >
+                          {oneTimeSummary.unsettled_count === 1
+                            ? "1 unsettled"
+                            : `${oneTimeSummary.unsettled_count} unsettled`}
+                        </Text>
+                      </View>
+                    </View>
+                    <View
+                      style={[
+                        styles.oneTimeBalanceSlot,
+                        expandedText && styles.balanceBadgeExpanded,
+                      ]}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 13,
+                          lineHeight: 16,
+                          fontWeight: "700",
+                          textAlign: "right",
+                          color: balanceAmountColor(
+                            oneTimeSummary.net_minor / 100,
+                            theme.colors,
+                            { dark: theme.dark },
+                          ),
+                        }}
+                        numberOfLines={2}
+                      >
+                        {groupListBalanceWords(
+                          oneTimeSummary.net_minor / 100,
+                          formatCurrency(
+                            Math.abs(oneTimeSummary.net_minor) / 100,
+                            oneTimeSummary.currency,
+                          ),
+                        )}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                </Surface>
+              ) : null}
+
               {/* Archived + Former share one disclosure: header card, inset icon,
                   compact divider children (not active Surface cards). */}
               {archivedGroups.length > 0 ? (
@@ -611,67 +685,6 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                     </View>
                   ) : null}
                 </View>
-              ) : null}
-
-              {/* Quiet one-time bills row — only when local unsettled net exists. */}
-              {oneTimeSummary ? (
-                <Surface
-                  style={[styles.groupItem, { backgroundColor: theme.colors.surface, marginTop: 12 }]}
-                  elevation={0}
-                >
-                  <TouchableOpacity
-                    testID="one-time-bills-row"
-                    style={[styles.groupTouchable, expandedText && styles.groupTouchableExpanded]}
-                    onPress={() => openSplitBill()}
-                    activeOpacity={0.7}
-                    accessibilityRole="button"
-                    accessibilityLabel={`One-time bills, ${groupListBalanceWords(
-                      oneTimeSummary.net_minor / 100,
-                      formatCurrency(Math.abs(oneTimeSummary.net_minor) / 100, oneTimeSummary.currency),
-                    )}`}
-                  >
-                    <View style={[styles.groupMainContent, expandedText && styles.groupMainContentExpanded]}>
-                      <View style={styles.groupInfo}>
-                        <Text
-                          variant="titleMedium"
-                          style={[styles.groupName, { color: theme.colors.onSurface }]}
-                          numberOfLines={1}
-                        >
-                          One-time bills
-                        </Text>
-                      </View>
-                    </View>
-                    <View
-                      style={[
-                        styles.oneTimeBalanceSlot,
-                        expandedText && styles.balanceBadgeExpanded,
-                      ]}
-                    >
-                      <Text
-                        style={{
-                          fontSize: 13,
-                          lineHeight: 16,
-                          fontWeight: "700",
-                          textAlign: "right",
-                          color: balanceAmountColor(
-                            oneTimeSummary.net_minor / 100,
-                            theme.colors,
-                            { dark: theme.dark },
-                          ),
-                        }}
-                        numberOfLines={2}
-                      >
-                        {groupListBalanceWords(
-                          oneTimeSummary.net_minor / 100,
-                          formatCurrency(
-                            Math.abs(oneTimeSummary.net_minor) / 100,
-                            oneTimeSummary.currency,
-                          ),
-                        )}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-                </Surface>
               ) : null}
             </>
           )}

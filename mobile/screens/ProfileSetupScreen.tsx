@@ -512,7 +512,8 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
               style={[
                 styles.notificationSetting,
                 {
-                  borderTopColor: theme.colors.outlineVariant,
+                  // No top hairline — this row is not a divided settings stack item.
+                  borderTopWidth: 0,
                   opacity: loading ? 0.5 : 1,
                 },
               ]}
@@ -528,7 +529,7 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
                   variant="bodySmall"
                   style={{ color: theme.colors.onSurfaceVariant }}
                 >
-                  Split a bill without a group. Recent bills live here.
+                  Split a bill without a group.
                 </Text>
               </View>
               <Icon

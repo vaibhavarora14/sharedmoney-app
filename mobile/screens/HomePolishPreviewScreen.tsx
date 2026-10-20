@@ -239,6 +239,37 @@ function HomeListPreview({
           </Surface>
         ))}
 
+        {showOneTimeRow ? (
+          <Surface
+            style={[styles.groupRow, { backgroundColor: theme.colors.surface, marginTop: 4 }]}
+            elevation={0}
+            testID="preview-one-time-bills-row"
+          >
+            <View style={{ flex: 1, paddingRight: 12 }}>
+              <Text
+                variant="titleMedium"
+                style={{ fontWeight: "700", color: theme.colors.onSurface, letterSpacing: -0.2 }}
+              >
+                One-time bills
+              </Text>
+              <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                2 unsettled
+              </Text>
+            </View>
+            <Text
+              style={{
+                fontSize: 13,
+                lineHeight: 16,
+                fontWeight: "700",
+                textAlign: "right",
+                color: balanceAmountColor(oneTimeNet, theme.colors, { dark: theme.dark }),
+              }}
+            >
+              {groupListBalanceWords(oneTimeNet, formatCurrency(oneTimeNet, "USD"))}
+            </Text>
+          </Surface>
+        ) : null}
+
         <View
           style={[styles.sectionAccordion, { backgroundColor: theme.colors.surface }]}
           testID="preview-archived-accordion"
@@ -337,34 +368,6 @@ function HomeListPreview({
           ) : null}
         </View>
 
-        {showOneTimeRow ? (
-          <Surface
-            style={[styles.groupRow, { backgroundColor: theme.colors.surface, marginTop: 12 }]}
-            elevation={0}
-            testID="preview-one-time-bills-row"
-          >
-            <View style={{ flex: 1, paddingRight: 12 }}>
-              <Text
-                variant="titleMedium"
-                style={{ fontWeight: "700", color: theme.colors.onSurface, letterSpacing: -0.2 }}
-              >
-                One-time bills
-              </Text>
-            </View>
-            <Text
-              style={{
-                fontSize: 13,
-                lineHeight: 16,
-                fontWeight: "700",
-                textAlign: "right",
-                color: balanceAmountColor(oneTimeNet, theme.colors, { dark: theme.dark }),
-              }}
-            >
-              {groupListBalanceWords(oneTimeNet, formatCurrency(oneTimeNet, "USD"))}
-            </Text>
-          </Surface>
-        ) : null}
-
         <View testID="home-list-clearance" style={{ height: 32 }} />
       </View>
     </PreviewShell>
@@ -379,7 +382,7 @@ function ProfileOneTimePreview() {
         <Surface style={[styles.profileCard, { backgroundColor: theme.colors.surface }]} elevation={2}>
           <TouchableRipple
             testID="preview-profile-one-time-row"
-            style={[styles.profileRow, { borderTopColor: theme.colors.outlineVariant }]}
+            style={styles.profileRow}
           >
             <View style={styles.profileRowInner}>
               <View style={{ flex: 1 }}>
@@ -387,7 +390,7 @@ function ProfileOneTimePreview() {
                   One-time bills
                 </Text>
                 <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                  Split a bill without a group. Recent bills live here.
+                  Split a bill without a group.
                 </Text>
               </View>
               <Icon source="chevron-right" size={20} color={theme.colors.onSurfaceVariant} />
@@ -588,7 +591,7 @@ export const HomePolishPreviewScreen: React.FC = () => {
         {surface === "split-loading" ? <SplitBillFormPreview loadingPeople disabledCreate /> : null}
         {surface === "split-form" ? <SplitBillFormPreview /> : null}
         {surface === "split-carry" ? (
-          <SplitBillFormPreview draft={{ amount: "36.00", currency: "EUR" }} showRecentBills={false} />
+          <SplitBillFormPreview draft={{ amount: "36.00", currency: "USD" }} showRecentBills={false} />
         ) : null}
         {surface === "split-mode" ? <SplitBillFormPreview modeMenuOpen /> : null}
       </SafeAreaView>
@@ -632,9 +635,9 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   profileRow: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    marginTop: 4,
-    paddingTop: 12,
+    // No top hairline — matches Profile One-time bills row.
+    marginTop: 0,
+    paddingTop: 0,
   },
   profileRowInner: {
     flexDirection: "row",

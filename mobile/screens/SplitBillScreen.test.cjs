@@ -376,3 +376,112 @@ test("create form wires the mode menu and switches Equal → Shares → Amounts"
   byId(menu, "split-mode-unequal").props.onPress();
   assert.deepEqual(calls, ["shares", "unequal"]);
 });
+
+test("splitDraftFromExpense carries the expense form currency, not a stale code", () => {
+  const filename = path.join(__dirname, "SplitBillScreen.tsx");
+  const module = { exports: {} };
+  const code = ts.transpileModule(readFileSync(filename, "utf8"), {
+    compilerOptions: {
+      target: ts.ScriptTarget.ES2022,
+      module: ts.ModuleKind.CommonJS,
+      jsx: ts.JsxEmit.ReactJSX,
+      esModuleInterop: true,
+    },
+  }).outputText;
+  // Pure helper only — stub heavy deps so transpile loads.
+  new Function("require", "module", "exports", code)((id) => {
+    if (id === "react" || id === "react-native" || id === "react-native-paper"
+      || id === "react-native-safe-area-context" || id === "@tanstack/react-query"
+      || id.startsWith("../")) {
+      if (id === "react") return React;
+      if (id === "react-native") {
+        return {
+          View: "View",
+          Modal: "Modal",
+          Platform: { OS: "web" },
+          Pressable: "Pressable",
+          ScrollView: "ScrollView",
+          Share: {},
+          StyleSheet: { create: (s) => s, hairlineWidth: 1 },
+          KeyboardAvoidingView: "KeyboardAvoidingView",
+        };
+      }
+      if (id === "react-native-paper") {
+        return new Proxy({}, { get: (_, name) => (name === "useTheme" ? () => ({ colors: {} }) : name) });
+      }
+      if (id === "react-native-safe-area-context") return { SafeAreaView: "SafeAreaView" };
+      if (id === "@tanstack/react-query") return { useQuery: () => ({}), useQueryClient: () => ({}) };
+      if (id === "../utils/currency") {
+        return {
+          CURRENCIES: [{ code: "USD", symbol: "$" }, { code: "EUR", symbol: "€" }],
+          formatCurrency: (n, c) => `${c} ${n}`,
+          getCurrencyName: (c) => c,
+          getDefaultCurrency: () => "USD",
+          getLocaleCurrencyCode: () => "USD",
+        };
+      }
+      if (id === "../utils/recentBillSplits") {
+        return {
+          formatRecentBillAmount: () => "$0",
+          listRecentBillSplits: async () => [],
+          RECENT_BILLS_PREVIEW_COUNT: 3,
+          readLastBillSplitCurrency: async () => "EUR",
+          relativeBillDate: () => "",
+          rememberRecentBillSplit: async () => [],
+          settlementFromBillSession: () => ({ settled: false, your_net_minor: 0 }),
+          updateRecentBillSettlement: async () => [],
+          writeLastBillSplitCurrency: async () => {},
+        };
+      }
+      if (id === "../utils/billSplit") {
+        return {
+          allocateBillSplit: () => [],
+          billAmountMinor: () => null,
+          billSplitUrl: () => "",
+        };
+      }
+      if (id === "../utils/splits") {
+        return { distributeRemaining: () => ({}), sanitizeAmountInput: (t) => t };
+      }
+      if (id === "../utils/peoplePicker") {
+        return { existingPersonLabel: (p) => p.full_name, filterAndSortExistingPeople: () => [] };
+      }
+      if (id === "../hooks/useBillSplit") {
+        return { confirmBillSplit: async () => null, createBillSplit: async () => "", readBillSplit: async () => null, useBillSplitPeople: () => ({ data: [], isLoading: false }) };
+      }
+      if (id === "../hooks/useProfile") return { useProfile: () => ({ data: null }) };
+      if (id === "../contexts/AuthContext") return { useAuth: () => ({ user: null }) };
+      if (id === "../components/Skeleton") return { Skeleton: "Skeleton", SkeletonGroup: "SkeletonGroup" };
+      if (id === "../components/SplitAmongEditor") return { SplitAmongEditor: "SplitAmongEditor" };
+      if (id === "../constants/layout") return { WEB_MAX_WIDTH: 600 };
+      return {};
+    }
+    return require(id);
+  }, module, module.exports);
+
+  const { splitDraftFromExpense } = module.exports;
+  assert.deepEqual(
+    splitDraftFromExpense({ amount: "36.00", currency: "USD" }),
+    { amount: "36.00", currency: "USD" },
+  );
+  assert.deepEqual(
+    splitDraftFromExpense({ amount: " 14.25 ", currency: "eur" }),
+    { amount: "14.25", currency: "EUR" },
+  );
+  // Last-used EUR must not appear when the expense form shows USD.
+  assert.equal(splitDraftFromExpense({ amount: "36", currency: "USD" }).currency, "USD");
+  assert.notEqual(splitDraftFromExpense({ amount: "36", currency: "USD" }).currency, "EUR");
+  assert.equal(splitDraftFromExpense({ amount: "", currency: "USD" }).amount, undefined);
+  assert.equal(splitDraftFromExpense({ amount: "10", currency: "nope" }).currency, undefined);
+});
+
+test("SplitBillFormPreview draft currency matches Add expense carry-over (USD, not EUR)", () => {
+  const source = readFileSync(path.join(__dirname, "HomePolishPreviewScreen.tsx"), "utf8");
+  assert.match(source, /draft=\{\{\s*amount:\s*"36\.00",\s*currency:\s*"USD"\s*\}\}/);
+  assert.doesNotMatch(
+    source,
+    /draft=\{\{\s*amount:\s*"36\.00",\s*currency:\s*"EUR"\s*\}\}/,
+  );
+  const addExpense = source.slice(source.indexOf("function AddExpenseGlobalPreview"));
+  assert.match(addExpense, /\$36\.00/);
+});

@@ -66,7 +66,11 @@ import {
     sumSelectedAmounts,
 } from "../utils/splits";
 import { useGroups } from "../hooks/useGroups";
-import { SplitBillScreen, type SplitBillDraft } from "./SplitBillScreen";
+import {
+  SplitBillScreen,
+  splitDraftFromExpense,
+  type SplitBillDraft,
+} from "./SplitBillScreen";
 
 interface TransactionFormScreenProps {
   transaction?: Transaction | null;
@@ -977,10 +981,11 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
                   compact
                   testID="split-once-link"
                   onPress={() => {
-                    const draft: SplitBillDraft = {
-                      amount: amount.trim() || undefined,
-                      currency: currency || undefined,
-                    };
+                    // Carry the symbol currency shown on this form — never last-used split currency.
+                    const draft = splitDraftFromExpense({
+                      amount,
+                      currency: currency || effectiveDefaultCurrency,
+                    });
                     if (onOpenOneTimeSplit) {
                       onOpenOneTimeSplit(draft);
                       return;
@@ -1493,6 +1498,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
 
       {showOneTimeSplit ? (
         <SplitBillScreen
+          key={`one-time-${oneTimeSplitDraft?.currency ?? "xxx"}-${oneTimeSplitDraft?.amount ?? ""}`}
           draft={oneTimeSplitDraft}
           onDismiss={() => {
             setShowOneTimeSplit(false);

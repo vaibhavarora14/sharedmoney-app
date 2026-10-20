@@ -58,6 +58,22 @@ export type SplitBillDraft = {
   currency?: string;
 };
 
+/**
+ * Build a one-time-split draft from Add expense fields.
+ * Always carries the currency the expense form is actually showing (not last-used split currency).
+ */
+export function splitDraftFromExpense(input: {
+  amount: string;
+  currency: string;
+}): SplitBillDraft {
+  const amount = input.amount.trim();
+  const currency = input.currency.trim().toUpperCase();
+  return {
+    amount: amount || undefined,
+    currency: /^[A-Z]{3}$/.test(currency) ? currency : undefined,
+  };
+}
+
 function KnownPeopleSkeleton() {
   const theme = useTheme();
   return (
