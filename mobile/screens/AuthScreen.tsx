@@ -6,6 +6,7 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   useWindowDimensions,
@@ -19,35 +20,86 @@ import {
   useTheme,
 } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { CountryCodePicker } from "../components/CountryCodePicker";
+import { Skeleton, SkeletonGroup } from "../components/Skeleton";
 import { isAuthDesktopWebViewport } from "../constants/layout";
 import { useAuth } from "../contexts/AuthContext";
+import {
+  CountryCode,
+  countryCodes,
+  getCountryByCode,
+} from "../utils/countryCodes";
+import {
+  DEFAULT_PHONE_COUNTRY_CODE,
+  normalizePhoneToE164,
+} from "../utils/phoneValidation";
+import { sendWhatsAppOtp } from "../utils/whatsappOtpApi";
+import { isWhatsAppOtpLoginEnabled } from "../utils/whatsappOtpLogin";
 
-type AuthStep = "methods" | "email";
+type AuthStep = "methods" | "email" | "phone" | "otp";
 
 interface AuthScreenProps {
   onToggleMode: () => void;
   isSignUp: boolean;
+  /** Design-review only. Never set from production App.tsx. */
+  previewInitialStep?: AuthStep;
+  /** Design-review only. Seeds the OTP screen phone label. */
+  previewPhoneE164?: string;
+}
+
+function AuthActionSkeleton() {
+  return (
+    <SkeletonGroup style={styles.methodStack} testID="auth-whatsapp-skeleton">
+      <Skeleton width="100%" height={48} borderRadius={8} />
+      <Skeleton width="100%" height={48} borderRadius={8} />
+      <Skeleton width="72%" height={16} borderRadius={4} />
+    </SkeletonGroup>
+  );
 }
 
 export const AuthScreen: React.FC<AuthScreenProps> = ({
   onToggleMode,
   isSignUp,
+  previewInitialStep,
+  previewPhoneE164,
 }) => {
+  const whatsappOtpEnabled = isWhatsAppOtpLoginEnabled();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [authStep, setAuthStep] = useState<AuthStep>("methods");
+  const [phoneNational, setPhoneNational] = useState(
+    previewInitialStep === "phone" || previewInitialStep === "otp" ? "9876543210" : "",
+  );
+  const [otpCode, setOtpCode] = useState("");
+  const [phoneE164, setPhoneE164] = useState<string | null>(
+    previewPhoneE164 ?? null,
+  );
+  const [selectedCountry, setSelectedCountry] = useState<CountryCode>(
+    () =>
+      getCountryByCode(DEFAULT_PHONE_COUNTRY_CODE) ??
+      countryCodes.find((c) => c.code === "IN") ??
+      countryCodes[0],
+  );
+  const [showCountryPicker, setShowCountryPicker] = useState(false);
+  const [authStep, setAuthStep] = useState<AuthStep>(
+    previewInitialStep && whatsappOtpEnabled ? previewInitialStep : "methods",
+  );
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [appleLoading, setAppleLoading] = useState(false);
+  const [whatsappLoading, setWhatsappLoading] = useState(false);
   const [appleSignInAvailable, setAppleSignInAvailable] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [resendSeconds, setResendSeconds] = useState(0);
   const emailInputRef = useRef<any>(null);
-  const { signIn, signUp, signInWithGoogle, signInWithApple } = useAuth();
+  const phoneInputRef = useRef<any>(null);
+  const otpInputRef = useRef<any>(null);
+  const { signIn, signUp, signInWithGoogle, signInWithApple, signInWithWhatsAppOtp } =
+    useAuth();
   const theme = useTheme();
   const { width } = useWindowDimensions();
   const isDesktopWeb = isAuthDesktopWebViewport(Platform.OS, width);
-  const socialLoading = googleLoading || appleLoading;
+  const socialLoading = googleLoading || appleLoading || whatsappLoading;
   const formDisabled = loading || socialLoading;
   const emailInvalid = Boolean(formError && formError.toLowerCase().includes("email"));
   const passwordInvalid = Boolean(
@@ -86,11 +138,25 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   }, []);
 
   useEffect(() => {
-    if (authStep !== "email") return;
-
-    const focusTimer = setTimeout(() => emailInputRef.current?.focus(), 0);
-    return () => clearTimeout(focusTimer);
+    if (authStep === "email") {
+      const focusTimer = setTimeout(() => emailInputRef.current?.focus(), 0);
+      return () => clearTimeout(focusTimer);
+    }
+    if (authStep === "phone") {
+      const focusTimer = setTimeout(() => phoneInputRef.current?.focus(), 0);
+      return () => clearTimeout(focusTimer);
+    }
+    if (authStep === "otp") {
+      const focusTimer = setTimeout(() => otpInputRef.current?.focus(), 0);
+      return () => clearTimeout(focusTimer);
+    }
   }, [authStep]);
+
+  useEffect(() => {
+    if (resendSeconds <= 0) return;
+    const timer = setTimeout(() => setResendSeconds((s) => s - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [resendSeconds]);
 
   const clearFormError = () => {
     if (formError) setFormError(null);
@@ -101,9 +167,16 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     setAuthStep("email");
   };
 
+  const showPhoneForm = () => {
+    clearFormError();
+    setOtpCode("");
+    setAuthStep("phone");
+  };
+
   const showMethods = () => {
     Keyboard.dismiss();
     clearFormError();
+    setOtpCode("");
     setAuthStep("methods");
   };
 
@@ -197,6 +270,80 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     }
   };
 
+  const handleSendWhatsAppOtp = async () => {
+    clearFormError();
+    const normalized = normalizePhoneToE164(
+      phoneNational,
+      selectedCountry.code,
+    );
+    if (!normalized) {
+      setFormError("Enter a valid phone number with country code.");
+      return;
+    }
+
+    setWhatsappLoading(true);
+    try {
+      const result = await sendWhatsAppOtp(normalized);
+      setPhoneE164(normalized);
+      setResendSeconds(result.resend_after || 60);
+      setAuthStep("otp");
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Could not send WhatsApp code.";
+      setFormError(message);
+      Alert.alert("WhatsApp code", message, [{ text: "OK", style: "default" }]);
+    } finally {
+      setWhatsappLoading(false);
+    }
+  };
+
+  const handleVerifyWhatsAppOtp = async () => {
+    clearFormError();
+    if (!phoneE164) {
+      setFormError("Request a new code and try again.");
+      setAuthStep("phone");
+      return;
+    }
+    const trimmed = otpCode.trim();
+    if (!/^\d{4,8}$/.test(trimmed)) {
+      setFormError("Enter the 6-digit code from WhatsApp.");
+      return;
+    }
+
+    setWhatsappLoading(true);
+    try {
+      const { error } = await signInWithWhatsAppOtp(phoneE164, trimmed);
+      if (error) {
+        setFormError(error.message || "Incorrect code.");
+        Alert.alert("WhatsApp sign-in failed", error.message || "Incorrect code.", [
+          { text: "OK", style: "default" },
+        ]);
+      }
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "An unexpected error occurred.";
+      setFormError(message);
+    } finally {
+      setWhatsappLoading(false);
+    }
+  };
+
+  const handleResendWhatsAppOtp = async () => {
+    if (resendSeconds > 0 || !phoneE164) return;
+    setWhatsappLoading(true);
+    clearFormError();
+    try {
+      const result = await sendWhatsAppOtp(phoneE164);
+      setResendSeconds(result.resend_after || 60);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Could not resend code.";
+      setFormError(message);
+    } finally {
+      setWhatsappLoading(false);
+    }
+  };
+
   const renderLogo = (size: "compact" | "desktop") => (
     <Image
       source={require("../assets/logo.png")}
@@ -274,6 +421,20 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         >
           Continue with email
         </Button>
+
+        {whatsappOtpEnabled ? (
+          <Button
+            mode="outlined"
+            icon="whatsapp"
+            onPress={showPhoneForm}
+            disabled={formDisabled}
+            style={styles.methodButton}
+            contentStyle={styles.methodButtonContent}
+            accessibilityLabel="Continue with WhatsApp"
+          >
+            Continue with WhatsApp
+          </Button>
+        ) : null}
       </View>
 
       {renderAccountToggle()}
@@ -374,6 +535,199 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     </View>
   );
 
+  const renderPhoneForm = () => (
+    <View style={styles.emailScreen} testID="auth-whatsapp-phone">
+      <Button
+        mode="text"
+        icon="arrow-left"
+        onPress={showMethods}
+        disabled={formDisabled}
+        style={styles.backButton}
+        contentStyle={styles.backButtonContent}
+      >
+        All sign-in methods
+      </Button>
+
+      <Text variant="headlineSmall" style={[styles.emailTitle, { color: theme.colors.onBackground }]}>
+        Continue with WhatsApp
+      </Text>
+      <Text
+        variant="bodyMedium"
+        style={[styles.phoneHint, { color: theme.colors.onSurfaceVariant }]}
+      >
+        We’ll send a one-time code to your WhatsApp number.
+      </Text>
+
+      {whatsappLoading ? (
+        <AuthActionSkeleton />
+      ) : (
+        <>
+          <View style={styles.phoneRow}>
+            <Pressable
+              onPress={() => setShowCountryPicker(true)}
+              disabled={formDisabled}
+              style={[
+                styles.countryButton,
+                {
+                  borderColor: theme.colors.outline,
+                  backgroundColor: theme.colors.surface,
+                },
+              ]}
+              accessibilityLabel={`Country code ${selectedCountry.name} ${selectedCountry.dialCode}`}
+            >
+              <Text variant="bodyLarge" style={{ color: theme.colors.onSurface }}>
+                {selectedCountry.flag} {selectedCountry.dialCode}
+              </Text>
+            </Pressable>
+            <TextInput
+              ref={phoneInputRef}
+              label="Phone number"
+              value={phoneNational}
+              onChangeText={(value) => {
+                setPhoneNational(value);
+                clearFormError();
+              }}
+              mode="outlined"
+              keyboardType="phone-pad"
+              autoComplete="tel"
+              textContentType="telephoneNumber"
+              accessibilityLabel="Phone number"
+              disabled={formDisabled}
+              error={Boolean(formError)}
+              style={styles.phoneInput}
+            />
+          </View>
+
+          {formError ? (
+            <Text
+              accessibilityRole="alert"
+              variant="bodyMedium"
+              style={[styles.formError, { color: theme.colors.error }]}
+            >
+              {formError}
+            </Text>
+          ) : null}
+
+          <Button
+            mode="contained"
+            onPress={handleSendWhatsAppOtp}
+            disabled={formDisabled}
+            style={styles.methodButton}
+            contentStyle={styles.methodButtonContent}
+          >
+            Send WhatsApp code
+          </Button>
+        </>
+      )}
+
+      <CountryCodePicker
+        visible={showCountryPicker}
+        onDismiss={() => setShowCountryPicker(false)}
+        onSelect={setSelectedCountry}
+        selectedCountry={selectedCountry}
+      />
+    </View>
+  );
+
+  const renderOtpForm = () => (
+    <View style={styles.emailScreen} testID="auth-whatsapp-otp">
+      <Button
+        mode="text"
+        icon="arrow-left"
+        onPress={() => {
+          clearFormError();
+          setOtpCode("");
+          setAuthStep("phone");
+        }}
+        disabled={formDisabled}
+        style={styles.backButton}
+        contentStyle={styles.backButtonContent}
+      >
+        Change number
+      </Button>
+
+      <Text variant="headlineSmall" style={[styles.emailTitle, { color: theme.colors.onBackground }]}>
+        Enter WhatsApp code
+      </Text>
+      <Text
+        variant="bodyMedium"
+        style={[styles.phoneHint, { color: theme.colors.onSurfaceVariant }]}
+      >
+        Code sent to {phoneE164 || "your WhatsApp"}.
+      </Text>
+
+      {whatsappLoading ? (
+        <AuthActionSkeleton />
+      ) : (
+        <>
+          <TextInput
+            ref={otpInputRef}
+            label="6-digit code"
+            value={otpCode}
+            onChangeText={(value) => {
+              setOtpCode(value.replace(/\D/g, "").slice(0, 8));
+              clearFormError();
+            }}
+            mode="outlined"
+            keyboardType="number-pad"
+            textContentType="oneTimeCode"
+            autoComplete="sms-otp"
+            accessibilityLabel="WhatsApp verification code"
+            disabled={formDisabled}
+            error={Boolean(formError)}
+            style={styles.input}
+          />
+
+          {formError ? (
+            <Text
+              accessibilityRole="alert"
+              variant="bodyMedium"
+              style={[styles.formError, { color: theme.colors.error }]}
+            >
+              {formError}
+            </Text>
+          ) : null}
+
+          <Button
+            mode="contained"
+            onPress={handleVerifyWhatsAppOtp}
+            disabled={formDisabled}
+            style={styles.methodButton}
+            contentStyle={styles.methodButtonContent}
+          >
+            Verify and continue
+          </Button>
+
+          <Button
+            mode="text"
+            onPress={handleResendWhatsAppOtp}
+            disabled={formDisabled || resendSeconds > 0}
+            style={styles.resendButton}
+          >
+            {resendSeconds > 0 ? `Resend in ${resendSeconds}s` : "Resend code"}
+          </Button>
+        </>
+      )}
+    </View>
+  );
+
+  const renderAuthStep = () => {
+    switch (authStep) {
+      case "methods":
+        return renderMethods();
+      case "email":
+        return renderEmailForm();
+      case "phone":
+        return renderPhoneForm();
+      case "otp":
+        return renderOtpForm();
+      default: {
+        const _exhaustive: never = authStep;
+        return _exhaustive;
+      }
+    }
+  };
+
   return (
     <SafeAreaView
       style={[styles.container, { backgroundColor: theme.colors.background }]}
@@ -420,7 +774,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
             ]}
             elevation={0}
           >
-            {authStep === "methods" ? renderMethods() : renderEmailForm()}
+            {renderAuthStep()}
           </Surface>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -562,5 +916,29 @@ const styles = StyleSheet.create({
   formError: {
     fontWeight: "600",
     marginBottom: 16,
+  },
+  phoneHint: {
+    marginBottom: 20,
+    marginTop: -12,
+  },
+  phoneRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 16,
+    width: "100%",
+  },
+  countryButton: {
+    alignItems: "center",
+    borderRadius: 4,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 56,
+    paddingHorizontal: 12,
+  },
+  phoneInput: {
+    flex: 1,
+  },
+  resendButton: {
+    marginTop: 8,
   },
 });

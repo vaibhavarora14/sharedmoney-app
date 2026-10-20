@@ -1,7 +1,7 @@
 /**
- * WhatsApp Cloud API helpers (Meta Graph API template messages).
+ * WhatsApp Cloud API helpers (Meta Graph API template + text messages).
  *
- * Used by `whatsapp-dry-run` for connect-only dry-run / live template sends.
+ * Used by `whatsapp-dry-run` and `whatsapp-otp` (feature-flagged login).
  * Secrets live in Supabase/GitHub env — never commit tokens.
  *
  * Env:
@@ -12,6 +12,7 @@
  * - WHATSAPP_REMINDER_TEMPLATE_NAME (optional; required when template=reminder)
  * - WHATSAPP_REMINDER_TEMPLATE_LANG (default: en)
  * - WHATSAPP_DRY_RUN_SECRET (shared secret for admin/debug auth)
+ * - WHATSAPP_OTP_DELIVERY (text|template; default text for Meta test recipients)
  */
 
 export const WHATSAPP_GRAPH_API_VERSION = 'v21.0';
@@ -53,6 +54,21 @@ export interface WhatsAppTemplateMessagePayload {
     components: WhatsAppTemplateComponent[];
   };
 }
+
+export interface WhatsAppTextMessagePayload {
+  messaging_product: 'whatsapp';
+  recipient_type: 'individual';
+  to: string;
+  type: 'text';
+  text: {
+    preview_url: boolean;
+    body: string;
+  };
+}
+
+export type WhatsAppMessagePayload =
+  | WhatsAppTemplateMessagePayload
+  | WhatsAppTextMessagePayload;
 
 export interface WhatsAppTemplateConfig {
   otpTemplateName: string;
@@ -239,15 +255,42 @@ export function buildGraphMessagesUrl(phoneNumberId: string): string {
   return `https://graph.facebook.com/${WHATSAPP_GRAPH_API_VERSION}/${id}/messages`;
 }
 
+/**
+ * Free-form text for Meta Cloud API test recipients (allowlisted numbers).
+ * Prefer this while `sharedmoney_otp` awaits approval; `hello_world` cannot carry an OTP.
+ */
+export function buildWhatsAppTextPayload(
+  toE164: string,
+  body: string,
+): WhatsAppTextMessagePayload {
+  const trimmedBody = body.trim();
+  if (!trimmedBody) {
+    throw new Error('Invalid request: text body is required');
+  }
+  if (trimmedBody.length > 4096) {
+    throw new Error('Invalid request: text body is too long');
+  }
+  return {
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to: toWhatsAppRecipient(toE164),
+    type: 'text',
+    text: {
+      preview_url: false,
+      body: trimmedBody,
+    },
+  };
+}
+
 export interface MetaSendResult {
   messageId: string | null;
   raw: unknown;
 }
 
-export async function sendWhatsAppTemplateMessage(options: {
+export async function sendWhatsAppMessage(options: {
   token: string;
   phoneNumberId: string;
-  payload: WhatsAppTemplateMessagePayload;
+  payload: WhatsAppMessagePayload;
   fetchImpl?: typeof fetch;
 }): Promise<MetaSendResult> {
   const url = buildGraphMessagesUrl(options.phoneNumberId);
@@ -289,4 +332,14 @@ export async function sendWhatsAppTemplateMessage(options: {
       : null;
 
   return { messageId, raw };
+}
+
+/** @deprecated Prefer sendWhatsAppMessage — kept for dry-run call sites. */
+export async function sendWhatsAppTemplateMessage(options: {
+  token: string;
+  phoneNumberId: string;
+  payload: WhatsAppTemplateMessagePayload;
+  fetchImpl?: typeof fetch;
+}): Promise<MetaSendResult> {
+  return sendWhatsAppMessage(options);
 }
