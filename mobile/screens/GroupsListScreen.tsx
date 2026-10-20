@@ -38,11 +38,12 @@ import { ANALYTICS_EVENTS } from "../utils/posthogEvents";
 import { getSeenGroupIds, markGroupSeen } from "../utils/seenGroups";
 import { partitionGroupsBySection } from "../utils/groupListSections";
 import { recordSentryListCounts } from "../utils/sentryTelemetry";
+import { balanceAmountColor, groupListBalanceWords } from "../utils/balanceRowLabels";
+import { formatCurrency } from "../utils/currency";
 import {
-  formatRecentBillAmount,
   listRecentBillSplits,
-  RECENT_BILLS_PREVIEW_COUNT,
-  relativeBillDate,
+  summarizeUnsettledOneTimeBills,
+  type OneTimeBillsHomeSummary,
   type RecentBillSplit,
 } from "../utils/recentBillSplits";
 import { CreateGroupScreen } from "./CreateGroupScreen";
@@ -71,7 +72,6 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
   const [showSplitBill, setShowSplitBill] = useState(false);
   const [splitBillToken, setSplitBillToken] = useState<string | undefined>();
   const [recentBills, setRecentBills] = useState<RecentBillSplit[]>([]);
-  const [showAllRecentBills, setShowAllRecentBills] = useState(false);
   const [formerGroupsExpanded, setFormerGroupsExpanded] = useState<boolean>(false);
   const [archivedGroupsExpanded, setArchivedGroupsExpanded] = useState<boolean>(false);
   const [seenGroupIds, setSeenGroupIds] = useState<Set<string> | null>(null);
@@ -161,6 +161,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
     setSplitBillToken(token);
     setShowSplitBill(true);
   };
+  const oneTimeSummary: OneTimeBillsHomeSummary | null = summarizeUnsettledOneTimeBills(recentBills);
 
   const handleGroupPress = (group: Group) => {
     if (user?.id) {
@@ -416,16 +417,6 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
           showsVerticalScrollIndicator={false}
           testID="groups-loading-placeholders"
         >
-          <Button
-            mode="contained"
-            icon="call-split"
-            disabled
-            testID="split-bill-entry"
-            style={styles.splitBillEntry}
-            contentStyle={styles.splitBillEntryContent}
-          >
-            Split a bill
-          </Button>
           <GroupsHomeSkeletonRows embedded />
         </ScrollView>
       ) : (
@@ -434,71 +425,6 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* Home is the single Split a bill entry: full-width under header, above groups. */}
-          {hasAnyVisibleGroups ? (
-            <Button
-              mode="contained"
-              icon="call-split"
-              testID="split-bill-entry"
-              style={styles.splitBillEntry}
-              contentStyle={styles.splitBillEntryContent}
-              onPress={() => openSplitBill()}
-            >
-              Split a bill
-            </Button>
-          ) : null}
-
-          {recentBills.length > 0 ? (
-            <View style={styles.recentBills} testID="recent-bills-row">
-              <Text variant="labelLarge" style={[styles.sectionHeaderLabel, { color: theme.colors.onSurfaceVariant }]}>
-                Recent bills
-              </Text>
-              {(showAllRecentBills
-                ? recentBills
-                : recentBills.slice(0, RECENT_BILLS_PREVIEW_COUNT)
-              ).map((bill) => {
-                const amount = formatRecentBillAmount(bill.amount_minor, bill.currency);
-                const people = bill.people_count === 1
-                  ? "1 person"
-                  : `${bill.people_count} people`;
-                const when = relativeBillDate(bill.remembered_at);
-                return (
-                  <TouchableRipple
-                    key={bill.token}
-                    testID={`recent-bill-${bill.token.slice(0, 8)}`}
-                    onPress={() => openSplitBill(bill.token)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Open recent bill ${bill.identity}, ${amount}, ${people}${when ? `, ${when}` : ""}`}
-                    style={[styles.recentBillRow, { borderBottomColor: theme.colors.outlineVariant }]}
-                  >
-                    <View style={styles.recentBillContent}>
-                      <View style={{ flex: 1, minWidth: 0 }}>
-                        <Text variant="bodyLarge" numberOfLines={1} style={{ fontWeight: "600" }}>
-                          {bill.identity}
-                        </Text>
-                        <Text variant="bodySmall" numberOfLines={1} style={{ color: theme.colors.onSurfaceVariant }}>
-                          {amount} · {people}{when ? ` · ${when}` : ""}
-                        </Text>
-                      </View>
-                      <Icon source="chevron-right" size={20} color={theme.colors.onSurfaceVariant} />
-                    </View>
-                  </TouchableRipple>
-                );
-              })}
-              {!showAllRecentBills && recentBills.length > RECENT_BILLS_PREVIEW_COUNT ? (
-                <Button
-                  mode="text"
-                  compact
-                  testID="recent-bills-see-all"
-                  onPress={() => setShowAllRecentBills(true)}
-                  style={{ alignSelf: "flex-start", marginTop: 4 }}
-                >
-                  See all
-                </Button>
-              ) : null}
-            </View>
-          ) : null}
-
           {notificationsEnabled && shouldShowNotificationPrimer({
             platform: Platform.OS,
             activeGroupCount: activeGroups.length,
@@ -557,24 +483,26 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                   maxWidth: 280,
                 }}
               >
-                Start with a one-time bill, or create a group for ongoing expenses.
+                Create a group for ongoing shared expenses with friends or roommates.
               </Text>
               <Button
                 mode="contained"
-                icon="call-split"
-                onPress={() => openSplitBill()}
-                testID="split-bill-entry"
-                style={styles.emptySplitBill}
-                contentStyle={styles.splitBillEntryContent}
+                onPress={() => setShowCreateGroup(true)}
+                testID="groups-empty-create"
+                style={styles.emptyCreateGroup}
+                contentStyle={{ minHeight: 48 }}
               >
-                Split a bill
+                Create a group
               </Button>
               <Button
                 mode="text"
-                onPress={() => setShowCreateGroup(true)}
-                testID="groups-empty-create"
+                compact
+                onPress={() => openSplitBill()}
+                testID="home-empty-one-time-split"
+                style={{ marginTop: 8 }}
+                labelStyle={{ fontWeight: "500" }}
               >
-                Create a group
+                Just one bill? Split it without a group
               </Button>
             </View>
           ) : (
@@ -684,6 +612,67 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                   ) : null}
                 </View>
               ) : null}
+
+              {/* Quiet one-time bills row — only when local unsettled net exists. */}
+              {oneTimeSummary ? (
+                <Surface
+                  style={[styles.groupItem, { backgroundColor: theme.colors.surface, marginTop: 12 }]}
+                  elevation={0}
+                >
+                  <TouchableOpacity
+                    testID="one-time-bills-row"
+                    style={[styles.groupTouchable, expandedText && styles.groupTouchableExpanded]}
+                    onPress={() => openSplitBill()}
+                    activeOpacity={0.7}
+                    accessibilityRole="button"
+                    accessibilityLabel={`One-time bills, ${groupListBalanceWords(
+                      oneTimeSummary.net_minor / 100,
+                      formatCurrency(Math.abs(oneTimeSummary.net_minor) / 100, oneTimeSummary.currency),
+                    )}`}
+                  >
+                    <View style={[styles.groupMainContent, expandedText && styles.groupMainContentExpanded]}>
+                      <View style={styles.groupInfo}>
+                        <Text
+                          variant="titleMedium"
+                          style={[styles.groupName, { color: theme.colors.onSurface }]}
+                          numberOfLines={1}
+                        >
+                          One-time bills
+                        </Text>
+                      </View>
+                    </View>
+                    <View
+                      style={[
+                        styles.oneTimeBalanceSlot,
+                        expandedText && styles.balanceBadgeExpanded,
+                      ]}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 13,
+                          lineHeight: 16,
+                          fontWeight: "700",
+                          textAlign: "right",
+                          color: balanceAmountColor(
+                            oneTimeSummary.net_minor / 100,
+                            theme.colors,
+                            { dark: theme.dark },
+                          ),
+                        }}
+                        numberOfLines={2}
+                      >
+                        {groupListBalanceWords(
+                          oneTimeSummary.net_minor / 100,
+                          formatCurrency(
+                            Math.abs(oneTimeSummary.net_minor) / 100,
+                            oneTimeSummary.currency,
+                          ),
+                        )}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                </Surface>
+              ) : null}
             </>
           )}
 
@@ -766,16 +755,6 @@ export function GroupsHomeSkeleton() {
         showsVerticalScrollIndicator={false}
         testID="groups-loading-placeholders"
       >
-        <Button
-          mode="contained"
-          icon="call-split"
-          disabled
-          testID="split-bill-entry"
-          style={styles.splitBillEntry}
-          contentStyle={styles.splitBillEntryContent}
-        >
-          Split a bill
-        </Button>
         <GroupsHomeSkeletonRows embedded />
       </ScrollView>
     </View>
@@ -798,21 +777,6 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: 16,
   },
-  splitBillEntry: {
-    marginBottom: 12,
-    alignSelf: "stretch",
-  },
-  splitBillEntryContent: {
-    minHeight: 48,
-  },
-  emptySplitBill: {
-    alignSelf: "stretch",
-    marginBottom: 8,
-    maxWidth: 320,
-  },
-  recentBills: {
-    marginBottom: 16,
-  },
   sectionHeaderLabel: {
     fontWeight: "700",
     letterSpacing: 0.2,
@@ -824,21 +788,22 @@ const styles = StyleSheet.create({
     minHeight: 44,
     marginBottom: 8,
   },
-  recentBillRow: {
-    minHeight: 48,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  recentBillContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 10,
-    paddingHorizontal: 2,
-    gap: 8,
-  },
   emptyContainer: {
     paddingVertical: 64,
     alignItems: "center",
     justifyContent: "center",
+  },
+  emptyCreateGroup: {
+    alignSelf: "stretch",
+    maxWidth: 320,
+  },
+  oneTimeBalanceSlot: {
+    width: GROUP_BALANCE_SLOT_WIDTH,
+    flexShrink: 0,
+    alignItems: "flex-end",
+    justifyContent: "center",
+    paddingHorizontal: 2,
+    paddingVertical: 2,
   },
   groupItem: {
     marginBottom: 9,
@@ -944,6 +909,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     minHeight: 44,
+    // Match active group row content inset (groupTouchable paddingHorizontal).
     paddingHorizontal: 14,
     gap: 10,
   },
@@ -951,16 +917,15 @@ const styles = StyleSheet.create({
     paddingTop: 0,
     paddingBottom: 4,
   },
-  // Nested Archived/Former children: indent + hairline on canvas (no surface/r14 cards).
+  // Nested Archived/Former children: same horizontal inset as header / active rows.
   nestedGroupRow: {
-    marginLeft: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   nestedGroupTouchable: {
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 12,
-    paddingHorizontal: 4,
+    paddingHorizontal: 14,
     gap: 8,
   },
   nestedGroupName: {

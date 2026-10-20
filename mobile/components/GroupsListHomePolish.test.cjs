@@ -32,8 +32,9 @@ function loadStyles(filename) {
     ) {
       styles = new Function(
         "StyleSheet",
+        "GROUP_BALANCE_SLOT_WIDTH",
         `return (${node.initializer.arguments[0].getText(source)});`
-      )({ hairlineWidth: 1 });
+      )({ hairlineWidth: 1 }, 152);
     }
     ts.forEachChild(node, visit);
   }
@@ -53,11 +54,9 @@ test("Archived and Former share disclosure header inset + compact divider childr
   const styles = loadStyles(
     path.join(__dirname, "../screens/GroupsListScreen.tsx")
   );
-  assert.ok(
-    styles.nestedGroupRow.marginLeft >= 12 &&
-      styles.nestedGroupRow.marginLeft <= 16,
-    "Archived/Former indent children ~12–16px"
-  );
+  // Inset is padding on the touchable, not a left margin on the row.
+  assert.equal(styles.nestedGroupRow.marginLeft, undefined);
+  assert.equal(styles.nestedGroupTouchable.paddingHorizontal, 14);
   assert.equal(styles.nestedGroupRow.borderBottomWidth, 1);
   assert.equal(styles.nestedGroupRow.borderRadius, undefined);
   assert.equal(styles.nestedGroupName.fontWeight, "600");
@@ -73,10 +72,8 @@ test("preview mirror keeps shared disclosure inset + nested divider chrome", () 
     path.join(__dirname, "../screens/HomePolishPreviewScreen.tsx")
   );
   assert.ok((styles.sectionAccordion.minHeight ?? 0) >= 44);
-  assert.ok(
-    styles.nestedGroupRow.marginLeft >= 12 &&
-      styles.nestedGroupRow.marginLeft <= 16
-  );
+  assert.equal(styles.nestedGroupRow.marginLeft, undefined);
+  assert.equal(styles.nestedGroupTouchable.paddingHorizontal, 14);
   assert.equal(styles.nestedGroupRow.borderBottomWidth, 1);
   assert.equal(styles.groupRow.borderRadius, 14);
   assert.equal(styles.groupRow.marginBottom, 9);
@@ -182,9 +179,18 @@ function harnessWithFormer(loading = false) {
     "../utils/posthogEvents": { ANALYTICS_EVENTS: {} },
     "../utils/recentBillSplits": {
       listRecentBillSplits: async () => [],
+      summarizeUnsettledOneTimeBills: () => null,
       RECENT_BILLS_PREVIEW_COUNT: 3,
       formatRecentBillAmount: (minor, currency) => `$${(minor / 100).toFixed(2)}`,
       relativeBillDate: () => "Today",
+    },
+    "../utils/balanceRowLabels": {
+      balanceAmountColor: () => "#0a7",
+      groupListBalanceWords: (amount, formatted) =>
+        amount > 0 ? `You're owed ${formatted}` : amount < 0 ? `You owe ${formatted}` : "Even",
+    },
+    "../utils/currency": {
+      formatCurrency: (amount, currency) => `$${Number(amount).toFixed(2)}`,
     },
     "../components/NotificationBell": { NotificationBell: "NotificationBell" },
     "../components/Skeleton": { Skeleton: "Skeleton", SkeletonGroup: "SkeletonGroup" },
@@ -276,8 +282,8 @@ function harnessWithFormer(loading = false) {
     },
     setFormerExpanded(expanded) {
       // showCreateGroup, showSplitBill, splitBillToken, recentBills,
-      // showAllRecentBills, formerGroupsExpanded.
-      state[5] = expanded;
+      // formerGroupsExpanded (index 4), archivedGroupsExpanded…
+      state[4] = expanded;
     },
   };
 }
@@ -328,12 +334,11 @@ test("expanded Former children use compact divider rows like Archived", () => {
   assert.equal(activeBadge.props.loading, true);
 });
 
-test("Home keeps Split a bill above Groups when there are no recent bills", () => {
+test("Home with groups has no Split CTA or Recent bills; only Groups header", () => {
   const tree = harnessWithFormer().render();
-  const split = nodes(tree).find((n) => n.props?.testID === "split-bill-entry");
-  assert.ok(split, "Split a bill must render with groups even when recent bills are empty");
-  assert.equal(split.props.children, "Split a bill");
+  assert.equal(nodes(tree).some((n) => n.props?.testID === "split-bill-entry"), false);
   assert.equal(nodes(tree).some((n) => n.props?.testID === "recent-bills-row"), false);
+  assert.equal(nodes(tree).some((n) => n.props?.testID === "one-time-bills-row"), false);
   assert.ok(nodes(tree).find((n) => n.props?.testID === "groups-section-header"));
 });
 
@@ -347,11 +352,9 @@ test("bootstrap and initial Groups query share the same loading rows and header 
     assert.ok(rows);
     const header = nodes(tree).find(node => node.type === "Header");
     assert.ok(header);
-    const split = nodes(tree).find(node =>
+    assert.equal(nodes(tree).some(node =>
       node.type === "Button" && node.props.testID === "split-bill-entry"
-    );
-    assert.equal(split.props.mode, "contained");
-    assert.deepEqual(flatten(split.props.style), realStyles.splitBillEntry);
+    ), false);
     assert.equal(nodes(tree).some(node => node.type === "ActivityIndicator"), false);
   }
   const rows = app.skeletonRows();
@@ -370,15 +373,11 @@ test("bootstrap and initial Groups query share the same loading rows and header 
   }
 });
 
-test("Home with groups exposes a full-width Split a bill entry above the list", () => {
+test("Home with groups has no full-width Split a bill entry", () => {
   const tree = harnessWithFormer().render();
-  const split = nodes(tree).find(node => node.props?.testID === "split-bill-entry");
-  assert.ok(split);
-  assert.equal(split.props.mode, "contained");
-  assert.equal(split.props.children, "Split a bill");
-  const realStyles = loadStyles(path.join(__dirname, "../screens/GroupsListScreen.tsx"));
-  assert.deepEqual(flatten(split.props.style), realStyles.splitBillEntry);
+  assert.equal(nodes(tree).some(node => node.props?.testID === "split-bill-entry"), false);
   assert.equal(nodes(tree).some(node => node.props?.testID === "groups-empty-state"), false);
+  assert.ok(nodes(tree).find(node => node.props?.testID === "new-group-action"));
 });
 
 test("top-level cards without a description keep the skeleton's description line height", () => {
@@ -391,7 +390,7 @@ test("top-level cards without a description keep the skeleton's description line
   assert.equal(nodes(tree).find(n => n.props?.testID === "group-subtitle-spacer-g-active"), undefined);
 });
 
-test("Home empty state keeps a single Split a bill CTA and no duplicate header entry", () => {
+test("Home empty state: Create a group primary + tertiary one-time split link", () => {
   const overridesPath = path.join(__dirname, "../screens/GroupsListScreen.tsx");
   // Reuse the former harness wiring but with an empty group list.
   let stateIndex = 0;
@@ -469,10 +468,20 @@ test("Home empty state keeps a single Split a bill CTA and no duplicate header e
       if (id === "../utils/recentBillSplits") {
         return {
           listRecentBillSplits: async () => [],
+          summarizeUnsettledOneTimeBills: () => null,
           RECENT_BILLS_PREVIEW_COUNT: 3,
           formatRecentBillAmount: () => "$0.00",
           relativeBillDate: () => "Today",
         };
+      }
+      if (id === "../utils/balanceRowLabels") {
+        return {
+          balanceAmountColor: () => "#0a7",
+          groupListBalanceWords: () => "Even",
+        };
+      }
+      if (id === "../utils/currency") {
+        return { formatCurrency: (amount) => `$${Number(amount).toFixed(2)}` };
       }
       if (id === "../utils/sentryTelemetry") return { recordSentryListCounts: () => {} };
       if (id === "../utils/posthogAnalytics") return { captureIdentifiedAnalyticsEvent: () => {} };
@@ -500,9 +509,10 @@ test("Home empty state keeps a single Split a bill CTA and no duplicate header e
   const tree = module.exports.GroupsListScreen({});
   const empty = nodes(tree).find((n) => n.props?.testID === "groups-empty-state");
   assert.ok(empty);
-  const splitEntries = nodes(tree).filter((n) => n.props?.testID === "split-bill-entry");
-  assert.equal(splitEntries.length, 1, "empty Home must not duplicate Split a bill");
-  assert.equal(splitEntries[0].props.children, "Split a bill");
-  assert.ok(nodes(empty).some((n) => n.props?.testID === "split-bill-entry"));
+  assert.equal(nodes(tree).some((n) => n.props?.testID === "split-bill-entry"), false);
+  const link = nodes(empty).find((n) => n.props?.testID === "home-empty-one-time-split");
+  assert.ok(link);
+  assert.equal(link.props.children, "Just one bill? Split it without a group");
+  assert.equal(link.props.mode, "text");
   assert.ok(nodes(empty).some((n) => n.props?.testID === "groups-empty-create"));
 });

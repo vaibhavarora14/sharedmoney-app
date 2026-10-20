@@ -57,17 +57,21 @@ import {
   SUPPORT_TOPICS,
   type SupportTopic,
 } from "../utils/supportEmail";
+import { SplitBillScreen } from "./SplitBillScreen";
 
 interface ProfileSetupScreenProps {
   onComplete: () => void;
   onBack?: () => void;
   onOpenCurrencyPreview?: () => void;
+  /** Opens the one-time bill split screen (Recent bills live there). */
+  onOpenOneTimeBills?: () => void;
 }
 
 export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
   onComplete,
   onBack,
   onOpenCurrencyPreview,
+  onOpenOneTimeBills,
 }) => {
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
@@ -77,6 +81,7 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
   );
   const [showCountryPicker, setShowCountryPicker] = useState(false);
   const [supportSheetVisible, setSupportSheetVisible] = useState(false);
+  const [showOneTimeBills, setShowOneTimeBills] = useState(false);
   const [loading, setLoading] = useState(false);
   const [notificationWorking, setNotificationWorking] = useState(false);
   const theme = useTheme();
@@ -495,6 +500,44 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
               </Button>
             ) : null}
 
+            <Pressable
+              testID="profile-one-time-bills"
+              accessibilityRole="button"
+              accessibilityLabel="One-time bills"
+              disabled={loading}
+              onPress={() => {
+                if (onOpenOneTimeBills) onOpenOneTimeBills();
+                else setShowOneTimeBills(true);
+              }}
+              style={[
+                styles.notificationSetting,
+                {
+                  borderTopColor: theme.colors.outlineVariant,
+                  opacity: loading ? 0.5 : 1,
+                },
+              ]}
+            >
+              <View style={styles.notificationSettingCopy}>
+                <Text
+                  variant="titleSmall"
+                  style={{ color: theme.colors.onSurface, fontWeight: "700" }}
+                >
+                  One-time bills
+                </Text>
+                <Text
+                  variant="bodySmall"
+                  style={{ color: theme.colors.onSurfaceVariant }}
+                >
+                  Split a bill without a group. Recent bills live here.
+                </Text>
+              </View>
+              <Icon
+                source="chevron-right"
+                size={20}
+                color={theme.colors.onSurfaceVariant}
+              />
+            </Pressable>
+
             {notificationsEnabled ? (
               <View
                 style={[
@@ -908,6 +951,10 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
           <Button onPress={() => setSupportSheetVisible(false)}>Cancel</Button>
         </Modal>
       </Portal>
+
+      {showOneTimeBills && !onOpenOneTimeBills ? (
+        <SplitBillScreen onDismiss={() => setShowOneTimeBills(false)} />
+      ) : null}
     </View>
   );
 };

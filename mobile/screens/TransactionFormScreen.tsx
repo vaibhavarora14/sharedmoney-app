@@ -65,6 +65,8 @@ import {
     splitsFromAmountMap,
     sumSelectedAmounts,
 } from "../utils/splits";
+import { useGroups } from "../hooks/useGroups";
+import { SplitBillScreen, type SplitBillDraft } from "./SplitBillScreen";
 
 interface TransactionFormScreenProps {
   transaction?: Transaction | null;
@@ -76,6 +78,11 @@ interface TransactionFormScreenProps {
   defaultCurrency?: string;
   defaultSplitAmong?: string[];
   groupId?: string;
+  /**
+   * Global Add expense only (!groupId). Opens one-time split with amount/currency carry-over.
+   * When omitted, a local SplitBillScreen modal is used.
+   */
+  onOpenOneTimeSplit?: (draft: SplitBillDraft) => void;
 }
 
 const CATEGORY_OPTIONS = [
@@ -109,6 +116,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
   defaultCurrency,
   defaultSplitAmong,
   groupId,
+  onOpenOneTimeSplit,
 }) => {
   const effectiveDefaultCurrency = defaultCurrency || getDefaultCurrency();
   const theme = useTheme();
@@ -116,6 +124,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
   const insets = useSafeAreaInsets();
   const amountInputRef = useRef<RNTextInput>(null);
   const didDefaultSplitRef = useRef(false);
+  const isGlobalAddExpense = !groupId && !transaction;
 
   // Form state
   const [description, setDescription] = useState("");
@@ -130,12 +139,18 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
   const [showCurrencyPicker, setShowCurrencyPicker] = useState(false);
   const [currencySearch, setCurrencySearch] = useState("");
   const [showRateEditor, setShowRateEditor] = useState(false);
+  const [pickedGroupId, setPickedGroupId] = useState<string | undefined>();
+  const [showGroupPicker, setShowGroupPicker] = useState(false);
+  const [showOneTimeSplit, setShowOneTimeSplit] = useState(false);
+  const [oneTimeSplitDraft, setOneTimeSplitDraft] = useState<SplitBillDraft | undefined>();
+  const effectiveGroupId = groupId || pickedGroupId;
+  const { data: allGroups } = useGroups();
   const {
     groupSettings,
     rateBook,
     setGroupRate,
     clearGroupRate,
-  } = useCurrencyPreferences(groupId);
+  } = useCurrencyPreferences(effectiveGroupId);
   const settlementCurrency = groupSettings?.settlementCurrency;
   const [loading, setLoading] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -159,15 +174,23 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     data: participants,
     isLoading: isLoadingParticipants,
     error: participantsError,
-  } = useParticipants(groupId || null);
+  } = useParticipants(effectiveGroupId || null);
   const lastExpenseSplitQuery = useGroupLastExpenseSplitAmong(
-    transaction || !groupId ? null : groupId
+    transaction || !effectiveGroupId ? null : effectiveGroupId
   );
 
   // Memoized values
   const isGroupExpense = useMemo(
-    () => type === "expense" && !!groupId && (participants?.length || 0) > 0,
-    [type, groupId, participants?.length]
+    () => type === "expense" && !!effectiveGroupId && (participants?.length || 0) > 0,
+    [type, effectiveGroupId, participants?.length]
+  );
+  const pickedGroup = useMemo(
+    () => (allGroups || []).find((group) => group.id === pickedGroupId),
+    [allGroups, pickedGroupId],
+  );
+  const selectableGroups = useMemo(
+    () => (allGroups || []).filter((group) => group.user_status !== "left" && !group.archived_at),
+    [allGroups],
   );
 
   const activeParticipants = useMemo(
@@ -349,7 +372,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
         const lastSplitResolved =
           lastExpenseSplitQuery.isFetched
           || lastExpenseSplitQuery.isError
-          || !groupId
+          || !effectiveGroupId
           || Boolean(defaultSplitAmong && defaultSplitAmong.length > 0);
         if (!lastSplitResolved) return;
 
@@ -378,7 +401,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     lastExpenseSplitQuery.data,
     lastExpenseSplitQuery.isFetched,
     lastExpenseSplitQuery.isError,
-    groupId,
+    effectiveGroupId,
   ]);
 
   const formatDateForInput = (date: Date): string => {
@@ -920,6 +943,60 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
             </Card.Content>
           </Card>
 
+          {/* Global Add expense: pick a group, or split once without one. */}
+          {isGlobalAddExpense ? (
+            <Card style={styles.card} mode="outlined" testID="global-expense-group-picker">
+              <Card.Content>
+                <Pressable
+                  onPress={() => setShowGroupPicker(true)}
+                  disabled={loading}
+                  accessibilityRole="button"
+                  accessibilityLabel={pickedGroup ? `Group, ${pickedGroup.name}` : "Choose a group"}
+                >
+                  <View style={styles.selectRow}>
+                    <IconButton icon="account-group-outline" size={24} accessible={false} importantForAccessibility="no" />
+                    <View style={styles.selectRowContent}>
+                      <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                        Group
+                      </Text>
+                      <Text
+                        variant="bodyLarge"
+                        numberOfLines={1}
+                        style={{
+                          color: pickedGroup ? theme.colors.onSurface : theme.colors.onSurfaceVariant,
+                        }}
+                      >
+                        {pickedGroup?.name || "Choose a group"}
+                      </Text>
+                    </View>
+                    <IconButton icon="chevron-down" size={24} accessible={false} importantForAccessibility="no" />
+                  </View>
+                </Pressable>
+                <Button
+                  mode="text"
+                  compact
+                  testID="split-once-link"
+                  onPress={() => {
+                    const draft: SplitBillDraft = {
+                      amount: amount.trim() || undefined,
+                      currency: currency || undefined,
+                    };
+                    if (onOpenOneTimeSplit) {
+                      onOpenOneTimeSplit(draft);
+                      return;
+                    }
+                    setOneTimeSplitDraft(draft);
+                    setShowOneTimeSplit(true);
+                  }}
+                  style={{ alignSelf: "flex-start", marginTop: 4 }}
+                  labelStyle={{ fontWeight: "500" }}
+                >
+                  Not in a group? Split once
+                </Button>
+              </Card.Content>
+            </Card>
+          ) : null}
+
           {/* SPLITTING CARD - Only for group expenses */}
           {isGroupExpense && (
             <Card style={styles.card} mode="outlined">
@@ -1332,7 +1409,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
         </TouchableOpacity>
       </Modal>
 
-      {groupId && settlementCurrency ? (
+      {effectiveGroupId && settlementCurrency ? (
         <ExchangeRateEditor
           visible={showRateEditor}
           from={currency}
@@ -1341,12 +1418,85 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
           rateBook={rateBook}
           onDismiss={() => setShowRateEditor(false)}
           onSave={(rate) => {
-            void setGroupRate(groupId, currency, settlementCurrency, rate, "expense");
+            void setGroupRate(effectiveGroupId, currency, settlementCurrency, rate, "expense");
             setShowRateEditor(false);
           }}
           onResetToMarket={() => {
-            void clearGroupRate(groupId, currency, settlementCurrency);
+            void clearGroupRate(effectiveGroupId, currency, settlementCurrency);
             setShowRateEditor(false);
+          }}
+        />
+      ) : null}
+
+      <Modal
+        visible={showGroupPicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowGroupPicker(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowGroupPicker(false)}
+        >
+          <View
+            style={[styles.pickerModal, { backgroundColor: theme.colors.surface }]}
+            onStartShouldSetResponder={() => true}
+          >
+            <View style={styles.pickerHeader}>
+              <Text variant="titleMedium" style={{ fontWeight: "700" }}>
+                Choose a group
+              </Text>
+              <IconButton icon="close" onPress={() => setShowGroupPicker(false)} />
+            </View>
+            <FlatList
+              data={selectableGroups}
+              keyExtractor={(item) => item.id}
+              testID="global-expense-group-list"
+              contentContainerStyle={styles.pickerList}
+              ListEmptyComponent={
+                <Text
+                  variant="bodyMedium"
+                  style={{ color: theme.colors.onSurfaceVariant, padding: 16 }}
+                >
+                  No active groups yet.
+                </Text>
+              }
+              renderItem={({ item }) => {
+                const selected = item.id === pickedGroupId;
+                return (
+                  <TouchableOpacity
+                    testID={`global-expense-group-${item.id}`}
+                    onPress={() => {
+                      setPickedGroupId(item.id);
+                      didDefaultSplitRef.current = false;
+                      setShowGroupPicker(false);
+                    }}
+                    style={[
+                      styles.pickerItem,
+                      selected && { backgroundColor: theme.colors.primaryContainer },
+                    ]}
+                  >
+                    <Text variant="bodyLarge" style={{ flex: 1 }} numberOfLines={1}>
+                      {item.name}
+                    </Text>
+                    {selected ? (
+                      <IconButton icon="check" size={20} iconColor={theme.colors.primary} accessible={false} importantForAccessibility="no" />
+                    ) : null}
+                  </TouchableOpacity>
+                );
+              }}
+            />
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {showOneTimeSplit ? (
+        <SplitBillScreen
+          draft={oneTimeSplitDraft}
+          onDismiss={() => {
+            setShowOneTimeSplit(false);
+            setOneTimeSplitDraft(undefined);
           }}
         />
       ) : null}

@@ -1,10 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { BILL_TOKEN_PATTERN, type BillSplitMode } from "./billSplit";
+import { BILL_TOKEN_PATTERN, type BillSplitMode, type BillSplitSession } from "./billSplit";
 import { formatCurrency } from "./currency";
 
 const STORAGE_KEY = "recent-bill-splits-v2";
 const LAST_CURRENCY_KEY = "last-bill-split-currency";
-/** Persist enough history that Home can show 3 + “See all”. */
+/** Persist enough history that the split screen can show 3 + “See all”. */
 const MAX_STORED = 20;
 export const RECENT_BILLS_PREVIEW_COUNT = 3;
 
@@ -17,8 +17,24 @@ export interface RecentBillSplit {
   identity: string;
   people_count: number;
   remembered_at: string;
+  /**
+   * Local settlement tracking (no hosted DB). True when every participant has
+   * confirmed their share, or the viewer’s net is zero.
+   */
+  settled: boolean;
+  /**
+   * Signed minor units from the viewer’s perspective on this one-time bill.
+   * Positive = you’re owed; negative = you owe. Honest local estimate only.
+   */
+  your_net_minor: number;
   /** @deprecated kept for v1 migrations */
   title?: string;
+}
+
+export interface OneTimeBillsHomeSummary {
+  net_minor: number;
+  currency: string;
+  unsettled_count: number;
 }
 
 function storageKey(userId: string): string {
@@ -36,11 +52,20 @@ function isRecentBill(value: unknown): value is RecentBillSplit {
     typeof row.identity === "string" &&
     typeof row.people_count === "number" &&
     typeof row.remembered_at === "string" &&
+    typeof row.settled === "boolean" &&
+    typeof row.your_net_minor === "number" &&
     (row.mode === "equal" || row.mode === "shares" || row.mode === "unequal")
   );
 }
 
-/** Migrate v1 rows that only had a `title` into the identity shape. */
+/** Creator paid the total; net owed to them is total − their share. */
+export function creatorNetMinor(amountMinor: number, peopleCount: number): number {
+  const count = Math.max(2, peopleCount);
+  const yourShare = Math.floor(amountMinor / count);
+  return amountMinor - yourShare;
+}
+
+/** Migrate v1/v2 rows that lack settlement fields into the current shape. */
 function coerceRecentBill(value: unknown): RecentBillSplit | null {
   if (isRecentBill(value)) return value;
   if (!value || typeof value !== "object") return null;
@@ -61,14 +86,23 @@ function coerceRecentBill(value: unknown): RecentBillSplit | null {
     : typeof row.title === "string" && row.title.trim()
       ? row.title.trim()
       : "Bill";
+  const people_count = typeof row.people_count === "number" ? row.people_count : 2;
+  const settled = typeof row.settled === "boolean" ? row.settled : false;
+  const your_net_minor = typeof row.your_net_minor === "number"
+    ? row.your_net_minor
+    : settled
+      ? 0
+      : creatorNetMinor(row.amount_minor, people_count);
   return {
     token: row.token,
     amount_minor: row.amount_minor,
     currency: row.currency,
     mode,
     identity,
-    people_count: typeof row.people_count === "number" ? row.people_count : 2,
+    people_count,
     remembered_at: row.remembered_at,
+    settled,
+    your_net_minor,
   };
 }
 
@@ -106,6 +140,67 @@ export function recentBillIdentity(input: {
   return "Bill";
 }
 
+/** Derive local settled + net from a live session (creator = index 0). */
+export function settlementFromBillSession(
+  session: BillSplitSession,
+  viewerParticipantId?: string | null,
+): { settled: boolean; your_net_minor: number } {
+  const settled = session.participants.length > 0
+    && session.participants.every((person) => person.confirmed);
+  if (settled) return { settled: true, your_net_minor: 0 };
+
+  const viewer = viewerParticipantId
+    ? session.participants.find((person) => person.id === viewerParticipantId)
+    : session.participants[0];
+  if (!viewer) {
+    return {
+      settled: false,
+      your_net_minor: creatorNetMinor(session.amount_minor, session.participants.length),
+    };
+  }
+  // Creator (first participant) paid the total → owed everyone else’s shares.
+  if (viewer.id === session.participants[0]?.id) {
+    const others = session.amount_minor - viewer.amount_minor;
+    return { settled: false, your_net_minor: others };
+  }
+  // Other participants owe their share until confirmed.
+  return {
+    settled: viewer.confirmed,
+    your_net_minor: viewer.confirmed ? 0 : -viewer.amount_minor,
+  };
+}
+
+/**
+ * Home quiet row: one net across unsettled local bills.
+ * Picks the currency with the largest absolute unsettled net (honest, no FX).
+ */
+export function summarizeUnsettledOneTimeBills(
+  bills: RecentBillSplit[],
+): OneTimeBillsHomeSummary | null {
+  const unsettled = bills.filter((bill) => !bill.settled && Math.abs(bill.your_net_minor) >= 1);
+  if (unsettled.length === 0) return null;
+
+  const byCurrency = new Map<string, number>();
+  for (const bill of unsettled) {
+    const code = bill.currency.toUpperCase();
+    byCurrency.set(code, (byCurrency.get(code) ?? 0) + bill.your_net_minor);
+  }
+  let currency = unsettled[0].currency.toUpperCase();
+  let net_minor = byCurrency.get(currency) ?? 0;
+  for (const [code, net] of byCurrency) {
+    if (Math.abs(net) > Math.abs(net_minor)) {
+      currency = code;
+      net_minor = net;
+    }
+  }
+  if (Math.abs(net_minor) < 1) return null;
+  return {
+    net_minor,
+    currency,
+    unsettled_count: unsettled.length,
+  };
+}
+
 export async function listRecentBillSplits(userId: string): Promise<RecentBillSplit[]> {
   try {
     const raw = await AsyncStorage.getItem(storageKey(userId));
@@ -122,7 +217,7 @@ export async function listRecentBillSplits(userId: string): Promise<RecentBillSp
   }
 }
 
-/** Keep recent bills so a closed bill can be reopened from Home. */
+/** Keep recent bills so a closed bill can be reopened from the split screen. */
 export async function rememberRecentBillSplit(
   userId: string,
   entry: {
@@ -135,9 +230,15 @@ export async function rememberRecentBillSplit(
     creatorName?: string | null;
     firstPayeeName?: string | null;
     people_count?: number;
+    settled?: boolean;
+    your_net_minor?: number;
   },
 ): Promise<RecentBillSplit[]> {
   if (!BILL_TOKEN_PATTERN.test(entry.token)) return listRecentBillSplits(userId);
+  const people_count = entry.people_count && entry.people_count > 0 ? entry.people_count : 2;
+  const settled = entry.settled ?? false;
+  const your_net_minor = entry.your_net_minor
+    ?? (settled ? 0 : creatorNetMinor(entry.amount_minor, people_count));
   const next: RecentBillSplit = {
     token: entry.token,
     amount_minor: entry.amount_minor,
@@ -149,8 +250,10 @@ export async function rememberRecentBillSplit(
         creatorName: entry.creatorName,
         firstPayeeName: entry.firstPayeeName,
       }),
-    people_count: entry.people_count && entry.people_count > 0 ? entry.people_count : 2,
+    people_count,
     remembered_at: new Date().toISOString(),
+    settled,
+    your_net_minor,
   };
   const existing = await listRecentBillSplits(userId);
   const merged = [next, ...existing.filter((row) => row.token !== next.token)].slice(0, MAX_STORED);
@@ -159,6 +262,26 @@ export async function rememberRecentBillSplit(
     await AsyncStorage.setItem(LAST_CURRENCY_KEY, entry.currency.toUpperCase());
   } catch {
     // Ephemeral cache only — failure must not block split flow.
+  }
+  return merged;
+}
+
+/** Patch settlement fields after a confirm/read without bumping remembered_at order. */
+export async function updateRecentBillSettlement(
+  userId: string,
+  token: string,
+  patch: { settled: boolean; your_net_minor: number },
+): Promise<RecentBillSplit[]> {
+  const existing = await listRecentBillSplits(userId);
+  const merged = existing.map((row) =>
+    row.token === token
+      ? { ...row, settled: patch.settled, your_net_minor: patch.your_net_minor }
+      : row,
+  );
+  try {
+    await AsyncStorage.setItem(storageKey(userId), JSON.stringify(merged));
+  } catch {
+    // ignore
   }
   return merged;
 }

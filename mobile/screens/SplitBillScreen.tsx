@@ -34,9 +34,16 @@ import { allocateBillSplit, billAmountMinor, billSplitUrl, type BillSplitMode } 
 import { CURRENCIES, formatCurrency, getCurrencyName, getDefaultCurrency, getLocaleCurrencyCode } from "../utils/currency";
 import { existingPersonLabel, filterAndSortExistingPeople } from "../utils/peoplePicker";
 import {
+  formatRecentBillAmount,
+  listRecentBillSplits,
+  RECENT_BILLS_PREVIEW_COUNT,
   readLastBillSplitCurrency,
+  relativeBillDate,
   rememberRecentBillSplit,
+  settlementFromBillSession,
+  updateRecentBillSettlement,
   writeLastBillSplitCurrency,
+  type RecentBillSplit,
 } from "../utils/recentBillSplits";
 import { distributeRemaining, sanitizeAmountInput } from "../utils/splits";
 
@@ -45,6 +52,11 @@ const CREATOR = "bill-creator";
 const KNOWN_PEOPLE_ROW_HEIGHT = 56;
 const KNOWN_PEOPLE_SKELETON_ROWS = 3;
 const CURRENCY_PICKER_LIMIT = 24;
+
+export type SplitBillDraft = {
+  amount?: string;
+  currency?: string;
+};
 
 function KnownPeopleSkeleton() {
   const theme = useTheme();
@@ -86,15 +98,78 @@ function formatSplitAmount(minor: number, currency: string): string {
   return formatCurrency(minor / 100, currency);
 }
 
-function BillSplitForm({ onCreated }: { onCreated: (token: string) => void }) {
+function RecentBillsBlock({
+  bills,
+  showAll,
+  onShowAll,
+  onOpen,
+}: {
+  bills: RecentBillSplit[];
+  showAll: boolean;
+  onShowAll: () => void;
+  onOpen: (token: string) => void;
+}) {
+  const theme = useTheme();
+  if (bills.length === 0) return null;
+  const visible = showAll ? bills : bills.slice(0, RECENT_BILLS_PREVIEW_COUNT);
+  return (
+    <View style={styles.recentBills} testID="recent-bills-row">
+      <Text variant="labelLarge" style={{ color: theme.colors.onSurfaceVariant, fontWeight: "700" }}>
+        Recent bills
+      </Text>
+      {visible.map((bill) => {
+        const amount = formatRecentBillAmount(bill.amount_minor, bill.currency);
+        const people = bill.people_count === 1 ? "1 person" : `${bill.people_count} people`;
+        const when = relativeBillDate(bill.remembered_at);
+        return (
+          <Pressable
+            key={bill.token}
+            testID={`recent-bill-${bill.token.slice(0, 8)}`}
+            onPress={() => onOpen(bill.token)}
+            accessibilityRole="button"
+            accessibilityLabel={`Open recent bill ${bill.identity}, ${amount}, ${people}${when ? `, ${when}` : ""}`}
+            style={[styles.recentBillRow, { borderBottomColor: theme.colors.outlineVariant }]}
+          >
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text variant="bodyLarge" numberOfLines={1} style={{ fontWeight: "600" }}>
+                {bill.identity}
+              </Text>
+              <Text variant="bodySmall" numberOfLines={1} style={{ color: theme.colors.onSurfaceVariant }}>
+                {amount} · {people}{when ? ` · ${when}` : ""}
+              </Text>
+            </View>
+            <Icon source="chevron-right" size={20} color={theme.colors.onSurfaceVariant} />
+          </Pressable>
+        );
+      })}
+      {!showAll && bills.length > RECENT_BILLS_PREVIEW_COUNT ? (
+        <Button mode="text" compact testID="recent-bills-see-all" onPress={onShowAll} style={{ alignSelf: "flex-start" }}>
+          See all
+        </Button>
+      ) : null}
+    </View>
+  );
+}
+
+function BillSplitForm({
+  onCreated,
+  onOpenRecent,
+  draft,
+}: {
+  onCreated: (token: string) => void;
+  onOpenRecent: (token: string) => void;
+  draft?: SplitBillDraft;
+}) {
   const theme = useTheme();
   const { user } = useAuth();
   const { data: profile } = useProfile();
   const directory = useBillSplitPeople();
-  const [amount, setAmount] = useState("");
-  const [currencyInput, setCurrency] = useState<string>();
-  const [currencyHydrated, setCurrencyHydrated] = useState(false);
+  const [amount, setAmount] = useState(draft?.amount ?? "");
+  const [currencyInput, setCurrency] = useState<string | undefined>(draft?.currency);
+  const [currencyHydrated, setCurrencyHydrated] = useState(!!draft?.currency);
   const [showCurrencyPicker, setShowCurrencyPicker] = useState(false);
+  const [recentBills, setRecentBills] = useState<RecentBillSplit[]>([]);
+  const [showAllRecentBills, setShowAllRecentBills] = useState(false);
   const currency = currencyInput
     ?? profile?.preferred_currency
     ?? getLocaleCurrencyCode()
@@ -133,18 +208,23 @@ function BillSplitForm({ onCreated }: { onCreated: (token: string) => void }) {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const last = await readLastBillSplitCurrency();
+      if (user?.id) {
+        const rows = await listRecentBillSplits(user.id);
+        if (!cancelled) setRecentBills(rows);
+      }
       if (cancelled || currencyInput) {
         setCurrencyHydrated(true);
         return;
       }
+      const last = await readLastBillSplitCurrency();
+      if (cancelled) return;
       if (last) setCurrency(last);
       setCurrencyHydrated(true);
     })();
     return () => {
       cancelled = true;
     };
-  }, [currencyInput]);
+  }, [currencyInput, user?.id]);
 
   const addPerson = (id: string, fullName: string) => {
     if (!fullName.trim() || people.length >= 49) return;
@@ -175,6 +255,7 @@ function BillSplitForm({ onCreated }: { onCreated: (token: string) => void }) {
           people_count: people.length + 1,
           creatorName: profile?.full_name || "Bill creator",
           firstPayeeName: people[0]?.full_name,
+          settled: false,
         });
       } else {
         await writeLastBillSplitCurrency(currency);
@@ -189,6 +270,12 @@ function BillSplitForm({ onCreated }: { onCreated: (token: string) => void }) {
   };
 
   return <>
+    <RecentBillsBlock
+      bills={recentBills}
+      showAll={showAllRecentBills}
+      onShowAll={() => setShowAllRecentBills(true)}
+      onOpen={onOpenRecent}
+    />
     <Text variant="bodyMedium">A one-time bill. No group needed.</Text>
     <TextInput
       label="Amount"
@@ -374,17 +461,24 @@ function BillSplitDetails({ token }: { token: string }) {
   const remembered = useRef(false);
 
   React.useEffect(() => {
-    if (!session.data || !user?.id || remembered.current) return;
-    remembered.current = true;
-    void rememberRecentBillSplit(user.id, {
-      token,
-      amount_minor: session.data.amount_minor,
-      currency: session.data.currency,
-      mode: session.data.mode,
-      people_count: session.data.participants.length,
-      creatorName: session.data.participants[0]?.display_name,
-      firstPayeeName: session.data.participants[1]?.display_name,
-    });
+    if (!session.data || !user?.id) return;
+    const settlement = settlementFromBillSession(session.data);
+    if (!remembered.current) {
+      remembered.current = true;
+      void rememberRecentBillSplit(user.id, {
+        token,
+        amount_minor: session.data.amount_minor,
+        currency: session.data.currency,
+        mode: session.data.mode,
+        people_count: session.data.participants.length,
+        creatorName: session.data.participants[0]?.display_name,
+        firstPayeeName: session.data.participants[1]?.display_name,
+        settled: settlement.settled,
+        your_net_minor: settlement.your_net_minor,
+      });
+      return;
+    }
+    void updateRecentBillSettlement(user.id, token, settlement);
   }, [session.data, token, user?.id]);
 
   const confirm = async (id: string) => {
@@ -397,6 +491,10 @@ function BillSplitDetails({ token }: { token: string }) {
       await queryClient.cancelQueries({ queryKey: key });
       const result = await confirmBillSplit(token, id);
       queryClient.setQueryData(key, result);
+      if (result && user?.id) {
+        const settlement = settlementFromBillSession(result);
+        void updateRecentBillSettlement(user.id, token, settlement);
+      }
       if (result) setMessage("Your share is confirmed. No money has moved.");
     } catch (err) { setMessage((err as Error).message); }
     finally { confirming.current = false; setBusy(false); }
@@ -442,7 +540,15 @@ function BillSplitDetails({ token }: { token: string }) {
   </>;
 }
 
-export function SplitBillScreen({ token: initialToken, onDismiss }: { token?: string; onDismiss: () => void }) {
+export function SplitBillScreen({
+  token: initialToken,
+  draft,
+  onDismiss,
+}: {
+  token?: string;
+  draft?: SplitBillDraft;
+  onDismiss: () => void;
+}) {
   const theme = useTheme();
   const [token, setToken] = useState(initialToken);
   // Portal.Host keeps Paper menus (Portal) in this modal layer so they paint above the sheet on web.
@@ -454,7 +560,15 @@ export function SplitBillScreen({ token: initialToken, onDismiss }: { token?: st
         </Appbar.Header>
         <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === "ios" ? "padding" : "height"}>
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
-            {token ? <BillSplitDetails key={token} token={token} /> : <BillSplitForm onCreated={setToken} />}
+            {token
+              ? <BillSplitDetails key={token} token={token} />
+              : (
+                <BillSplitForm
+                  draft={draft}
+                  onCreated={setToken}
+                  onOpenRecent={setToken}
+                />
+              )}
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -467,14 +581,67 @@ export function SplitBillFormPreview({
   loadingPeople = false,
   modeMenuOpen = false,
   disabledCreate = false,
+  draft,
+  showRecentBills = true,
 }: {
   loadingPeople?: boolean;
   modeMenuOpen?: boolean;
   disabledCreate?: boolean;
+  draft?: SplitBillDraft;
+  showRecentBills?: boolean;
 }) {
   const theme = useTheme();
   const [mode, setMode] = useState<BillSplitMode>("equal");
   const [menuOpen, setMenuOpen] = useState(modeMenuOpen);
+  const amountValue = draft?.amount ?? "42.00";
+  const currencyCode = draft?.currency ?? "USD";
+  const currencySymbol = CURRENCIES.find((item) => item.code === currencyCode)?.symbol ?? currencyCode;
+  const previewBills: RecentBillSplit[] = [
+    {
+      token: "a".repeat(64),
+      amount_minor: 4200,
+      currency: "USD",
+      mode: "equal",
+      identity: "Dinner at Nora",
+      people_count: 3,
+      remembered_at: new Date().toISOString(),
+      settled: false,
+      your_net_minor: 2800,
+    },
+    {
+      token: "b".repeat(64),
+      amount_minor: 12000,
+      currency: "USD",
+      mode: "equal",
+      identity: "Cabin weekend",
+      people_count: 4,
+      remembered_at: new Date(Date.now() - 86_400_000).toISOString(),
+      settled: false,
+      your_net_minor: 9000,
+    },
+    {
+      token: "c".repeat(64),
+      amount_minor: 2850,
+      currency: "EUR",
+      mode: "equal",
+      identity: "With Maya Patel",
+      people_count: 2,
+      remembered_at: new Date(Date.now() - 2 * 86_400_000).toISOString(),
+      settled: true,
+      your_net_minor: 0,
+    },
+    {
+      token: "d".repeat(64),
+      amount_minor: 1800,
+      currency: "USD",
+      mode: "equal",
+      identity: "Taxi home",
+      people_count: 2,
+      remembered_at: new Date(Date.now() - 5 * 86_400_000).toISOString(),
+      settled: false,
+      your_net_minor: 900,
+    },
+  ];
   const participants: Participant[] = [
     { id: CREATOR, group_id: "", type: "member", full_name: "Alex" },
     { id: "p-maya", group_id: "", type: "member", full_name: "Maya Patel" },
@@ -490,8 +657,16 @@ export function SplitBillFormPreview({
         <Appbar.Content title="Split a bill" />
       </Appbar.Header>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        {showRecentBills ? (
+          <RecentBillsBlock
+            bills={previewBills}
+            showAll={false}
+            onShowAll={() => {}}
+            onOpen={() => {}}
+          />
+        ) : null}
         <Text variant="bodyMedium">A one-time bill. No group needed.</Text>
-        <TextInput label="Amount" mode="outlined" value="42.00" testID="split-bill-amount" />
+        <TextInput label="Amount" mode="outlined" value={amountValue} testID="split-bill-amount" />
         <View>
           <Text variant="labelLarge" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 6 }}>
             Currency
@@ -506,7 +681,7 @@ export function SplitBillFormPreview({
               <Icon source="chevron-down" size={size} color={theme.colors.onSurfaceVariant} />
             )}
           >
-            USD ($)
+            {currencyCode} ({currencySymbol})
           </Button>
         </View>
         <Text variant="titleMedium">Who’s on the bill?</Text>
@@ -537,8 +712,8 @@ export function SplitBillFormPreview({
           amounts={{}}
           shares={{}}
           mode={mode}
-          totalAmount={42}
-          currency="USD"
+          totalAmount={Number.parseFloat(amountValue) || 42}
+          currency={currencyCode}
           requiredIds={[CREATOR]}
           modeTestID="split-bill-mode"
           showEqualSummary={false}
@@ -584,6 +759,15 @@ export function SplitBillFormPreview({
 const styles = StyleSheet.create({
   root: { flex: 1 },
   content: { padding: 20, paddingBottom: 40, gap: 16, width: "100%", maxWidth: WEB_MAX_WIDTH, alignSelf: "center" },
+  recentBills: { gap: 4, marginBottom: 4 },
+  recentBillRow: {
+    minHeight: 48,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
   person: { padding: 16, borderRadius: 12, gap: 8 },
   personSkeleton: { padding: 16, borderRadius: 12, gap: 8 },
   knownPeople: { gap: 4 },

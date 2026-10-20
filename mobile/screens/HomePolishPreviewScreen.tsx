@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
+import { ScrollView, StyleSheet, View } from "react-native";
 import {
   Appbar,
   Button,
@@ -20,19 +20,23 @@ import { TransactionsEmptyState } from "../components/TransactionsSection";
 import { WEB_MAX_WIDTH } from "../constants/layout";
 import { lightTheme } from "../theme";
 import { Balance, GroupStatsResponse } from "../types";
+import { balanceAmountColor, groupListBalanceWords } from "../utils/balanceRowLabels";
 import { formatCurrency } from "../utils/currency";
 import { SplitBillFormPreview } from "./SplitBillScreen";
 
 type SurfaceId =
   | "home-empty"
   | "home-list"
-  | "home-no-bills"
+  | "home-unsettled"
   | "home-loading"
+  | "profile-one-time"
+  | "add-expense"
   | "group-home"
   | "group-loading"
   | "stats"
   | "split-loading"
   | "split-form"
+  | "split-carry"
   | "split-mode";
 
 const SAMPLE_BALANCES: Balance[] = [
@@ -52,28 +56,30 @@ const SAMPLE_BALANCES: Balance[] = [
     full_name: "You",
     email: "you@example.com",
   },
-  {
-    user_id: "u-alex",
-    participant_id: "p-alex",
-    amount: -18,
-    currency: "USD",
-    full_name: "Alex Rivera",
-    email: "alex@example.com",
-  },
-  {
-    user_id: "u-you",
-    participant_id: "p-you",
-    amount: 18,
-    currency: "USD",
-    full_name: "You",
-    email: "you@example.com",
-  },
 ];
 
 const DETAIL_BALANCES: Balance[] = [
-  { user_id: "u-alex", participant_id: "p-alex", amount: 85, currency: "USD", full_name: "Alex Rivera" },
-  { user_id: "u-maya", participant_id: "p-maya", amount: -42, currency: "USD", full_name: "Maya Patel" },
-  { user_id: "u-kai", participant_id: "p-kai", amount: 12, currency: "USD", full_name: "Kai Chen" },
+  {
+    user_id: "u-alex",
+    participant_id: "p-alex",
+    amount: 18,
+    currency: "USD",
+    full_name: "Alex Rivera",
+  },
+  {
+    user_id: "u-maya",
+    participant_id: "p-maya",
+    amount: -12,
+    currency: "USD",
+    full_name: "Maya Patel",
+  },
+  {
+    user_id: "u-kai",
+    participant_id: "p-kai",
+    amount: -6,
+    currency: "USD",
+    full_name: "Kai Chen",
+  },
 ];
 
 const SAMPLE_GROUP_STATS: GroupStatsResponse = {
@@ -92,29 +98,14 @@ const GROUPS = [
   {
     id: "g-roommates",
     name: "Roommates",
-    description: "Utilities and groceries",
-    balances: [
-      { user_id: "u-you", amount: 24, currency: "USD", full_name: "You" },
-    ],
+    description: "Utilities & groceries",
+    balance: 42,
   },
   {
     id: "g-trip",
-    name: "Phuket trip",
-    description: "Flights and dinners",
-    balances: [
-      {
-        user_id: "u-you",
-        amount: -86.4,
-        currency: "USD",
-        full_name: "You",
-      },
-    ],
-  },
-  {
-    id: "g-even",
-    name: "Book club",
-    description: undefined as string | undefined,
-    balances: [] as Balance[],
+    name: "Barcelona trip",
+    description: "Flights and Airbnb",
+    balance: -18.5,
   },
 ];
 
@@ -128,26 +119,12 @@ function PreviewShell({
   fab?: React.ReactNode;
 }) {
   const theme = useTheme();
-  const { width } = useWindowDimensions();
-  const maxWidth = Math.min(width, WEB_MAX_WIDTH);
   return (
-    <View
-      style={[
-        styles.shell,
-        {
-          backgroundColor: theme.colors.background,
-          maxWidth,
-          alignSelf: "center",
-          width: "100%",
-        },
-      ]}
-    >
-      <Appbar.Header style={{ backgroundColor: theme.colors.background }}>
-        <Appbar.Content title={title} titleStyle={{ fontWeight: "700" }} />
+    <View style={[styles.shell, { backgroundColor: theme.colors.background }]}>
+      <Appbar.Header elevated style={{ backgroundColor: theme.colors.surface }}>
+        <Appbar.Content title={title} titleStyle={{ fontWeight: "bold" }} />
       </Appbar.Header>
-      <ScrollView contentContainerStyle={{ paddingBottom: fab ? 96 : 32 }}>
-        {children}
-      </ScrollView>
+      <ScrollView contentContainerStyle={{ paddingBottom: 96 }}>{children}</ScrollView>
       {fab}
     </View>
   );
@@ -167,12 +144,14 @@ function HomeEmptyPreview() {
             maxWidth: 280,
           }}
         >
-          Start with a one-time bill, or create a group for ongoing expenses.
+          Create a group for ongoing shared expenses with friends or roommates.
         </Text>
-        <Button mode="contained" icon="call-split" style={{ alignSelf: "stretch", maxWidth: 320, marginBottom: 8 }}>
-          Split a bill
+        <Button mode="contained" style={{ alignSelf: "stretch", maxWidth: 320 }} contentStyle={{ minHeight: 48 }}>
+          Create a group
         </Button>
-        <Button mode="text">Create a group</Button>
+        <Button mode="text" compact testID="preview-home-empty-one-time" style={{ marginTop: 8 }} labelStyle={{ fontWeight: "500" }}>
+          Just one bill? Split it without a group
+        </Button>
       </View>
     </PreviewShell>
   );
@@ -189,16 +168,6 @@ const FORMER_GROUPS = [
     name: "Notification Test",
     description: "You left this group",
   },
-  {
-    id: "g-sushma",
-    name: "Sushma Cloth press",
-    description: "You left this group",
-  },
-  {
-    id: "g-weekend",
-    name: "Weekend",
-    description: "You left this group",
-  },
 ];
 
 const ARCHIVED_GROUPS = [
@@ -211,70 +180,23 @@ const ARCHIVED_GROUPS = [
 
 function HomeListPreview({
   balancesLoading = false,
-  showRecentBills = true,
+  showOneTimeRow = false,
 }: {
   balancesLoading?: boolean;
-  showRecentBills?: boolean;
+  showOneTimeRow?: boolean;
 }) {
   const theme = useTheme();
   const [formerExpanded, setFormerExpanded] = useState(true);
   const [archivedExpanded, setArchivedExpanded] = useState(true);
-  // Newest first: Today → Yesterday → 2d ago → older.
-  const recentBills = [
-    { identity: "Dinner at Nora", amount: formatCurrency(42, "USD"), people: "3 people", when: "Today" },
-    { identity: "Cabin weekend", amount: formatCurrency(120, "USD"), people: "4 people", when: "Yesterday" },
-    { identity: "With Maya Patel", amount: formatCurrency(28.5, "EUR"), people: "2 people", when: "2d ago" },
-    { identity: "Taxi home", amount: formatCurrency(18, "USD"), people: "2 people", when: "5d ago" },
-  ];
   const testID = balancesLoading
     ? "preview-home-loading"
-    : showRecentBills
-      ? "preview-home-list"
-      : "preview-home-no-bills";
+    : showOneTimeRow
+      ? "preview-home-unsettled"
+      : "preview-home-list";
+  const oneTimeNet = 42;
   return (
     <PreviewShell title="Your Groups">
       <View style={{ paddingHorizontal: 16 }} testID={testID}>
-        {/* Split a bill is always first on Home, including when Recent bills is empty. */}
-        <Button
-          mode="contained"
-          icon="call-split"
-          testID="preview-split-bill-entry"
-          style={{ marginBottom: 12, alignSelf: "stretch" }}
-          contentStyle={{ minHeight: 48 }}
-        >
-          Split a bill
-        </Button>
-        {showRecentBills ? (
-          <View style={{ marginBottom: 16 }} testID="preview-recent-bills">
-            <Text
-              variant="labelLarge"
-              style={{ color: theme.colors.onSurfaceVariant, marginBottom: 4, fontWeight: "700" }}
-            >
-              Recent bills
-            </Text>
-            {recentBills.slice(0, 3).map((bill) => (
-              <TouchableRipple
-                key={bill.identity}
-                style={[styles.recentBillRow, { borderBottomColor: theme.colors.outlineVariant }]}
-              >
-                <View style={styles.recentBillContent}>
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text variant="bodyLarge" numberOfLines={1} style={{ fontWeight: "600" }}>
-                      {bill.identity}
-                    </Text>
-                    <Text variant="bodySmall" numberOfLines={1} style={{ color: theme.colors.onSurfaceVariant }}>
-                      {bill.amount} · {bill.people} · {bill.when}
-                    </Text>
-                  </View>
-                  <Icon source="chevron-right" size={20} color={theme.colors.onSurfaceVariant} />
-                </View>
-              </TouchableRipple>
-            ))}
-            <Button mode="text" compact style={{ alignSelf: "flex-start", marginTop: 4 }}>
-              See all
-            </Button>
-          </View>
-        ) : null}
         <View style={styles.groupsSectionHeader} testID="preview-groups-header">
           <Text
             variant="labelLarge"
@@ -299,17 +221,21 @@ function HomeListPreview({
               >
                 {group.name}
               </Text>
-              {group.description ? (
-                <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}>
-                  {group.description}
-                </Text>
-              ) : null}
+              <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                {group.description}
+              </Text>
             </View>
-            <GroupBalanceBadge
-              loading={balancesLoading}
-              balanceData={balancesLoading ? undefined : { group_id: group.id, balances: group.balances }}
-              currentUserId="u-you"
-            />
+            {balancesLoading ? (
+              <View style={{ width: 96, height: 28, borderRadius: 8, backgroundColor: theme.colors.surfaceVariant }} />
+            ) : (
+              <GroupBalanceBadge
+                balanceData={{
+                  group_id: group.id,
+                  balances: [{ user_id: "u-you", amount: group.balance, currency: "USD", full_name: "You" }],
+                }}
+                currentUserId="u-you"
+              />
+            )}
           </Surface>
         ))}
 
@@ -325,9 +251,7 @@ function HomeListPreview({
           >
             <View style={styles.sectionDisclosureHeaderRow}>
               <Icon source="archive-outline" size={20} color={theme.colors.onSurfaceVariant} />
-              <Text
-                style={[styles.sectionAccordionTitle, { color: theme.colors.onSurfaceVariant, flex: 1 }]}
-              >
+              <Text style={[styles.sectionAccordionTitle, { color: theme.colors.onSurfaceVariant, flex: 1 }]}>
                 {`Archived (${ARCHIVED_GROUPS.length})`}
               </Text>
               <Icon
@@ -343,28 +267,17 @@ function HomeListPreview({
                 <View
                   key={group.id}
                   style={[styles.nestedGroupRow, { borderBottomColor: theme.colors.outlineVariant }]}
-                  testID={`preview-nested-${group.id}`}
+                  testID={`preview-nested-group-${group.id}`}
                 >
                   <View style={styles.nestedGroupTouchable}>
                     <View style={{ flex: 1 }}>
-                      <Text
-                        variant="titleMedium"
-                        style={{
-                          fontWeight: "600",
-                          color: theme.colors.onSurfaceVariant,
-                          letterSpacing: -0.2,
-                        }}
-                      >
+                      <Text variant="bodyLarge" style={styles.nestedGroupName}>
                         {group.name}
                       </Text>
-                      <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}>
+                      <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
                         {group.description}
                       </Text>
                     </View>
-                    <GroupBalanceBadge
-                      balanceData={{ group_id: group.id, balances: [] }}
-                      currentUserId="u-you"
-                    />
                   </View>
                 </View>
               ))}
@@ -384,9 +297,7 @@ function HomeListPreview({
           >
             <View style={styles.sectionDisclosureHeaderRow}>
               <Icon source="history" size={20} color={theme.colors.onSurfaceVariant} />
-              <Text
-                style={[styles.sectionAccordionTitle, { color: theme.colors.onSurfaceVariant, flex: 1 }]}
-              >
+              <Text style={[styles.sectionAccordionTitle, { color: theme.colors.onSurfaceVariant, flex: 1 }]}>
                 {`Former (${FORMER_GROUPS.length})`}
               </Text>
               <Icon
@@ -402,21 +313,13 @@ function HomeListPreview({
                 <View
                   key={group.id}
                   style={[styles.nestedGroupRow, { borderBottomColor: theme.colors.outlineVariant }]}
-                  testID={`preview-nested-former-${group.id}`}
                 >
                   <View style={styles.nestedGroupTouchable}>
                     <View style={{ flex: 1 }}>
-                      <Text
-                        variant="titleMedium"
-                        style={{
-                          fontWeight: "600",
-                          color: theme.colors.onSurfaceVariant,
-                          letterSpacing: -0.2,
-                        }}
-                      >
+                      <Text variant="bodyLarge" style={styles.nestedGroupName}>
                         {group.name}
                       </Text>
-                      <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}>
+                      <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
                         {group.description}
                       </Text>
                     </View>
@@ -433,7 +336,102 @@ function HomeListPreview({
             </View>
           ) : null}
         </View>
+
+        {showOneTimeRow ? (
+          <Surface
+            style={[styles.groupRow, { backgroundColor: theme.colors.surface, marginTop: 12 }]}
+            elevation={0}
+            testID="preview-one-time-bills-row"
+          >
+            <View style={{ flex: 1, paddingRight: 12 }}>
+              <Text
+                variant="titleMedium"
+                style={{ fontWeight: "700", color: theme.colors.onSurface, letterSpacing: -0.2 }}
+              >
+                One-time bills
+              </Text>
+            </View>
+            <Text
+              style={{
+                fontSize: 13,
+                lineHeight: 16,
+                fontWeight: "700",
+                textAlign: "right",
+                color: balanceAmountColor(oneTimeNet, theme.colors, { dark: theme.dark }),
+              }}
+            >
+              {groupListBalanceWords(oneTimeNet, formatCurrency(oneTimeNet, "USD"))}
+            </Text>
+          </Surface>
+        ) : null}
+
         <View testID="home-list-clearance" style={{ height: 32 }} />
+      </View>
+    </PreviewShell>
+  );
+}
+
+function ProfileOneTimePreview() {
+  const theme = useTheme();
+  return (
+    <PreviewShell title="Profile">
+      <View style={{ padding: 16 }} testID="preview-profile-one-time">
+        <Surface style={[styles.profileCard, { backgroundColor: theme.colors.surface }]} elevation={2}>
+          <TouchableRipple
+            testID="preview-profile-one-time-row"
+            style={[styles.profileRow, { borderTopColor: theme.colors.outlineVariant }]}
+          >
+            <View style={styles.profileRowInner}>
+              <View style={{ flex: 1 }}>
+                <Text variant="titleSmall" style={{ color: theme.colors.onSurface, fontWeight: "700" }}>
+                  One-time bills
+                </Text>
+                <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                  Split a bill without a group. Recent bills live here.
+                </Text>
+              </View>
+              <Icon source="chevron-right" size={20} color={theme.colors.onSurfaceVariant} />
+            </View>
+          </TouchableRipple>
+        </Surface>
+      </View>
+    </PreviewShell>
+  );
+}
+
+function AddExpenseGlobalPreview() {
+  const theme = useTheme();
+  return (
+    <PreviewShell title="Add Expense">
+      <View style={{ padding: 16 }} testID="preview-add-expense-global">
+        <Text
+          variant="displayMedium"
+          style={{ textAlign: "center", fontWeight: "300", marginVertical: 24, color: theme.colors.onSurface }}
+        >
+          $36.00
+        </Text>
+        <Surface style={[styles.profileCard, { backgroundColor: theme.colors.surface }]} elevation={0}>
+          <View style={styles.profileRowInner}>
+            <View style={{ flex: 1 }}>
+              <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                Group
+              </Text>
+              <Text variant="bodyLarge" style={{ color: theme.colors.onSurfaceVariant }}>
+                Choose a group
+              </Text>
+            </View>
+            <Icon source="chevron-down" size={20} color={theme.colors.onSurfaceVariant} />
+          </View>
+          <Button
+            mode="text"
+            compact
+            testID="preview-split-once-link"
+            style={{ alignSelf: "flex-start", marginTop: 4 }}
+            labelStyle={{ fontWeight: "500" }}
+          >
+            Not in a group? Split once
+          </Button>
+        </Surface>
       </View>
     </PreviewShell>
   );
@@ -532,13 +530,16 @@ export const HomePolishPreviewScreen: React.FC = () => {
     const allowed: SurfaceId[] = [
       "home-empty",
       "home-list",
-      "home-no-bills",
+      "home-unsettled",
       "home-loading",
+      "profile-one-time",
+      "add-expense",
       "group-home",
       "group-loading",
       "stats",
       "split-loading",
       "split-form",
+      "split-carry",
       "split-mode",
     ];
     return allowed.includes(requested as SurfaceId) ? (requested as SurfaceId) : "home-list";
@@ -561,29 +562,34 @@ export const HomePolishPreviewScreen: React.FC = () => {
           }}
         >
           <Text variant="labelLarge" style={{ marginBottom: 8, fontWeight: "700" }}>
-            Home polish preview — Groups header, compact bills, split form
+            Home polish preview — demoted split, one-time bills
           </Text>
           <SegmentedButtons
             value={surface}
             onValueChange={(v) => setSurface(v as SurfaceId)}
             buttons={[
-              { value: "home-no-bills", label: "CTA" },
-              { value: "home-list", label: "Bills" },
+              { value: "home-list", label: "Home" },
+              { value: "home-unsettled", label: "Owe" },
+              { value: "home-empty", label: "Empty" },
               { value: "split-form", label: "Split" },
-              { value: "split-loading", label: "Load" },
-              { value: "split-mode", label: "Mode" },
+              { value: "add-expense", label: "Add" },
             ]}
           />
         </View>
         {surface === "home-empty" ? <HomeEmptyPreview /> : null}
         {surface === "home-list" ? <HomeListPreview /> : null}
-        {surface === "home-no-bills" ? <HomeListPreview showRecentBills={false} /> : null}
+        {surface === "home-unsettled" ? <HomeListPreview showOneTimeRow /> : null}
         {surface === "home-loading" ? <HomeListPreview balancesLoading /> : null}
+        {surface === "profile-one-time" ? <ProfileOneTimePreview /> : null}
+        {surface === "add-expense" ? <AddExpenseGlobalPreview /> : null}
         {surface === "group-loading" ? <GroupHomePreview loading /> : null}
         {surface === "group-home" ? <GroupHomePreview /> : null}
         {surface === "stats" ? <StatsPreview /> : null}
         {surface === "split-loading" ? <SplitBillFormPreview loadingPeople disabledCreate /> : null}
         {surface === "split-form" ? <SplitBillFormPreview /> : null}
+        {surface === "split-carry" ? (
+          <SplitBillFormPreview draft={{ amount: "36.00", currency: "EUR" }} showRecentBills={false} />
+        ) : null}
         {surface === "split-mode" ? <SplitBillFormPreview modeMenuOpen /> : null}
       </SafeAreaView>
     </PaperProvider>
@@ -621,15 +627,18 @@ const styles = StyleSheet.create({
     minHeight: 44,
     marginBottom: 8,
   },
-  recentBillRow: {
-    minHeight: 48,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+  profileCard: {
+    borderRadius: 16,
+    padding: 16,
   },
-  recentBillContent: {
+  profileRow: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    marginTop: 4,
+    paddingTop: 12,
+  },
+  profileRowInner: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 10,
-    paddingHorizontal: 2,
     gap: 8,
   },
   sectionAccordion: {
@@ -661,14 +670,18 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
   },
   nestedGroupRow: {
-    marginLeft: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   nestedGroupTouchable: {
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 12,
-    paddingHorizontal: 4,
+    paddingHorizontal: 14,
     gap: 8,
+  },
+  nestedGroupName: {
+    fontWeight: "600",
+    flexShrink: 1,
+    letterSpacing: -0.2,
   },
 });

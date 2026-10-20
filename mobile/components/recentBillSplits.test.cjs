@@ -94,3 +94,122 @@ test("rememberRecentBillSplit keeps newest history and last-used currency", asyn
   assert.equal(rows[0].people_count, 4);
   assert.equal(await readLastBillSplitCurrency(), "USD");
 });
+
+test("creatorNetMinor is total minus equal share", () => {
+  const { creatorNetMinor } = loadRecent();
+  assert.equal(creatorNetMinor(1000, 2), 500);
+  assert.equal(creatorNetMinor(1000, 3), 1000 - Math.floor(1000 / 3));
+});
+
+test("summarizeUnsettledOneTimeBills hides settled and zero nets", () => {
+  const { summarizeUnsettledOneTimeBills } = loadRecent();
+  assert.equal(summarizeUnsettledOneTimeBills([]), null);
+  assert.equal(
+    summarizeUnsettledOneTimeBills([
+      {
+        token: "a".repeat(64),
+        amount_minor: 1000,
+        currency: "USD",
+        mode: "equal",
+        identity: "A",
+        people_count: 2,
+        remembered_at: "2026-10-20T00:00:00.000Z",
+        settled: true,
+        your_net_minor: 0,
+      },
+    ]),
+    null,
+  );
+  const summary = summarizeUnsettledOneTimeBills([
+    {
+      token: "a".repeat(64),
+      amount_minor: 4200,
+      currency: "USD",
+      mode: "equal",
+      identity: "Dinner",
+      people_count: 2,
+      remembered_at: "2026-10-20T00:00:00.000Z",
+      settled: false,
+      your_net_minor: 2100,
+    },
+    {
+      token: "b".repeat(64),
+      amount_minor: 1425,
+      currency: "EUR",
+      mode: "equal",
+      identity: "Taxi",
+      people_count: 2,
+      remembered_at: "2026-10-19T00:00:00.000Z",
+      settled: false,
+      your_net_minor: -1425,
+    },
+  ]);
+  assert.ok(summary);
+  assert.equal(summary.currency, "USD");
+  assert.equal(summary.net_minor, 2100);
+  assert.equal(summary.unsettled_count, 2);
+});
+
+test("rememberRecentBillSplit defaults settled false and creator net", async () => {
+  const { rememberRecentBillSplit, listRecentBillSplits } = loadRecent();
+  const token = "e".repeat(64);
+  await rememberRecentBillSplit("user-2", {
+    token,
+    amount_minor: 3000,
+    currency: "USD",
+    mode: "equal",
+    people_count: 3,
+    name: "Brunch",
+  });
+  const rows = await listRecentBillSplits("user-2");
+  assert.equal(rows[0].settled, false);
+  assert.equal(rows[0].your_net_minor, 3000 - Math.floor(3000 / 3));
+});
+
+test("updateRecentBillSettlement patches without reordering", async () => {
+  const {
+    rememberRecentBillSplit,
+    updateRecentBillSettlement,
+    listRecentBillSplits,
+  } = loadRecent();
+  const tokenA = "f".repeat(64);
+  const tokenB = "0".repeat(64);
+  await rememberRecentBillSplit("user-3", {
+    token: tokenA, amount_minor: 1000, currency: "USD", mode: "equal", people_count: 2, name: "A",
+  });
+  await rememberRecentBillSplit("user-3", {
+    token: tokenB, amount_minor: 2000, currency: "USD", mode: "equal", people_count: 2, name: "B",
+  });
+  await updateRecentBillSettlement("user-3", tokenA, { settled: true, your_net_minor: 0 });
+  const rows = await listRecentBillSplits("user-3");
+  assert.deepEqual(rows.map((row) => row.token), [tokenB, tokenA]);
+  assert.equal(rows[1].settled, true);
+  assert.equal(rows[1].your_net_minor, 0);
+});
+
+test("settlementFromBillSession marks all-confirmed as settled", () => {
+  const { settlementFromBillSession } = loadRecent();
+  const settled = settlementFromBillSession({
+    amount_minor: 3000,
+    currency: "USD",
+    mode: "equal",
+    participants: [
+      { id: "c", display_name: "You", amount_minor: 1000, confirmed: true },
+      { id: "p", display_name: "Pat", amount_minor: 1000, confirmed: true },
+      { id: "q", display_name: "Quinn", amount_minor: 1000, confirmed: true },
+    ],
+  });
+  assert.deepEqual(settled, { settled: true, your_net_minor: 0 });
+  const open = settlementFromBillSession({
+    amount_minor: 3000,
+    currency: "USD",
+    mode: "equal",
+    participants: [
+      { id: "c", display_name: "You", amount_minor: 1000, confirmed: false },
+      { id: "p", display_name: "Pat", amount_minor: 1000, confirmed: false },
+      { id: "q", display_name: "Quinn", amount_minor: 1000, confirmed: false },
+    ],
+  });
+  assert.equal(open.settled, false);
+  assert.equal(open.your_net_minor, 2000);
+});
