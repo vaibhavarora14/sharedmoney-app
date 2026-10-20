@@ -27,6 +27,41 @@ export interface WhatsAppOtpVerifyResult {
   };
 }
 
+export type WhatsAppOtpErrorCode =
+  | "WHATSAPP_SEND_FAILED"
+  | "OTP_MISMATCH"
+  | "OTP_EXPIRED"
+  | "OTP_LOCKED"
+  | "OTP_INVALID"
+  | "RATE_LIMITED"
+  | "FEATURE_DISABLED"
+  | "VALIDATION_ERROR"
+  | string;
+
+export class WhatsAppOtpApiError extends Error {
+  readonly code: WhatsAppOtpErrorCode;
+  readonly retryAfterSeconds?: number;
+
+  constructor(
+    message: string,
+    code: WhatsAppOtpErrorCode,
+    retryAfterSeconds?: number,
+  ) {
+    super(message);
+    this.name = "WhatsAppOtpApiError";
+    this.code = code;
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
+}
+
+function parseRetryAfterSeconds(details: string | undefined): number | undefined {
+  if (!details) return undefined;
+  const match = /retry_after=(\d+)/i.exec(details);
+  if (!match) return undefined;
+  const value = Number.parseInt(match[1], 10);
+  return Number.isFinite(value) ? value : undefined;
+}
+
 async function postWhatsAppOtp(body: Record<string, unknown>): Promise<unknown> {
   if (!API_URL) {
     throw new Error(
@@ -69,9 +104,19 @@ async function postWhatsAppOtp(body: Record<string, unknown>): Promise<unknown> 
       ? payload
       : {}) as ErrorBody;
     if (response.status === 404 || errBody.code === "FEATURE_DISABLED") {
-      throw new Error("WhatsApp login is not available in this build.");
+      throw new WhatsAppOtpApiError(
+        "WhatsApp login is not available in this build.",
+        "FEATURE_DISABLED",
+      );
     }
-    throw new Error(errBody.error || `Request failed (${response.status})`);
+    const code = errBody.code || `HTTP_${response.status}`;
+    const message =
+      errBody.error || `Request failed (${response.status})`;
+    throw new WhatsAppOtpApiError(
+      message,
+      code,
+      parseRetryAfterSeconds(errBody.details),
+    );
   }
 
   return payload;

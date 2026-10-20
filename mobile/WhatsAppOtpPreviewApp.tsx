@@ -37,26 +37,26 @@ function resolvePreviewProps(): WhatsAppOtpPreviewScreenProps {
     case "otp-wrong":
       return {
         initialStep: "otp",
-        formError: "Incorrect code. Try again.",
+        otpIssue: "mismatch",
         resendSeconds: 30,
       };
     case "otp-expired":
       return {
         initialStep: "otp",
-        formError: "This code has expired. Request a new one.",
+        otpIssue: "expired",
         resendSeconds: 0,
       };
     case "otp-locked":
       return {
         initialStep: "otp",
-        formError: "Too many incorrect attempts. Request a new code.",
-        resendSeconds: 0,
+        otpIssue: "locked",
+        // Demo lockout window (10:00) until a new code can be requested.
+        resendSeconds: 600,
       };
     case "phone-not-whatsapp":
       return {
         initialStep: "phone",
-        formError:
-          "Could not send WhatsApp code. Confirm the number is a Meta test recipient and try again.",
+        otpIssue: "send_failed",
       };
     default: {
       const step: PreviewStep =

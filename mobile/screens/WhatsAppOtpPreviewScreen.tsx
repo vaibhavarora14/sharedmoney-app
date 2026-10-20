@@ -8,10 +8,17 @@ import { WHATSAPP_OTP_RESEND_COOLDOWN_SECONDS } from "../utils/phoneDisplay";
 
 export type PreviewStep = "methods" | "phone" | "otp";
 export type PreviewWhatsAppLoading = "send" | "verify" | null;
+export type PreviewOtpIssue =
+  | "send_failed"
+  | "mismatch"
+  | "expired"
+  | "locked"
+  | null;
 
 export interface WhatsAppOtpPreviewScreenProps {
   initialStep: PreviewStep;
   formError?: string | null;
+  otpIssue?: PreviewOtpIssue;
   whatsAppLoading?: PreviewWhatsAppLoading;
   resendSeconds?: number;
   phoneE164?: string;
@@ -20,6 +27,7 @@ export interface WhatsAppOtpPreviewScreenProps {
 export function PreviewAuthScreen({
   initialStep,
   formError = null,
+  otpIssue = null,
   whatsAppLoading = null,
   resendSeconds,
   phoneE164 = "+919876543210",
@@ -31,6 +39,7 @@ export function PreviewAuthScreen({
       previewInitialStep={initialStep}
       previewPhoneE164={phoneE164}
       previewFormError={formError}
+      previewOtpIssue={otpIssue}
       previewWhatsAppLoading={whatsAppLoading}
       previewResendSeconds={
         resendSeconds ??

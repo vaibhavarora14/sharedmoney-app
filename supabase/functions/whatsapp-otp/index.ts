@@ -38,6 +38,7 @@ import {
   OtpRateLimitError,
   OtpVerifyError,
   phonePlaceholderEmail,
+  resendCooldownRemainingSeconds,
   resolveOtpDeliveryMode,
   WHATSAPP_OTP_PEPPER_ENV,
   type OtpChallengeRecord,
@@ -306,12 +307,15 @@ async function handleSend(
       req,
     );
   } catch (sendError) {
+    // Meta allowlist / test-recipient hints stay in logs only — never in user-facing copy.
     log.error('WhatsApp OTP delivery failed', 'whatsapp-otp', {
       error: sendError instanceof Error ? sendError.message : String(sendError),
+      hint:
+        'Confirm the recipient is a Meta allowlisted test number and (for text delivery) has opened the 24h session.',
     });
     return createErrorResponse(
       502,
-      'Could not send WhatsApp code. Confirm the number is a Meta test recipient and try again.',
+      "We couldn't send a code to this number. Check it's on WhatsApp, or use another sign-in method.",
       'WHATSAPP_SEND_FAILED',
       undefined,
       req,
@@ -331,7 +335,10 @@ async function handleVerify(
     active = assertChallengeVerifiable(challenge);
   } catch (err) {
     if (err instanceof OtpVerifyError) {
-      return createErrorResponse(400, err.message, 'OTP_INVALID', undefined, req);
+      const details = err.retryAfterSeconds != null
+        ? `retry_after=${err.retryAfterSeconds}`
+        : undefined;
+      return createErrorResponse(400, err.message, err.code, details, req);
     }
     throw err;
   }
@@ -347,11 +354,12 @@ async function handleVerify(
       .eq('id', active.id);
 
     if (nextAttempts >= active.max_attempts) {
+      const retryAfter = resendCooldownRemainingSeconds(active.created_at);
       return createErrorResponse(
         400,
-        'Too many incorrect attempts. Request a new code.',
+        'Too many incorrect attempts.',
         'OTP_LOCKED',
-        undefined,
+        `retry_after=${retryAfter}`,
         req,
       );
     }

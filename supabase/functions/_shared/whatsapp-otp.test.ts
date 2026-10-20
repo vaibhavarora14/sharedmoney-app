@@ -140,6 +140,18 @@ Deno.test('assertChallengeVerifiable covers expiry attempts and reuse', () => {
     OtpVerifyError,
     'incorrect attempts',
   );
+  try {
+    assertChallengeVerifiable({ ...base, expires_at: '2026-10-20T12:00:00.000Z' }, now);
+  } catch (err) {
+    assertEquals(err instanceof OtpVerifyError, true);
+    assertEquals((err as OtpVerifyError).code, 'OTP_EXPIRED');
+  }
+  try {
+    assertChallengeVerifiable({ ...base, attempt_count: OTP_MAX_ATTEMPTS }, now);
+  } catch (err) {
+    assertEquals(err instanceof OtpVerifyError, true);
+    assertEquals((err as OtpVerifyError).code, 'OTP_LOCKED');
+  }
 });
 
 Deno.test('buildOtpTextBody includes code without leaking extras', () => {

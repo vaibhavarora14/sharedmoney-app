@@ -131,21 +131,54 @@ export function assertHourlySendLimit(
   }
 }
 
+/** Seconds remaining before another OTP send is allowed for this challenge. */
+export function resendCooldownRemainingSeconds(
+  latestCreatedAt: string | Date | null | undefined,
+  now = new Date(),
+  cooldownMs = OTP_RESEND_COOLDOWN_MS,
+): number {
+  if (!latestCreatedAt) return 0;
+  const created = typeof latestCreatedAt === 'string'
+    ? new Date(latestCreatedAt)
+    : latestCreatedAt;
+  const elapsed = now.getTime() - created.getTime();
+  if (elapsed >= cooldownMs) return 0;
+  return Math.ceil((cooldownMs - elapsed) / 1000);
+}
+
+export type OtpVerifyErrorCode =
+  | 'OTP_EXPIRED'
+  | 'OTP_LOCKED'
+  | 'OTP_INVALID';
+
 export function assertChallengeVerifiable(
   challenge: OtpChallengeRecord | null,
   now = new Date(),
 ): OtpChallengeRecord {
   if (!challenge) {
-    throw new OtpVerifyError('No active code for this number. Request a new one.');
+    throw new OtpVerifyError(
+      'No active code for this number. Request a new one.',
+      'OTP_INVALID',
+    );
   }
   if (challenge.consumed_at) {
-    throw new OtpVerifyError('This code was already used. Request a new one.');
+    throw new OtpVerifyError(
+      'This code was already used. Request a new one.',
+      'OTP_INVALID',
+    );
   }
   if (isOtpExpired(challenge.expires_at, now)) {
-    throw new OtpVerifyError('This code has expired. Request a new one.');
+    throw new OtpVerifyError(
+      'This code has expired. Request a new one.',
+      'OTP_EXPIRED',
+    );
   }
   if (challenge.attempt_count >= challenge.max_attempts) {
-    throw new OtpVerifyError('Too many incorrect attempts. Request a new code.');
+    throw new OtpVerifyError(
+      'Too many incorrect attempts.',
+      'OTP_LOCKED',
+      resendCooldownRemainingSeconds(challenge.created_at, now),
+    );
   }
   return challenge;
 }
@@ -170,8 +203,16 @@ export class OtpRateLimitError extends Error {
 }
 
 export class OtpVerifyError extends Error {
-  constructor(message: string) {
+  readonly code: OtpVerifyErrorCode;
+  readonly retryAfterSeconds?: number;
+  constructor(
+    message: string,
+    code: OtpVerifyErrorCode = 'OTP_INVALID',
+    retryAfterSeconds?: number,
+  ) {
     super(message);
     this.name = 'OtpVerifyError';
+    this.code = code;
+    this.retryAfterSeconds = retryAfterSeconds;
   }
 }
