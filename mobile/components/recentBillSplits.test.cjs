@@ -6,7 +6,7 @@ const ts = require("typescript");
 
 function loadRecent() {
   const store = new Map();
-  const filename = path.join(__dirname, "recentBillSplits.ts");
+  const filename = path.join(__dirname, "../utils/recentBillSplits.ts");
   const module = { exports: {} };
   const code = ts.transpileModule(readFileSync(filename, "utf8"), {
     compilerOptions: {
