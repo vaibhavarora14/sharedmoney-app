@@ -155,9 +155,12 @@ function HomeEmptyPreview() {
             maxWidth: 280,
           }}
         >
-          Create a group to start splitting expenses.
+          Start with a one-time bill, or create a group for ongoing expenses.
         </Text>
-        <Button mode="contained">Create group</Button>
+        <Button mode="contained" icon="call-split" style={{ alignSelf: "stretch", maxWidth: 320, marginBottom: 8 }}>
+          Split a bill
+        </Button>
+        <Button mode="text">Create a group</Button>
       </View>
     </PreviewShell>
   );
@@ -216,6 +219,35 @@ function HomeListPreview() {
       }
     >
       <View style={{ paddingHorizontal: 16 }} testID="preview-home-list">
+        <Button
+          mode="contained"
+          icon="call-split"
+          style={{ marginBottom: 12, alignSelf: "stretch" }}
+          contentStyle={{ minHeight: 48 }}
+        >
+          Split a bill
+        </Button>
+        <View style={{ marginBottom: 12 }} testID="preview-recent-bills">
+          <Text variant="labelLarge" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 8 }}>
+            Recent bills
+          </Text>
+          {[
+            { title: "USD 42.00 · 3 people", mode: "Equal split" },
+            { title: "EUR 28.50 · 2 people", mode: "Shares" },
+          ].map((bill) => (
+            <Surface
+              key={bill.title}
+              style={[styles.groupRow, { backgroundColor: theme.colors.surface, marginBottom: 8 }]}
+              elevation={0}
+            >
+              <View style={{ flex: 1 }}>
+                <Text variant="titleMedium" style={{ fontWeight: "700" }}>{bill.title}</Text>
+                <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>{bill.mode}</Text>
+              </View>
+              <Text style={{ color: theme.colors.onSurfaceVariant }}>›</Text>
+            </Surface>
+          ))}
+        </View>
         {GROUPS.map((group) => (
           <Surface
             key={group.id}
