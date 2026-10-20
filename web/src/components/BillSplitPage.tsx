@@ -61,7 +61,24 @@ export function BillSplitPage({ token }: { token: string | null }) {
     <section className="bill-split-card" aria-labelledby="bill-title">
       <a className="bill-split-brand" href="/" aria-label="SharedMoney home">SharedMoney</a>
       {notFound ? null : <h1 id="bill-title">Split a bill</h1>}
-      {loading && !session ? <p role="status">Loading bill…</p> : null}
+      {loading && !session ? (
+        <div className="bill-split-skeleton" role="status" aria-label="Loading bill" data-testid="bill-split-skeleton">
+          <div className="bill-split-skeleton-line bill-split-skeleton-kicker" />
+          <div className="bill-split-skeleton-line bill-split-skeleton-total" />
+          <div className="bill-split-skeleton-line bill-split-skeleton-copy" />
+          <ul className="bill-split-people bill-split-skeleton-people" aria-hidden="true">
+            {[0, 1, 2].map((key) => (
+              <li key={key}>
+                <div>
+                  <span className="bill-split-skeleton-line bill-split-skeleton-name" />
+                  <span className="bill-split-skeleton-line bill-split-skeleton-amount" />
+                </div>
+                <span className="bill-split-skeleton-line bill-split-skeleton-button" />
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       {error ? <div role="alert"><p>{error}</p><button className="text-button" onClick={() => void refresh()} disabled={busy}>Try again</button></div> : null}
       {notFound ? <BillLinkUnavailable /> : null}
       {session ? <>

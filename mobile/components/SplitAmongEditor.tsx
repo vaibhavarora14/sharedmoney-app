@@ -214,6 +214,11 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
         {participants.map((participant) => {
           const selected = selectedSet.has(participant.id);
           const isFormer = participant.type === "former";
+          const isRequired = requiredIds.includes(participant.id);
+          // Required = current user, always included: label "You" and keep the check.
+          // Disabled only because the form is busy: keep the name, drop the check.
+          const chipDisabled = disabled || isRequired;
+          const showCheck = selected && (!disabled || isRequired);
           return (
             <Chip
               key={participant.id}
@@ -225,12 +230,12 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
                 !selected && { backgroundColor: theme.colors.surfaceVariant },
               ]}
               theme={selectionTheme}
-              disabled={disabled || requiredIds.includes(participant.id)}
-              showSelectedCheck
+              disabled={chipDisabled}
+              showSelectedCheck={showCheck}
               testID={`split-among-chip-${participant.email || participant.id}`}
             >
-              {displayName(participant)}
-              {isFormer ? " (Former)" : ""}
+              {isRequired ? "You" : displayName(participant)}
+              {!isRequired && isFormer ? " (Former)" : ""}
             </Chip>
           );
         })}

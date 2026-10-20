@@ -18,7 +18,7 @@ export const WEB_AUTH_DESKTOP_BREAKPOINT = 960;
 export const SCREEN_TRANSITION_MS = 250;
 
 /** Reserve the same trailing space before and after Home balances resolve. */
-export const GROUP_BALANCE_SLOT_WIDTH = 120;
+export const GROUP_BALANCE_SLOT_WIDTH = 152;
 
 export const isDesktopWebViewport = (platform: string, width: number) =>
   platform === "web" && width >= WEB_DESKTOP_BREAKPOINT;

@@ -86,30 +86,42 @@ test("group list does not claim Even while balances are still loading", () => {
   }
 });
 
-test("group list non-zero balance is color + label without Settled", () => {
+test("group list non-zero balance uses owed/owe words without Settled or bare +/-", () => {
   const Badge = loadBadge(lightTheme);
-  const tree = Badge({
+  const owed = Badge({
     balanceData: {
       group_id: "g",
-      balances: [{ user_id: "me", amount: 12.5, currency: "USD" }],
+      balances: [{ user_id: "me", amount: 24, currency: "USD" }],
     },
     currentUserId: "me",
   });
-  assert.doesNotMatch(text(tree), /Settled|Even/i);
-  assert.match(text(tree), /\+/);
-  assert.equal(nodes(tree).some((n) => n.props?.testID === "group-balance-amount"), true);
+  assert.doesNotMatch(text(owed), /Settled|Even/i);
+  assert.match(text(owed), /You're owed \$24\.00/);
+  assert.doesNotMatch(text(owed), /^\+|−|-/);
+  assert.equal(nodes(owed).some((n) => n.props?.testID === "group-balance-amount"), true);
+
+  const owe = Badge({
+    balanceData: {
+      group_id: "g",
+      balances: [{ user_id: "me", amount: -86.4, currency: "USD" }],
+    },
+    currentUserId: "me",
+  });
+  assert.match(text(owe), /You owe \$86\.40/);
 });
 
-test("loading, Even and amount reserve the same fixed right-aligned slot", () => {
+test("loading skeleton matches amount-line height in the shared right-aligned slot", () => {
   const Badge = loadBadge(lightTheme);
   const balanceData = { group_id: "g", balances: [{ user_id: "me", amount: 3000, currency: "INR" }] };
   const trees = [Badge({ loading: true }), Badge({ loading: false }), Badge({ balanceData, currentUserId: "me" })];
   const slots = trees.map(tree => Object.assign({}, ...tree.props.style.filter(Boolean)));
   slots.forEach(slot => {
-    assert.equal(slot.width, 120);
+    assert.equal(slot.width, 152);
     assert.equal(slot.flexShrink, 0);
     assert.equal(slot.alignItems, "flex-end");
   });
   assert.deepEqual(slots[0], slots[1]);
   assert.deepEqual(slots[1], slots[2]);
+  const skeleton = nodes(trees[0]).find((n) => n.type === "Skeleton");
+  assert.equal(skeleton.props.height, 16);
 });

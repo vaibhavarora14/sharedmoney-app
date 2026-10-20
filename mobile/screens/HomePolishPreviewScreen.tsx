@@ -1,10 +1,10 @@
 import React, { useState } from "react";
-import { ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
+import { ScrollView, StyleSheet, View } from "react-native";
 import {
   Appbar,
   Button,
   FAB,
-  List,
+  Icon,
   Provider as PaperProvider,
   SegmentedButtons,
   Surface,
@@ -20,8 +20,24 @@ import { TransactionsEmptyState } from "../components/TransactionsSection";
 import { WEB_MAX_WIDTH } from "../constants/layout";
 import { lightTheme } from "../theme";
 import { Balance, GroupStatsResponse } from "../types";
+import { balanceAmountColor, groupListBalanceWords } from "../utils/balanceRowLabels";
+import { formatCurrency } from "../utils/currency";
+import { SplitBillFormPreview } from "./SplitBillScreen";
 
-type SurfaceId = "home-empty" | "home-list" | "group-home" | "group-loading" | "stats";
+type SurfaceId =
+  | "home-empty"
+  | "home-list"
+  | "home-unsettled"
+  | "home-loading"
+  | "profile-one-time"
+  | "add-expense"
+  | "group-home"
+  | "group-loading"
+  | "stats"
+  | "split-loading"
+  | "split-form"
+  | "split-carry"
+  | "split-mode";
 
 const SAMPLE_BALANCES: Balance[] = [
   {
@@ -40,28 +56,30 @@ const SAMPLE_BALANCES: Balance[] = [
     full_name: "You",
     email: "you@example.com",
   },
-  {
-    user_id: "u-alex",
-    participant_id: "p-alex",
-    amount: -18,
-    currency: "USD",
-    full_name: "Alex Rivera",
-    email: "alex@example.com",
-  },
-  {
-    user_id: "u-you",
-    participant_id: "p-you",
-    amount: 18,
-    currency: "USD",
-    full_name: "You",
-    email: "you@example.com",
-  },
 ];
 
 const DETAIL_BALANCES: Balance[] = [
-  { user_id: "u-alex", participant_id: "p-alex", amount: 85, currency: "USD", full_name: "Alex Rivera" },
-  { user_id: "u-maya", participant_id: "p-maya", amount: -42, currency: "USD", full_name: "Maya Patel" },
-  { user_id: "u-kai", participant_id: "p-kai", amount: 12, currency: "USD", full_name: "Kai Chen" },
+  {
+    user_id: "u-alex",
+    participant_id: "p-alex",
+    amount: 18,
+    currency: "USD",
+    full_name: "Alex Rivera",
+  },
+  {
+    user_id: "u-maya",
+    participant_id: "p-maya",
+    amount: -12,
+    currency: "USD",
+    full_name: "Maya Patel",
+  },
+  {
+    user_id: "u-kai",
+    participant_id: "p-kai",
+    amount: -6,
+    currency: "USD",
+    full_name: "Kai Chen",
+  },
 ];
 
 const SAMPLE_GROUP_STATS: GroupStatsResponse = {
@@ -80,29 +98,14 @@ const GROUPS = [
   {
     id: "g-roommates",
     name: "Roommates",
-    description: "Utilities and groceries",
-    balances: [
-      { user_id: "u-you", amount: 24, currency: "USD", full_name: "You" },
-    ],
+    description: "Utilities & groceries",
+    balance: 42,
   },
   {
     id: "g-trip",
-    name: "Phuket trip",
-    description: "Flights and dinners",
-    balances: [
-      {
-        user_id: "u-you",
-        amount: -86.4,
-        currency: "USD",
-        full_name: "You",
-      },
-    ],
-  },
-  {
-    id: "g-even",
-    name: "Book club",
-    description: undefined as string | undefined,
-    balances: [] as Balance[],
+    name: "Barcelona trip",
+    description: "Flights and Airbnb",
+    balance: -18.5,
   },
 ];
 
@@ -116,26 +119,12 @@ function PreviewShell({
   fab?: React.ReactNode;
 }) {
   const theme = useTheme();
-  const { width } = useWindowDimensions();
-  const maxWidth = Math.min(width, WEB_MAX_WIDTH);
   return (
-    <View
-      style={[
-        styles.shell,
-        {
-          backgroundColor: theme.colors.background,
-          maxWidth,
-          alignSelf: "center",
-          width: "100%",
-        },
-      ]}
-    >
-      <Appbar.Header style={{ backgroundColor: theme.colors.background }}>
-        <Appbar.Content title={title} titleStyle={{ fontWeight: "700" }} />
+    <View style={[styles.shell, { backgroundColor: theme.colors.background }]}>
+      <Appbar.Header elevated style={{ backgroundColor: theme.colors.surface }}>
+        <Appbar.Content title={title} titleStyle={{ fontWeight: "bold" }} />
       </Appbar.Header>
-      <ScrollView contentContainerStyle={{ paddingBottom: fab ? 96 : 32 }}>
-        {children}
-      </ScrollView>
+      <ScrollView contentContainerStyle={{ paddingBottom: 96 }}>{children}</ScrollView>
       {fab}
     </View>
   );
@@ -155,9 +144,14 @@ function HomeEmptyPreview() {
             maxWidth: 280,
           }}
         >
-          Create a group to start splitting expenses.
+          Create a group for ongoing shared expenses with friends or roommates.
         </Text>
-        <Button mode="contained">Create group</Button>
+        <Button mode="contained" style={{ alignSelf: "stretch", maxWidth: 320 }} contentStyle={{ minHeight: 48 }}>
+          Create a group
+        </Button>
+        <Button mode="text" compact testID="preview-home-empty-one-time" style={{ marginTop: 8 }} labelStyle={{ fontWeight: "500" }}>
+          Just one bill? Split it without a group
+        </Button>
       </View>
     </PreviewShell>
   );
@@ -174,16 +168,6 @@ const FORMER_GROUPS = [
     name: "Notification Test",
     description: "You left this group",
   },
-  {
-    id: "g-sushma",
-    name: "Sushma Cloth press",
-    description: "You left this group",
-  },
-  {
-    id: "g-weekend",
-    name: "Weekend",
-    description: "You left this group",
-  },
 ];
 
 const ARCHIVED_GROUPS = [
@@ -194,28 +178,36 @@ const ARCHIVED_GROUPS = [
   },
 ];
 
-function HomeListPreview() {
+function HomeListPreview({
+  balancesLoading = false,
+  showOneTimeRow = false,
+}: {
+  balancesLoading?: boolean;
+  showOneTimeRow?: boolean;
+}) {
   const theme = useTheme();
-  // Expand Former by default so Design can re-score comfortable Former cards.
   const [formerExpanded, setFormerExpanded] = useState(true);
   const [archivedExpanded, setArchivedExpanded] = useState(true);
+  const testID = balancesLoading
+    ? "preview-home-loading"
+    : showOneTimeRow
+      ? "preview-home-unsettled"
+      : "preview-home-list";
+  const oneTimeNet = 42;
   return (
-    <PreviewShell
-      title="Your Groups"
-      fab={
-        <Surface
-          style={[styles.fabSurface, { backgroundColor: theme.colors.primary }]}
-          elevation={2}
-        >
-          <View style={styles.fabContent}>
-            <Text variant="labelLarge" style={{ color: theme.colors.onPrimary }}>
-              + New Group
-            </Text>
-          </View>
-        </Surface>
-      }
-    >
-      <View style={{ paddingHorizontal: 16 }} testID="preview-home-list">
+    <PreviewShell title="Your Groups">
+      <View style={{ paddingHorizontal: 16 }} testID={testID}>
+        <View style={styles.groupsSectionHeader} testID="preview-groups-header">
+          <Text
+            variant="labelLarge"
+            style={{ color: theme.colors.onSurfaceVariant, fontWeight: "700" }}
+          >
+            Groups
+          </Text>
+          <Button mode="text" compact testID="preview-new-group">
+            New group
+          </Button>
+        </View>
         {GROUPS.map((group) => (
           <Surface
             key={group.id}
@@ -229,161 +221,220 @@ function HomeListPreview() {
               >
                 {group.name}
               </Text>
-              {group.description ? (
-                <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}>
-                  {group.description}
-                </Text>
-              ) : null}
+              <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                {group.description}
+              </Text>
             </View>
-            <GroupBalanceBadge
-              balanceData={{ group_id: group.id, balances: group.balances }}
-              currentUserId="u-you"
-            />
+            {balancesLoading ? (
+              <View style={{ width: 96, height: 28, borderRadius: 8, backgroundColor: theme.colors.surfaceVariant }} />
+            ) : (
+              <GroupBalanceBadge
+                balanceData={{
+                  group_id: group.id,
+                  balances: [{ user_id: "u-you", amount: group.balance, currency: "USD", full_name: "You" }],
+                }}
+                currentUserId="u-you"
+              />
+            )}
           </Surface>
         ))}
 
-        {/* Loading badge sample — cold paint must not claim Even */}
-        <Surface
-          style={[styles.groupRow, { backgroundColor: theme.colors.surface }]}
-          elevation={0}
-          testID="preview-balance-loading-row"
-        >
-          <View style={{ flex: 1, paddingRight: 12 }}>
-            <Text
-              variant="titleMedium"
-              style={{ fontWeight: "700", color: theme.colors.onSurface, letterSpacing: -0.2 }}
-            >
-              Loading balances…
-            </Text>
-            <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}>
-              Placeholder until all-balances resolves
-            </Text>
-          </View>
-          <GroupBalanceBadge loading balanceData={undefined} currentUserId="u-you" />
-        </Surface>
-
-        <List.Accordion
-          title={`Archived (${ARCHIVED_GROUPS.length})`}
-          titleStyle={[styles.sectionAccordionTitle, { color: theme.colors.onSurfaceVariant }]}
-          style={[styles.sectionAccordion, { backgroundColor: theme.colors.surface }]}
-          left={(props) => (
-            <List.Icon
-              {...props}
-              icon="archive-outline"
-              color={theme.colors.onSurfaceVariant}
-              style={styles.sectionAccordionIcon}
-            />
-          )}
-          expanded={archivedExpanded}
-          onPress={() => setArchivedExpanded(!archivedExpanded)}
-        >
-          <View style={[styles.accordionContent, { backgroundColor: theme.colors.background }]}>
-            {ARCHIVED_GROUPS.map((group) => (
-              <View
-                key={group.id}
-                style={[styles.nestedGroupRow, { borderBottomColor: theme.colors.outlineVariant }]}
-                testID={`preview-nested-${group.id}`}
+        {showOneTimeRow ? (
+          <Surface
+            style={[styles.groupRow, { backgroundColor: theme.colors.surface, marginTop: 4 }]}
+            elevation={0}
+            testID="preview-one-time-bills-row"
+          >
+            <View style={{ flex: 1, paddingRight: 12 }}>
+              <Text
+                variant="titleMedium"
+                style={{ fontWeight: "700", color: theme.colors.onSurface, letterSpacing: -0.2 }}
               >
-                <View style={styles.nestedGroupTouchable}>
-                  <View style={{ flex: 1 }}>
-                    <Text
-                      variant="titleMedium"
-                      style={{
-                        fontWeight: "600",
-                        color: theme.colors.onSurfaceVariant,
-                        letterSpacing: -0.2,
-                      }}
-                    >
-                      {group.name}
-                    </Text>
-                    <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}>
-                      {group.description}
-                    </Text>
-                  </View>
-                  <GroupBalanceBadge
-                    balanceData={{ group_id: group.id, balances: [] }}
-                    currentUserId="u-you"
-                  />
-                </View>
-              </View>
-            ))}
-          </View>
-        </List.Accordion>
+                One-time bills
+              </Text>
+              <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                2 unsettled
+              </Text>
+            </View>
+            <Text
+              style={{
+                fontSize: 13,
+                lineHeight: 16,
+                fontWeight: "700",
+                textAlign: "right",
+                color: balanceAmountColor(oneTimeNet, theme.colors, { dark: theme.dark }),
+              }}
+            >
+              {groupListBalanceWords(oneTimeNet, formatCurrency(oneTimeNet, "USD"))}
+            </Text>
+          </Surface>
+        ) : null}
 
         <View
-          style={[
-            styles.sectionAccordion,
-            { backgroundColor: theme.colors.surface },
-          ]}
+          style={[styles.sectionAccordion, { backgroundColor: theme.colors.surface }]}
+          testID="preview-archived-accordion"
+        >
+          <TouchableRipple
+            onPress={() => setArchivedExpanded(!archivedExpanded)}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: archivedExpanded }}
+            style={styles.sectionDisclosureHeader}
+          >
+            <View style={styles.sectionDisclosureHeaderRow}>
+              <Icon source="archive-outline" size={20} color={theme.colors.onSurfaceVariant} />
+              <Text style={[styles.sectionAccordionTitle, { color: theme.colors.onSurfaceVariant, flex: 1 }]}>
+                {`Archived (${ARCHIVED_GROUPS.length})`}
+              </Text>
+              <Icon
+                source={archivedExpanded ? "chevron-up" : "chevron-down"}
+                size={20}
+                color={theme.colors.onSurfaceVariant}
+              />
+            </View>
+          </TouchableRipple>
+          {archivedExpanded ? (
+            <View style={[styles.sectionDisclosureContent, { backgroundColor: theme.colors.background }]}>
+              {ARCHIVED_GROUPS.map((group) => (
+                <View
+                  key={group.id}
+                  style={[styles.nestedGroupRow, { borderBottomColor: theme.colors.outlineVariant }]}
+                  testID={`preview-nested-group-${group.id}`}
+                >
+                  <View style={styles.nestedGroupTouchable}>
+                    <View style={{ flex: 1 }}>
+                      <Text variant="bodyLarge" style={styles.nestedGroupName}>
+                        {group.name}
+                      </Text>
+                      <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                        {group.description}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : null}
+        </View>
+
+        <View
+          style={[styles.sectionAccordion, { backgroundColor: theme.colors.surface }]}
           testID="preview-former-accordion"
         >
           <TouchableRipple
             onPress={() => setFormerExpanded(!formerExpanded)}
             accessibilityRole="button"
             accessibilityState={{ expanded: formerExpanded }}
-            style={styles.formerAccordionHeader}
+            style={styles.sectionDisclosureHeader}
           >
-            <View style={styles.formerAccordionHeaderRow}>
-              <List.Icon
-                icon="history"
-                color={theme.colors.onSurfaceVariant}
-                style={styles.sectionAccordionIcon}
-              />
-              <Text
-                style={[
-                  styles.sectionAccordionTitle,
-                  { color: theme.colors.onSurfaceVariant, flex: 1 },
-                ]}
-              >
+            <View style={styles.sectionDisclosureHeaderRow}>
+              <Icon source="history" size={20} color={theme.colors.onSurfaceVariant} />
+              <Text style={[styles.sectionAccordionTitle, { color: theme.colors.onSurfaceVariant, flex: 1 }]}>
                 {`Former (${FORMER_GROUPS.length})`}
               </Text>
-              <List.Icon
-                icon={formerExpanded ? "chevron-up" : "chevron-down"}
+              <Icon
+                source={formerExpanded ? "chevron-up" : "chevron-down"}
+                size={20}
                 color={theme.colors.onSurfaceVariant}
               />
             </View>
           </TouchableRipple>
           {formerExpanded ? (
-            <View
-              style={[
-                styles.formerAccordionContent,
-                { backgroundColor: theme.colors.background },
-              ]}
-            >
+            <View style={[styles.sectionDisclosureContent, { backgroundColor: theme.colors.background }]}>
               {FORMER_GROUPS.map((group) => (
-                <Surface
+                <View
                   key={group.id}
-                  style={[styles.groupRow, { backgroundColor: theme.colors.surface }]}
-                  elevation={0}
-                  testID={`preview-former-card-${group.id}`}
+                  style={[styles.nestedGroupRow, { borderBottomColor: theme.colors.outlineVariant }]}
                 >
-                  <View style={{ flex: 1, paddingRight: 12 }}>
-                    <Text
-                      variant="titleMedium"
-                      style={{
-                        fontWeight: "700",
-                        color: theme.colors.onSurfaceVariant,
-                        letterSpacing: -0.2,
+                  <View style={styles.nestedGroupTouchable}>
+                    <View style={{ flex: 1 }}>
+                      <Text variant="bodyLarge" style={styles.nestedGroupName}>
+                        {group.name}
+                      </Text>
+                      <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                        {group.description}
+                      </Text>
+                    </View>
+                    <GroupBalanceBadge
+                      balanceData={{
+                        group_id: group.id,
+                        balances: [{ user_id: "u-you", amount: -12, currency: "USD", full_name: "You" }],
                       }}
-                    >
-                      {group.name}
-                    </Text>
-                    <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}>
-                      {group.description}
-                    </Text>
+                      currentUserId="u-you"
+                    />
                   </View>
-                  <GroupBalanceBadge
-                    balanceData={{
-                      group_id: group.id,
-                      balances: [{ user_id: "u-you", amount: -12, currency: "USD", full_name: "You" }],
-                    }}
-                    currentUserId="u-you"
-                  />
-                </Surface>
+                </View>
               ))}
             </View>
           ) : null}
         </View>
+
+        <View testID="home-list-clearance" style={{ height: 32 }} />
+      </View>
+    </PreviewShell>
+  );
+}
+
+function ProfileOneTimePreview() {
+  const theme = useTheme();
+  return (
+    <PreviewShell title="Profile">
+      <View style={{ padding: 16 }} testID="preview-profile-one-time">
+        <Surface style={[styles.profileCard, { backgroundColor: theme.colors.surface }]} elevation={2}>
+          <TouchableRipple
+            testID="preview-profile-one-time-row"
+            style={styles.profileRow}
+          >
+            <View style={styles.profileRowInner}>
+              <View style={{ flex: 1 }}>
+                <Text variant="titleSmall" style={{ color: theme.colors.onSurface, fontWeight: "700" }}>
+                  One-time bills
+                </Text>
+                <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                  Split a bill without a group.
+                </Text>
+              </View>
+              <Icon source="chevron-right" size={20} color={theme.colors.onSurfaceVariant} />
+            </View>
+          </TouchableRipple>
+        </Surface>
+      </View>
+    </PreviewShell>
+  );
+}
+
+function AddExpenseGlobalPreview() {
+  const theme = useTheme();
+  return (
+    <PreviewShell title="Add Expense">
+      <View style={{ padding: 16 }} testID="preview-add-expense-global">
+        <Text
+          variant="displayMedium"
+          style={{ textAlign: "center", fontWeight: "300", marginVertical: 24, color: theme.colors.onSurface }}
+        >
+          $36.00
+        </Text>
+        <Surface style={[styles.profileCard, { backgroundColor: theme.colors.surface }]} elevation={0}>
+          <View style={styles.profileRowInner}>
+            <View style={{ flex: 1 }}>
+              <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                Group
+              </Text>
+              <Text variant="bodyLarge" style={{ color: theme.colors.onSurfaceVariant }}>
+                Choose a group
+              </Text>
+            </View>
+            <Icon source="chevron-down" size={20} color={theme.colors.onSurfaceVariant} />
+          </View>
+          <Button
+            mode="text"
+            compact
+            testID="preview-split-once-link"
+            style={{ alignSelf: "flex-start", marginTop: 4 }}
+            labelStyle={{ fontWeight: "500" }}
+          >
+            Not in a group? Split once
+          </Button>
+        </Surface>
       </View>
     </PreviewShell>
   );
@@ -476,7 +527,26 @@ function StatsPreview() {
 }
 
 export const HomePolishPreviewScreen: React.FC = () => {
-  const [surface, setSurface] = useState<SurfaceId>("home-list");
+  const [surface, setSurface] = useState<SurfaceId>(() => {
+    if (typeof window === "undefined") return "home-list";
+    const requested = new URLSearchParams(window.location.search).get("surface");
+    const allowed: SurfaceId[] = [
+      "home-empty",
+      "home-list",
+      "home-unsettled",
+      "home-loading",
+      "profile-one-time",
+      "add-expense",
+      "group-home",
+      "group-loading",
+      "stats",
+      "split-loading",
+      "split-form",
+      "split-carry",
+      "split-mode",
+    ];
+    return allowed.includes(requested as SurfaceId) ? (requested as SurfaceId) : "home-list";
+  });
 
   return (
     <PaperProvider theme={lightTheme}>
@@ -495,25 +565,35 @@ export const HomePolishPreviewScreen: React.FC = () => {
           }}
         >
           <Text variant="labelLarge" style={{ marginBottom: 8, fontWeight: "700" }}>
-            Home polish preview — Former flat cards + Archived nested
+            Home polish preview — demoted split, one-time bills
           </Text>
           <SegmentedButtons
             value={surface}
             onValueChange={(v) => setSurface(v as SurfaceId)}
             buttons={[
-              { value: "home-empty", label: "Empty" },
               { value: "home-list", label: "Home" },
-              { value: "group-loading", label: "Loading" },
-              { value: "group-home", label: "Group" },
-              { value: "stats", label: "Stats" },
+              { value: "home-unsettled", label: "Owe" },
+              { value: "home-empty", label: "Empty" },
+              { value: "split-form", label: "Split" },
+              { value: "add-expense", label: "Add" },
             ]}
           />
         </View>
         {surface === "home-empty" ? <HomeEmptyPreview /> : null}
         {surface === "home-list" ? <HomeListPreview /> : null}
+        {surface === "home-unsettled" ? <HomeListPreview showOneTimeRow /> : null}
+        {surface === "home-loading" ? <HomeListPreview balancesLoading /> : null}
+        {surface === "profile-one-time" ? <ProfileOneTimePreview /> : null}
+        {surface === "add-expense" ? <AddExpenseGlobalPreview /> : null}
         {surface === "group-loading" ? <GroupHomePreview loading /> : null}
         {surface === "group-home" ? <GroupHomePreview /> : null}
         {surface === "stats" ? <StatsPreview /> : null}
+        {surface === "split-loading" ? <SplitBillFormPreview loadingPeople disabledCreate /> : null}
+        {surface === "split-form" ? <SplitBillFormPreview /> : null}
+        {surface === "split-carry" ? (
+          <SplitBillFormPreview draft={{ amount: "36.00", currency: "USD" }} showRecentBills={false} />
+        ) : null}
+        {surface === "split-mode" ? <SplitBillFormPreview modeMenuOpen /> : null}
       </SafeAreaView>
     </PaperProvider>
   );
@@ -543,24 +623,31 @@ const styles = StyleSheet.create({
     bottom: 24,
     borderRadius: 28,
   },
-  fabSurface: {
-    position: "absolute",
-    right: 16,
-    bottom: 24,
-    borderRadius: 8,
-  },
-  fabContent: {
-    minHeight: 56,
-    paddingHorizontal: 16,
+  groupsSectionHeader: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "space-between",
+    minHeight: 44,
+    marginBottom: 8,
+  },
+  profileCard: {
+    borderRadius: 16,
+    padding: 16,
+  },
+  profileRow: {
+    // No top hairline — matches Profile One-time bills row.
+    marginTop: 0,
+    paddingTop: 0,
+  },
+  profileRowInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   sectionAccordion: {
     marginTop: 20,
     marginBottom: 8,
     borderRadius: 12,
-    paddingVertical: 2,
-    paddingHorizontal: 4,
     minHeight: 44,
     overflow: "hidden",
   },
@@ -570,37 +657,34 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     letterSpacing: 0.2,
   },
-  sectionAccordionIcon: {
-    marginLeft: 0,
-    marginRight: 0,
-  },
-  accordionContent: {
-    paddingTop: 4,
-    marginHorizontal: -4,
-  },
-  formerAccordionHeader: {
+  sectionDisclosureHeader: {
     minHeight: 44,
     justifyContent: "center",
   },
-  formerAccordionHeaderRow: {
+  sectionDisclosureHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
     minHeight: 44,
-    paddingRight: 4,
+    paddingHorizontal: 14,
+    gap: 10,
   },
-  formerAccordionContent: {
-    paddingTop: 8,
-    marginHorizontal: -4,
+  sectionDisclosureContent: {
+    paddingTop: 0,
+    paddingBottom: 4,
   },
   nestedGroupRow: {
-    marginLeft: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   nestedGroupTouchable: {
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 12,
-    paddingHorizontal: 4,
+    paddingHorizontal: 14,
     gap: 8,
+  },
+  nestedGroupName: {
+    fontWeight: "600",
+    flexShrink: 1,
+    letterSpacing: -0.2,
   },
 });
