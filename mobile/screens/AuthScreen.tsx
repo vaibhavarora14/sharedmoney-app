@@ -913,8 +913,20 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           autoComplete="one-time-code"
           accessibilityLabel="WhatsApp verification code"
           disabled={codeDisabled}
-          error={Boolean(formError)}
-          style={styles.input}
+          // Locked is non-typeable: disabled grey fill/border, not red error outline.
+          error={Boolean(formError) && !otpLocked}
+          outlineColor={
+            otpLocked ? theme.colors.outlineVariant : undefined
+          }
+          activeOutlineColor={
+            otpLocked ? theme.colors.outlineVariant : undefined
+          }
+          style={[
+            styles.input,
+            otpLocked
+              ? { backgroundColor: theme.colors.surfaceVariant }
+              : null,
+          ]}
           maxLength={OTP_CODE_LENGTH}
         />
 
