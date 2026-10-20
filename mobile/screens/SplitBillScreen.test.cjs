@@ -33,16 +33,20 @@ function loadScreen(overrides = {}) {
     fonts: { labelLarge: { lineHeight: 16 } },
   };
   const paper = Object.fromEntries(
-    ["Appbar", "Button", "List", "Portal", "Surface", "Text", "TextInput"].map((name) => [name, name]),
+    ["Appbar", "Button", "Icon", "List", "Portal", "Surface", "Text", "TextInput"].map((name) => [name, name]),
   );
   paper.Appbar = { Header: "Header", BackAction: "Back", Content: "Content" };
   paper.List = { Item: "List.Item", Icon: "List.Icon" };
-  paper.Portal = Object.assign(function Portal() {}, { Host: "Portal.Host" });
+  paper.Portal = Object.assign(function Portal({ children }) {
+    return React.createElement("Portal", null, children);
+  }, { Host: "Portal.Host" });
+  paper.Modal = "PaperModal";
   paper.useTheme = () => theme;
   paper.TextInput = "TextInput";
   paper.Button = "Button";
   paper.Surface = "Surface";
   paper.Text = "Text";
+  paper.Icon = "Icon";
 
   const directory = {
     isLoading: true,
@@ -93,10 +97,11 @@ function loadScreen(overrides = {}) {
           View: "View",
           ScrollView: "ScrollView",
           Modal: "Modal",
+          Pressable: "Pressable",
           KeyboardAvoidingView: "KeyboardAvoidingView",
           Platform: { OS: "web" },
           Share: { share: async () => {} },
-          StyleSheet: { create: (styles) => styles },
+          StyleSheet: { create: (styles) => styles, hairlineWidth: 1 },
         };
       }
       if (id === "react-native-paper") return paper;
@@ -141,6 +146,22 @@ function loadScreen(overrides = {}) {
           formatBillAmount: (minor, currency) => `${currency} ${(minor / 100).toFixed(2)}`,
         };
       }
+      if (id === "../utils/currency") {
+        return {
+          CURRENCIES: [
+            { code: "USD", symbol: "$", name: "US Dollar" },
+            { code: "EUR", symbol: "€", name: "Euro" },
+            { code: "INR", symbol: "₹", name: "Indian Rupee" },
+          ],
+          formatCurrency: (amount, currency) => {
+            const symbol = currency === "EUR" ? "€" : currency === "INR" ? "₹" : "$";
+            return `${symbol}${Number(amount).toFixed(2)}`;
+          },
+          getCurrencyName: (code) => code,
+          getDefaultCurrency: () => "USD",
+          getLocaleCurrencyCode: () => "USD",
+        };
+      }
       if (id === "../utils/peoplePicker") {
         return {
           existingPersonLabel: (person) => person.full_name || person.email,
@@ -148,7 +169,11 @@ function loadScreen(overrides = {}) {
         };
       }
       if (id === "../utils/recentBillSplits") {
-        return { rememberRecentBillSplit: async () => [] };
+        return {
+          rememberRecentBillSplit: async () => [],
+          readLastBillSplitCurrency: async () => null,
+          writeLastBillSplitCurrency: async () => {},
+        };
       }
       if (id === "../utils/splits") {
         return {
@@ -218,6 +243,35 @@ test("people directory loading uses same-size skeletons instead of a spinner", (
   };
   const rows = nodes(skeleton).filter((node) => rowHeight(node.props?.style) === 56);
   assert.equal(rows.length, 3, "skeleton reserves three List.Item-sized rows");
+});
+
+test("create CTA stays a contained pill when disabled and currency is a picker", () => {
+  const tree = expandScreen(loadScreen({ directory: { isLoading: false } }).render());
+  const create = tree.find((node) => node.props?.testID === "split-bill-create");
+  assert.ok(create);
+  assert.equal(create.props.mode, "contained");
+  assert.equal(create.props.disabled, true);
+  const createStyle = Object.assign({}, ...[create.props.style].flat(Infinity).filter(Boolean));
+  assert.equal(createStyle.borderRadius, 24);
+  assert.equal(createStyle.opacity, 0.45);
+  assert.equal(tree.some((node) => node.props?.label === "Currency code"), false);
+  assert.ok(tree.find((node) => node.props?.testID === "split-bill-currency"));
+});
+
+test("Add by name is an inline row under search, not an outlined button", () => {
+  // Seed person-input state: amount, currencyInput, currencyHydrated, showCurrencyPicker, name…
+  const screen = loadScreen({ directory: { isLoading: false } });
+  // First render initializes state; then set name via the TextInput onChange.
+  let tree = expandScreen(screen.render());
+  const input = tree.find((node) => node.props?.testID === "split-bill-person-input");
+  assert.ok(input);
+  input.props.onChangeText("Sam");
+  tree = expandScreen(screen.render());
+  const add = tree.find((node) => node.props?.testID === "split-bill-add-person");
+  assert.ok(add);
+  assert.equal(add.type, "Pressable");
+  assert.notEqual(add.props.mode, "outlined");
+  assert.match(String(nodes(add).map((n) => (typeof n === "string" ? n : n.props?.children)).flat(Infinity).join("")), /Add/);
 });
 
 test("bill details loading uses a same-size skeleton instead of a spinner", () => {

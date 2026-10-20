@@ -40,7 +40,10 @@ import { getSeenGroupIds, markGroupSeen } from "../utils/seenGroups";
 import { partitionGroupsBySection } from "../utils/groupListSections";
 import { recordSentryListCounts } from "../utils/sentryTelemetry";
 import {
+  formatRecentBillAmount,
   listRecentBillSplits,
+  RECENT_BILLS_PREVIEW_COUNT,
+  relativeBillDate,
   type RecentBillSplit,
 } from "../utils/recentBillSplits";
 import { CreateGroupScreen } from "./CreateGroupScreen";
@@ -69,7 +72,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
   const [showSplitBill, setShowSplitBill] = useState(false);
   const [splitBillToken, setSplitBillToken] = useState<string | undefined>();
   const [recentBills, setRecentBills] = useState<RecentBillSplit[]>([]);
-  const [newGroupHeight, setNewGroupHeight] = useState(56);
+  const [showAllRecentBills, setShowAllRecentBills] = useState(false);
   const [formerGroupsExpanded, setFormerGroupsExpanded] = useState<boolean>(false);
   const [archivedGroupsExpanded, setArchivedGroupsExpanded] = useState<boolean>(false);
   const [seenGroupIds, setSeenGroupIds] = useState<Set<string> | null>(null);
@@ -449,34 +452,52 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
 
           {recentBills.length > 0 ? (
             <View style={styles.recentBills} testID="recent-bills-row">
-              <Text variant="labelLarge" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 8 }}>
+              <Text variant="labelLarge" style={[styles.sectionHeaderLabel, { color: theme.colors.onSurfaceVariant }]}>
                 Recent bills
               </Text>
-              {recentBills.map((bill) => (
-                <Surface
-                  key={bill.token}
-                  style={[styles.recentBillItem, { backgroundColor: theme.colors.surface }]}
-                  elevation={0}
-                >
+              {(showAllRecentBills
+                ? recentBills
+                : recentBills.slice(0, RECENT_BILLS_PREVIEW_COUNT)
+              ).map((bill) => {
+                const amount = formatRecentBillAmount(bill.amount_minor, bill.currency);
+                const people = bill.people_count === 1
+                  ? "1 person"
+                  : `${bill.people_count} people`;
+                const when = relativeBillDate(bill.remembered_at);
+                return (
                   <TouchableRipple
+                    key={bill.token}
                     testID={`recent-bill-${bill.token.slice(0, 8)}`}
                     onPress={() => openSplitBill(bill.token)}
                     accessibilityRole="button"
-                    accessibilityLabel={`Open recent bill ${bill.title}`}
-                    style={styles.recentBillTouchable}
+                    accessibilityLabel={`Open recent bill ${bill.identity}, ${amount}, ${people}${when ? `, ${when}` : ""}`}
+                    style={[styles.recentBillRow, { borderBottomColor: theme.colors.outlineVariant }]}
                   >
                     <View style={styles.recentBillContent}>
                       <View style={{ flex: 1, minWidth: 0 }}>
-                        <Text variant="titleMedium" numberOfLines={1}>{bill.title}</Text>
-                        <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                          {bill.mode === "unequal" ? "Exact amounts" : bill.mode === "shares" ? "Shares" : "Equal split"}
+                        <Text variant="bodyLarge" numberOfLines={1} style={{ fontWeight: "600" }}>
+                          {bill.identity}
+                        </Text>
+                        <Text variant="bodySmall" numberOfLines={1} style={{ color: theme.colors.onSurfaceVariant }}>
+                          {amount} · {people}{when ? ` · ${when}` : ""}
                         </Text>
                       </View>
                       <Icon source="chevron-right" size={20} color={theme.colors.onSurfaceVariant} />
                     </View>
                   </TouchableRipple>
-                </Surface>
-              ))}
+                );
+              })}
+              {!showAllRecentBills && recentBills.length > RECENT_BILLS_PREVIEW_COUNT ? (
+                <Button
+                  mode="text"
+                  compact
+                  testID="recent-bills-see-all"
+                  onPress={() => setShowAllRecentBills(true)}
+                  style={{ alignSelf: "flex-start", marginTop: 4 }}
+                >
+                  See all
+                </Button>
+              ) : null}
             </View>
           ) : null}
 
@@ -560,6 +581,21 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
             </View>
           ) : (
             <>
+              <View style={styles.groupsSectionHeader} testID="groups-section-header">
+                <Text variant="labelLarge" style={[styles.sectionHeaderLabel, { color: theme.colors.onSurfaceVariant }]}>
+                  Groups
+                </Text>
+                <Button
+                  mode="text"
+                  compact
+                  testID="new-group-action"
+                  onPress={() => setShowCreateGroup(true)}
+                  accessibilityLabel="New group"
+                >
+                  New group
+                </Button>
+              </View>
+
               {/* Active Groups */}
               {activeGroups.map((group) => renderGroupItem(group))}
 
@@ -657,40 +693,10 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
             </>
           )}
 
-          {/* Bottom padding for FAB when present */}
-          <View
-            testID="new-group-clearance"
-            style={{ height: hasAnyVisibleGroups ? newGroupHeight + 24 : 24 }}
-          />
+          {/* Bottom padding so Archived / Former never sit under chrome. */}
+          <View testID="home-list-clearance" style={{ height: 32 }} />
         </ScrollView>
       )}
-
-      {/* Single primary CTA — solid action when groups exist; empty state owns Create group alone. */}
-      {hasAnyVisibleGroups ? (
-        <View style={styles.fab} pointerEvents="box-none">
-          <Surface
-            testID="new-group-surface"
-            style={[styles.fabSurface, { backgroundColor: theme.colors.primary }]}
-            elevation={2}
-            onLayout={({ nativeEvent }) => setNewGroupHeight(nativeEvent.layout.height)}
-          >
-            <TouchableRipple
-              testID="new-group-action"
-              style={styles.fabRipple}
-              onPress={() => setShowCreateGroup(true)}
-              accessibilityRole="button"
-              accessibilityLabel="New Group"
-            >
-              <View style={styles.fabContent} pointerEvents="none">
-                <Icon source="plus" size={24} color={theme.colors.onPrimary} />
-                <Text variant="labelLarge" style={[styles.fabLabel, { color: theme.colors.onPrimary }]}>
-                  New Group
-                </Text>
-              </View>
-            </TouchableRipple>
-          </Surface>
-        </View>
-      ) : null}
 
       {showSplitBill ? (
         <SplitBillScreen
@@ -811,21 +817,28 @@ const styles = StyleSheet.create({
     maxWidth: 320,
   },
   recentBills: {
-    marginBottom: 12,
+    marginBottom: 16,
   },
-  recentBillItem: {
-    borderRadius: 14,
+  sectionHeaderLabel: {
+    fontWeight: "700",
+    letterSpacing: 0.2,
+  },
+  groupsSectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    minHeight: 44,
     marginBottom: 8,
-    overflow: "hidden",
   },
-  recentBillTouchable: {
-    minHeight: 56,
+  recentBillRow: {
+    minHeight: 48,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   recentBillContent: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 2,
     gap: 8,
   },
   emptyContainer: {
@@ -884,33 +897,6 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 8,
     marginTop: 16,
-  },
-  fab: {
-    position: "absolute",
-    left: 16,
-    right: 16,
-    bottom: 26,
-    alignItems: "flex-end",
-  },
-  fabSurface: {
-    maxWidth: "100%",
-    borderRadius: 8,
-  },
-  fabRipple: {
-    borderRadius: 8,
-    overflow: "hidden",
-  },
-  fabContent: {
-    minHeight: 56,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  fabLabel: {
-    marginHorizontal: 8,
-    flexShrink: 1,
   },
   // New Styles
   groupSubtitle: {

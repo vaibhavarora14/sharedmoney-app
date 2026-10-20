@@ -8,6 +8,16 @@ export function balancePolarityLabel(amount: number): "owed" | "you owe" | "sett
   return "settled";
 }
 
+/** Home group-row copy: words + amount, never bare +/-. */
+export function groupListBalanceWords(
+  amount: number,
+  formattedAbsolute: string,
+): string {
+  if (amount > 0.01) return `You're owed ${formattedAbsolute}`;
+  if (amount < -0.01) return `You owe ${formattedAbsolute}`;
+  return GROUP_LIST_EVEN_LABEL;
+}
+
 /**
  * Zero-balance copy for group *list* surfaces (#277).
  * Avoids "Settled" while still communicating an even state.

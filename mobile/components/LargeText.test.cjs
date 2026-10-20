@@ -42,6 +42,12 @@ function harness(fontScale = 1) {
     '../utils/groupListPerfTelemetry': {},
     '../utils/posthogAnalytics': { captureIdentifiedAnalyticsEvent: () => {} },
     '../utils/posthogEvents': { ANALYTICS_EVENTS: {} },
+    '../utils/recentBillSplits': {
+      listRecentBillSplits: async () => [],
+      RECENT_BILLS_PREVIEW_COUNT: 3,
+      formatRecentBillAmount: () => '$0.00',
+      relativeBillDate: () => 'Today',
+    },
     '../components/NotificationBell': { NotificationBell: 'NotificationBell' },
     '../components/GroupBalanceBadge': { GroupBalanceBadge: 'GroupBalanceBadge' },
     '../components/Skeleton': { Skeleton: 'Skeleton', SkeletonGroup: 'SkeletonGroup' },
@@ -105,29 +111,23 @@ test('group ledger filters grow with text while retaining their compact minimum'
   assert.equal(style.maxHeight, undefined);
 });
 
-test('New Group uses content height, keeps its action, and reserves its measured scroll clearance', () => {
+test('New group is a Groups-header text action with list clearance, not a FAB', () => {
   const app = harness(2);
   const render = () => app.render('screens/GroupsListScreen.tsx', 'GroupsListScreen');
-  let tree = render();
-  const action = nodes(tree).find(n => n.props.testID === 'new-group-action');
-  assert.ok(action, 'New Group must not use Paper FAB’s fixed 56dp content box');
-  assert.equal(action.props.accessibilityLabel, 'New Group');
-  assert.equal(action.props.accessibilityRole, 'button');
-  assert.match(text(action), /New Group/);
-  const content = action.props.children;
-  assert.equal(flatten(content.props.style).height, undefined);
-  assert.equal(flatten(content.props.style).minHeight, 56);
-  const label = nodes(action).find(n => n.type === 'Text');
-  assert.equal(flatten(label.props.style).flexShrink, 1);
-  assert.equal(label.props.numberOfLines, undefined);
-  assert.notEqual(label.props.allowFontScaling, false);
-  assert.equal(label.props.maxFontSizeMultiplier, undefined);
-  const surface = nodes(tree).find(n => n.props.testID === 'new-group-surface');
-  assert.equal(flatten(surface.props.style).maxWidth, '100%');
-  surface.props.onLayout({ nativeEvent: { layout: { height: 112 } } });
-  tree = render();
-  const spacer = nodes(tree).find(n => n.props.testID === 'new-group-clearance');
-  assert.equal(flatten(spacer.props.style).height, 136);
+  const tree = render();
+  assert.equal(nodes(tree).some(n => n.type === 'FAB'), false);
+  assert.equal(nodes(tree).some(n => n.props?.testID === 'new-group-surface'), false);
+  const header = nodes(tree).find(n => n.props?.testID === 'groups-section-header');
+  assert.ok(header, 'Groups section header must host New group');
+  const action = nodes(tree).find(n => n.props?.testID === 'new-group-action');
+  assert.ok(action);
+  assert.equal(action.props.mode, 'text');
+  assert.equal(action.props.accessibilityLabel, 'New group');
+  assert.match(text(action), /New group/);
+  assert.notEqual(action.props.allowFontScaling, false);
+  const clearance = nodes(tree).find(n => n.props?.testID === 'home-list-clearance');
+  assert.ok(clearance);
+  assert.equal(flatten(clearance.props.style).height, 32);
   action.props.onPress();
   assert.equal(nodes(render()).find(n => n.type === 'CreateGroupScreen').props.visible, true);
 });
@@ -176,7 +176,9 @@ test('group rows retain compact normal layout and reflow enlarged title, descrip
       });
       for (const node of nodes(renderedBadge)) {
         assert.equal(flatten(node.props.style).height, undefined, 'status remains content-sized');
-        assert.equal(node.props.numberOfLines, undefined);
+        if (node.props?.numberOfLines != null) {
+          assert.ok(node.props.numberOfLines <= 2, 'balance words may wrap once in the slot');
+        }
         assert.notEqual(node.props.allowFontScaling, false);
         assert.equal(node.props.maxFontSizeMultiplier, undefined);
       }
@@ -184,6 +186,10 @@ test('group rows retain compact normal layout and reflow enlarged title, descrip
       if (balances.length === 0) {
         assert.match(text(renderedBadge), /Even/);
         assert.doesNotMatch(text(renderedBadge), /Settled/i);
+      } else if (balances[0].amount > 0) {
+        assert.match(text(renderedBadge), /You're owed/);
+      } else {
+        assert.match(text(renderedBadge), /You owe/);
       }
     }
   }

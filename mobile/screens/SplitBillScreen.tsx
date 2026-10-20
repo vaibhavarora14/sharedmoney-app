@@ -1,7 +1,27 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import React, { useRef, useState } from "react";
-import { KeyboardAvoidingView, Modal, Platform, ScrollView, Share, StyleSheet, View } from "react-native";
-import { Appbar, Button, List, Portal, Surface, Text, TextInput, useTheme } from "react-native-paper";
+import React, { useEffect, useRef, useState } from "react";
+import {
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  Share,
+  StyleSheet,
+  View,
+} from "react-native";
+import {
+  Appbar,
+  Button,
+  Icon,
+  List,
+  Modal as PaperModal,
+  Portal,
+  Surface,
+  Text,
+  TextInput,
+  useTheme,
+} from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Skeleton, SkeletonGroup } from "../components/Skeleton";
 import { SplitAmongEditor } from "../components/SplitAmongEditor";
@@ -10,15 +30,21 @@ import { useAuth } from "../contexts/AuthContext";
 import { confirmBillSplit, createBillSplit, readBillSplit, useBillSplitPeople } from "../hooks/useBillSplit";
 import { useProfile } from "../hooks/useProfile";
 import type { Participant } from "../types";
-import { allocateBillSplit, billAmountMinor, billSplitUrl, formatBillAmount, type BillSplitMode } from "../utils/billSplit";
+import { allocateBillSplit, billAmountMinor, billSplitUrl, type BillSplitMode } from "../utils/billSplit";
+import { CURRENCIES, formatCurrency, getCurrencyName, getDefaultCurrency, getLocaleCurrencyCode } from "../utils/currency";
 import { existingPersonLabel, filterAndSortExistingPeople } from "../utils/peoplePicker";
-import { rememberRecentBillSplit } from "../utils/recentBillSplits";
+import {
+  readLastBillSplitCurrency,
+  rememberRecentBillSplit,
+  writeLastBillSplitCurrency,
+} from "../utils/recentBillSplits";
 import { distributeRemaining, sanitizeAmountInput } from "../utils/splits";
 
 const CREATOR = "bill-creator";
 /** Match Paper List.Item title-only row height so loading does not shift the form. */
 const KNOWN_PEOPLE_ROW_HEIGHT = 56;
 const KNOWN_PEOPLE_SKELETON_ROWS = 3;
+const CURRENCY_PICKER_LIMIT = 24;
 
 function KnownPeopleSkeleton() {
   const theme = useTheme();
@@ -50,10 +76,14 @@ function BillDetailsSkeleton() {
           <Skeleton width="55%" height={40} borderRadius={8} />
         </View>
       ))}
-      <Skeleton width="100%" height={44} borderRadius={8} />
+      <Skeleton width="100%" height={44} borderRadius={22} />
       <Skeleton width="70%" height={14} />
     </SkeletonGroup>
   );
+}
+
+function formatSplitAmount(minor: number, currency: string): string {
+  return formatCurrency(minor / 100, currency);
 }
 
 function BillSplitForm({ onCreated }: { onCreated: (token: string) => void }) {
@@ -63,7 +93,12 @@ function BillSplitForm({ onCreated }: { onCreated: (token: string) => void }) {
   const directory = useBillSplitPeople();
   const [amount, setAmount] = useState("");
   const [currencyInput, setCurrency] = useState<string>();
-  const currency = currencyInput ?? profile?.preferred_currency ?? "USD";
+  const [currencyHydrated, setCurrencyHydrated] = useState(false);
+  const [showCurrencyPicker, setShowCurrencyPicker] = useState(false);
+  const currency = currencyInput
+    ?? profile?.preferred_currency
+    ?? getLocaleCurrencyCode()
+    ?? getDefaultCurrency();
   const [name, setName] = useState("");
   const [people, setPeople] = useState<Participant[]>([]);
   const [mode, setMode] = useState<BillSplitMode>("equal");
@@ -85,12 +120,31 @@ function BillSplitForm({ onCreated }: { onCreated: (token: string) => void }) {
   let validation = "";
   try {
     allocations = allocateBillSplit(total ?? 0, ids.length, mode, values);
-    if (!/^[A-Z]{3}$/.test(currency)) validation = "Enter a three-letter currency code.";
+    if (!/^[A-Z]{3}$/.test(currency)) validation = "Choose a currency.";
   } catch (err) {
     validation = (err as Error).message;
   }
   const suggestions = filterAndSortExistingPeople(directory.data ?? [], name)
     .filter((person) => !people.some((selected) => selected.id === person.id));
+  const trimmedName = name.trim();
+  const canAddByName = !!trimmedName && people.length < 49 && !busy;
+  const createDisabled = busy || !!validation || total === null;
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const last = await readLastBillSplitCurrency();
+      if (cancelled || currencyInput) {
+        setCurrencyHydrated(true);
+        return;
+      }
+      if (last) setCurrency(last);
+      setCurrencyHydrated(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [currencyInput]);
 
   const addPerson = (id: string, fullName: string) => {
     if (!fullName.trim() || people.length >= 49) return;
@@ -119,7 +173,11 @@ function BillSplitForm({ onCreated }: { onCreated: (token: string) => void }) {
           currency,
           mode,
           people_count: people.length + 1,
+          creatorName: profile?.full_name || "Bill creator",
+          firstPayeeName: people[0]?.full_name,
         });
+      } else {
+        await writeLastBillSplitCurrency(currency);
       }
       onCreated(token);
     } catch (err) {
@@ -132,29 +190,94 @@ function BillSplitForm({ onCreated }: { onCreated: (token: string) => void }) {
 
   return <>
     <Text variant="bodyMedium">A one-time bill. No group needed.</Text>
-    <TextInput label="Amount" mode="outlined" value={amount} keyboardType="decimal-pad"
-      testID="split-bill-amount" disabled={busy} onChangeText={(text) => {
+    <TextInput
+      label="Amount"
+      mode="outlined"
+      value={amount}
+      keyboardType="decimal-pad"
+      testID="split-bill-amount"
+      disabled={busy}
+      onChangeText={(text) => {
         const next = sanitizeAmountInput(text);
         if (next !== null) setAmount(next);
-      }} />
-    <TextInput label="Currency code" mode="outlined" value={currency} maxLength={3}
-      autoCapitalize="characters" disabled={busy} onChangeText={(text) => setCurrency(text.toUpperCase())} />
+      }}
+    />
+    <View>
+      <Text variant="labelLarge" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 6 }}>
+        Currency
+      </Text>
+      <Button
+        mode="outlined"
+        testID="split-bill-currency"
+        disabled={busy || !currencyHydrated}
+        onPress={() => setShowCurrencyPicker(true)}
+        contentStyle={styles.currencyButtonContent}
+        style={styles.currencyButton}
+        icon="chevron-down"
+      >
+        {currency} ({CURRENCIES.find((item) => item.code === currency)?.symbol ?? currency})
+      </Button>
+    </View>
     <Text variant="titleMedium">Who’s on the bill?</Text>
     <Text variant="bodyMedium">You’re included. Add at least one other person.</Text>
-    <TextInput label="Find someone or enter a new name" mode="outlined" value={name}
-      testID="split-bill-person-input" maxLength={100} disabled={busy || people.length >= 49} onChangeText={setName} />
-    <Button mode="outlined" testID="split-bill-add-person" disabled={busy || !name.trim() || people.length >= 49}
-      onPress={() => addPerson(`new:${nextPerson.current++}`, name)}>Add by name</Button>
+    <TextInput
+      label="Find someone or enter a new name"
+      mode="outlined"
+      value={name}
+      testID="split-bill-person-input"
+      maxLength={100}
+      disabled={busy || people.length >= 49}
+      onChangeText={setName}
+    />
+    {trimmedName ? (
+      <Pressable
+        testID="split-bill-add-person"
+        disabled={!canAddByName}
+        accessibilityRole="button"
+        accessibilityLabel={`Add ${trimmedName}`}
+        onPress={() => addPerson(`new:${nextPerson.current++}`, name)}
+        style={({ pressed }) => [
+          styles.addByNameRow,
+          {
+            opacity: canAddByName ? (pressed ? 0.7 : 1) : 0.45,
+            borderBottomColor: theme.colors.outlineVariant,
+          },
+        ]}
+      >
+        <Text variant="bodyLarge" style={{ color: theme.colors.primary, fontWeight: "600" }}>
+          {`Add “${trimmedName.slice(0, 40)}”`}
+        </Text>
+        <Icon source="plus" size={20} color={theme.colors.primary} />
+      </Pressable>
+    ) : null}
     {directory.isLoading ? <KnownPeopleSkeleton /> : null}
     {directory.isError ? <><Text>Couldn’t load known people. You can still add by name.</Text>
       <Button onPress={() => void directory.refetch()}>Retry people</Button></> : null}
     {!directory.isLoading && suggestions.length > 0 && people.length < 49 ? <View style={styles.knownPeople} testID="split-bill-known-people">
       <Text variant="labelLarge">People you know</Text>
       <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled" style={{ maxHeight: KNOWN_PEOPLE_ROW_HEIGHT * KNOWN_PEOPLE_SKELETON_ROWS }}>
-        {suggestions.map((person) => <List.Item key={person.id} title={existingPersonLabel(person)}
-          style={{ minHeight: KNOWN_PEOPLE_ROW_HEIGHT }}
-          disabled={busy} accessibilityLabel={`Add ${existingPersonLabel(person)}`}
-          onPress={() => addPerson(person.id, existingPersonLabel(person))} right={(props) => <List.Icon {...props} icon="plus" />} />)}
+        {suggestions.map((person) => (
+          <Pressable
+            key={person.id}
+            disabled={busy}
+            accessibilityRole="button"
+            accessibilityLabel={`Add ${existingPersonLabel(person)}`}
+            onPress={() => addPerson(person.id, existingPersonLabel(person))}
+            style={({ pressed }) => [
+              styles.knownPersonPressable,
+              {
+                minHeight: KNOWN_PEOPLE_ROW_HEIGHT,
+                opacity: busy ? 0.45 : pressed ? 0.7 : 1,
+                borderBottomColor: theme.colors.outlineVariant,
+              },
+            ]}
+          >
+            <Text variant="bodyLarge" style={{ flex: 1 }} numberOfLines={1}>
+              {existingPersonLabel(person)}
+            </Text>
+            <List.Icon icon="plus" color={theme.colors.primary} />
+          </Pressable>
+        ))}
       </ScrollView>
     </View> : null}
     <SplitAmongEditor participants={participants} selectedIds={ids} amounts={amounts} shares={shares}
@@ -167,12 +290,70 @@ function BillSplitForm({ onCreated }: { onCreated: (token: string) => void }) {
       onShareChange={(id, value) => setShares((current) => ({ ...current, [id]: value }))}
       onSplitRemaining={() => { if (total) setAmounts((current) => distributeRemaining(current, ids, total / 100)); }} />
     {mode === "equal" && allocations.length > 0 ? participants.map((person, i) =>
-      <Text key={person.id}>{person.full_name}: {formatBillAmount(allocations[i], currency)}</Text>) : null}
+      <Text key={person.id}>{person.full_name}: {formatSplitAmount(allocations[i], currency)}</Text>) : null}
     {validation ? <Text accessibilityLiveRegion="polite" style={{ color: theme.colors.onSurfaceVariant }}>{validation}</Text> : null}
     {error ? <Text accessibilityLiveRegion="polite" style={{ color: theme.colors.error }}>{error}</Text> : null}
     <Text variant="bodySmall">The link is available for 30 days. Anyone with it can see the names and amounts and acknowledge a share. SharedMoney does not move money.</Text>
-    <Button mode="contained" testID="split-bill-create" disabled={busy || !!validation}
-      onPress={() => void create()}>{busy ? "Creating…" : "Create & get share link"}</Button>
+    <Button
+      mode="contained"
+      testID="split-bill-create"
+      disabled={createDisabled}
+      onPress={() => void create()}
+      buttonColor={theme.colors.primary}
+      textColor={theme.colors.onPrimary}
+      style={[styles.createCta, createDisabled && styles.createCtaDimmed]}
+      contentStyle={styles.createCtaContent}
+      theme={{
+        colors: {
+          surfaceDisabled: theme.colors.primary,
+          onSurfaceDisabled: theme.colors.onPrimary,
+        },
+      }}
+    >
+      {busy ? "Creating…" : "Create & get share link"}
+    </Button>
+    <Portal>
+      <PaperModal
+        visible={showCurrencyPicker}
+        onDismiss={() => setShowCurrencyPicker(false)}
+        contentContainerStyle={[styles.currencyPickerModal, { backgroundColor: theme.colors.surface }]}
+      >
+        <Text variant="titleMedium" style={{ fontWeight: "700", marginBottom: 8 }}>
+          Currency
+        </Text>
+        <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 12 }}>
+          Used for this bill’s amounts.
+        </Text>
+        <ScrollView style={{ maxHeight: 360 }} testID="split-bill-currency-list">
+          {CURRENCIES.slice(0, CURRENCY_PICKER_LIMIT).map((item) => {
+            const selected = item.code === currency;
+            return (
+              <Pressable
+                key={item.code}
+                testID={`split-bill-currency-${item.code}`}
+                onPress={() => {
+                  setCurrency(item.code);
+                  void writeLastBillSplitCurrency(item.code);
+                  setShowCurrencyPicker(false);
+                }}
+                style={[
+                  styles.currencyOption,
+                  selected && { backgroundColor: theme.colors.primaryContainer },
+                ]}
+              >
+                <View>
+                  <Text variant="bodyLarge">{item.code} ({item.symbol})</Text>
+                  <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                    {getCurrencyName(item.code)}
+                  </Text>
+                </View>
+                {selected ? <Icon source="check" size={20} color={theme.colors.primary} /> : null}
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      </PaperModal>
+    </Portal>
   </>;
 }
 
@@ -197,6 +378,8 @@ function BillSplitDetails({ token }: { token: string }) {
       currency: session.data.currency,
       mode: session.data.mode,
       people_count: session.data.participants.length,
+      creatorName: session.data.participants[0]?.display_name,
+      firstPayeeName: session.data.participants[1]?.display_name,
     });
   }, [session.data, token, user?.id]);
 
@@ -229,14 +412,20 @@ function BillSplitDetails({ token }: { token: string }) {
   if (session.isPending) return <BillDetailsSkeleton />;
   if (session.isError) return <><Text>Couldn’t load this bill.</Text><Button onPress={() => void session.refetch()}>Try again</Button></>;
   if (!session.data) return <><Text variant="headlineSmall">Bill not found</Text><Text>This link is invalid or has expired.</Text></>;
+  const modeLabel = session.data.mode === "unequal"
+    ? "Exact amounts"
+    : session.data.mode === "shares"
+      ? "Shares"
+      : "Equal split";
   return <>
-    <Text variant="labelLarge">Total · {session.data.mode === "unequal" ? "Exact amounts" : session.data.mode === "shares" ? "Shares" : "Equal split"}</Text>
-    <Text variant="headlineLarge">{formatBillAmount(session.data.amount_minor, session.data.currency)}</Text>
+    <Text variant="labelLarge" style={{ color: theme.colors.onSurfaceVariant }}>Total</Text>
+    <Text variant="headlineLarge">{formatSplitAmount(session.data.amount_minor, session.data.currency)}</Text>
+    <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>{modeLabel}</Text>
     <Text>Choose your name to confirm your share. This is an acknowledgement only; no money moves.</Text>
     {session.data.participants.map((person) => <Surface key={person.id} elevation={0}
       style={[styles.person, { backgroundColor: theme.colors.surfaceVariant }]}>
       <Text variant="titleMedium">{person.display_name}</Text>
-      <Text variant="bodyLarge">{formatBillAmount(person.amount_minor, session.data!.currency)}</Text>
+      <Text variant="bodyLarge">{formatSplitAmount(person.amount_minor, session.data!.currency)}</Text>
       <Button testID="split-bill-confirm" mode={person.confirmed ? "text" : "outlined"}
         disabled={busy || person.confirmed} accessibilityLabel={person.confirmed ? `${person.display_name}, confirmed` : `Confirm my share as ${person.display_name}`}
         onPress={() => void confirm(person.id)}>{person.confirmed ? "Confirmed" : "I’ll cover my share"}</Button>
@@ -269,6 +458,116 @@ export function SplitBillScreen({ token: initialToken, onDismiss }: { token?: st
   </Modal>;
 }
 
+/** Design / Expo preview surfaces — mirrors create-form chrome without network. */
+export function SplitBillFormPreview({
+  loadingPeople = false,
+  modeMenuOpen = false,
+  disabledCreate = false,
+}: {
+  loadingPeople?: boolean;
+  modeMenuOpen?: boolean;
+  disabledCreate?: boolean;
+}) {
+  const theme = useTheme();
+  const [mode, setMode] = useState<BillSplitMode>("equal");
+  const [menuOpen, setMenuOpen] = useState(modeMenuOpen);
+  const participants: Participant[] = [
+    { id: CREATOR, group_id: "", type: "member", full_name: "Alex" },
+    { id: "p-maya", group_id: "", type: "member", full_name: "Maya Patel" },
+  ];
+  const ids = participants.map((p) => p.id);
+  React.useEffect(() => {
+    setMenuOpen(modeMenuOpen);
+  }, [modeMenuOpen]);
+  return (
+    <View style={[styles.root, { backgroundColor: theme.colors.background }]} testID="split-bill-form-preview">
+      <Appbar.Header elevated style={{ backgroundColor: theme.colors.surface }}>
+        <Appbar.BackAction onPress={() => {}} />
+        <Appbar.Content title="Split a bill" />
+      </Appbar.Header>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <Text variant="bodyMedium">A one-time bill. No group needed.</Text>
+        <TextInput label="Amount" mode="outlined" value="42.00" testID="split-bill-amount" />
+        <View>
+          <Text variant="labelLarge" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 6 }}>
+            Currency
+          </Text>
+          <Button mode="outlined" testID="split-bill-currency" icon="chevron-down" contentStyle={styles.currencyButtonContent}>
+            USD ($)
+          </Button>
+        </View>
+        <Text variant="titleMedium">Who’s on the bill?</Text>
+        <TextInput label="Find someone or enter a new name" mode="outlined" value="Sam" testID="split-bill-person-input" />
+        <Pressable
+          testID="split-bill-add-person"
+          style={[styles.addByNameRow, { borderBottomColor: theme.colors.outlineVariant }]}
+        >
+          <Text variant="bodyLarge" style={{ color: theme.colors.primary, fontWeight: "600" }}>
+            {`Add “Sam”`}
+          </Text>
+          <Icon source="plus" size={20} color={theme.colors.primary} />
+        </Pressable>
+        {loadingPeople ? <KnownPeopleSkeleton /> : (
+          <View style={styles.knownPeople} testID="split-bill-known-people">
+            <Text variant="labelLarge">People you know</Text>
+            <Pressable
+              style={[styles.knownPersonPressable, { minHeight: KNOWN_PEOPLE_ROW_HEIGHT, borderBottomColor: theme.colors.outlineVariant }]}
+            >
+              <Text variant="bodyLarge" style={{ flex: 1 }}>Maya Patel</Text>
+              <List.Icon icon="plus" color={theme.colors.primary} />
+            </Pressable>
+          </View>
+        )}
+        <SplitAmongEditor
+          participants={participants}
+          selectedIds={ids}
+          amounts={{}}
+          shares={{}}
+          mode={mode}
+          totalAmount={42}
+          currency="USD"
+          requiredIds={[CREATOR]}
+          modeTestID="split-bill-mode"
+          showEqualSummary={false}
+          areAllSelected
+          onToggleAll={() => {}}
+          onToggleMember={() => {}}
+          onModeChange={setMode}
+          onAmountChange={() => {}}
+          onShareChange={() => {}}
+          onSplitRemaining={() => {}}
+        />
+        {menuOpen ? (
+          <View testID="split-mode-menu-preview" style={[styles.modeMenuPreview, { backgroundColor: theme.colors.surface, borderColor: theme.colors.outlineVariant }]}>
+            {(["Equal", "Amounts", "Shares"] as const).map((label) => (
+              <Text key={label} variant="bodyLarge" style={{ paddingVertical: 12, paddingHorizontal: 16 }}>
+                {label}{label === "Equal" ? "  ✓" : ""}
+              </Text>
+            ))}
+          </View>
+        ) : null}
+        <Button
+          mode="contained"
+          testID="split-bill-create"
+          disabled={disabledCreate || loadingPeople}
+          buttonColor={theme.colors.primary}
+          textColor={theme.colors.onPrimary}
+          style={[styles.createCta, (disabledCreate || loadingPeople) && styles.createCtaDimmed]}
+          contentStyle={styles.createCtaContent}
+          theme={{
+            colors: {
+              surfaceDisabled: theme.colors.primary,
+              onSurfaceDisabled: theme.colors.onPrimary,
+            },
+          }}
+        >
+          {loadingPeople ? "Creating…" : "Create & get share link"}
+        </Button>
+      </ScrollView>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   root: { flex: 1 },
   content: { padding: 20, paddingBottom: 40, gap: 16, width: "100%", maxWidth: WEB_MAX_WIDTH, alignSelf: "center" },
@@ -280,5 +579,62 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 4,
+  },
+  knownPersonPressable: {
+    flexDirection: "row",
+    alignItems: "center",
+    width: "100%",
+    paddingHorizontal: 4,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  addByNameRow: {
+    minHeight: 44,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 4,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  currencyButton: {
+    alignSelf: "stretch",
+  },
+  currencyButtonContent: {
+    minHeight: 48,
+    justifyContent: "space-between",
+    flexDirection: "row-reverse",
+  },
+  currencyPickerModal: {
+    marginHorizontal: 24,
+    borderRadius: 16,
+    padding: 20,
+    maxWidth: WEB_MAX_WIDTH,
+    alignSelf: "center",
+    width: "100%",
+  },
+  currencyOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    minHeight: 56,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  createCta: {
+    borderRadius: 24,
+    borderWidth: 0,
+    alignSelf: "stretch",
+  },
+  createCtaDimmed: {
+    opacity: 0.45,
+  },
+  createCtaContent: {
+    minHeight: 48,
+    borderRadius: 24,
+  },
+  modeMenuPreview: {
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: "hidden",
   },
 });

@@ -4,6 +4,7 @@ import {
   Appbar,
   Button,
   FAB,
+  Icon,
   List,
   Provider as PaperProvider,
   SegmentedButtons,
@@ -20,8 +21,19 @@ import { TransactionsEmptyState } from "../components/TransactionsSection";
 import { WEB_MAX_WIDTH } from "../constants/layout";
 import { lightTheme } from "../theme";
 import { Balance, GroupStatsResponse } from "../types";
+import { formatCurrency } from "../utils/currency";
+import { SplitBillFormPreview } from "./SplitBillScreen";
 
-type SurfaceId = "home-empty" | "home-list" | "group-home" | "group-loading" | "stats";
+type SurfaceId =
+  | "home-empty"
+  | "home-list"
+  | "home-loading"
+  | "group-home"
+  | "group-loading"
+  | "stats"
+  | "split-loading"
+  | "split-form"
+  | "split-mode";
 
 const SAMPLE_BALANCES: Balance[] = [
   {
@@ -197,28 +209,20 @@ const ARCHIVED_GROUPS = [
   },
 ];
 
-function HomeListPreview() {
+function HomeListPreview({ balancesLoading = false }: { balancesLoading?: boolean }) {
   const theme = useTheme();
   // Expand Former by default so Design can re-score comfortable Former cards.
   const [formerExpanded, setFormerExpanded] = useState(true);
   const [archivedExpanded, setArchivedExpanded] = useState(true);
+  const recentBills = [
+    { identity: "Dinner at Nora", amount: formatCurrency(42, "USD"), people: "3 people", when: "Today" },
+    { identity: "Maya Patel", amount: formatCurrency(28.5, "EUR"), people: "2 people", when: "2d ago" },
+    { identity: "Cabin weekend", amount: formatCurrency(120, "USD"), people: "4 people", when: "Yesterday" },
+    { identity: "Taxi home", amount: formatCurrency(18, "USD"), people: "2 people", when: "5d ago" },
+  ];
   return (
-    <PreviewShell
-      title="Your Groups"
-      fab={
-        <Surface
-          style={[styles.fabSurface, { backgroundColor: theme.colors.primary }]}
-          elevation={2}
-        >
-          <View style={styles.fabContent}>
-            <Text variant="labelLarge" style={{ color: theme.colors.onPrimary }}>
-              + New Group
-            </Text>
-          </View>
-        </Surface>
-      }
-    >
-      <View style={{ paddingHorizontal: 16 }} testID="preview-home-list">
+    <PreviewShell title="Your Groups">
+      <View style={{ paddingHorizontal: 16 }} testID={balancesLoading ? "preview-home-loading" : "preview-home-list"}>
         <Button
           mode="contained"
           icon="call-split"
@@ -227,26 +231,45 @@ function HomeListPreview() {
         >
           Split a bill
         </Button>
-        <View style={{ marginBottom: 12 }} testID="preview-recent-bills">
-          <Text variant="labelLarge" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 8 }}>
+        <View style={{ marginBottom: 16 }} testID="preview-recent-bills">
+          <Text
+            variant="labelLarge"
+            style={{ color: theme.colors.onSurfaceVariant, marginBottom: 4, fontWeight: "700" }}
+          >
             Recent bills
           </Text>
-          {[
-            { title: "USD 42.00 · 3 people", mode: "Equal split" },
-            { title: "EUR 28.50 · 2 people", mode: "Shares" },
-          ].map((bill) => (
-            <Surface
-              key={bill.title}
-              style={[styles.groupRow, { backgroundColor: theme.colors.surface, marginBottom: 8 }]}
-              elevation={0}
+          {recentBills.slice(0, 3).map((bill) => (
+            <TouchableRipple
+              key={bill.identity}
+              style={[styles.recentBillRow, { borderBottomColor: theme.colors.outlineVariant }]}
             >
-              <View style={{ flex: 1 }}>
-                <Text variant="titleMedium" style={{ fontWeight: "700" }}>{bill.title}</Text>
-                <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>{bill.mode}</Text>
+              <View style={styles.recentBillContent}>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text variant="bodyLarge" numberOfLines={1} style={{ fontWeight: "600" }}>
+                    {bill.identity}
+                  </Text>
+                  <Text variant="bodySmall" numberOfLines={1} style={{ color: theme.colors.onSurfaceVariant }}>
+                    {bill.amount} · {bill.people} · {bill.when}
+                  </Text>
+                </View>
+                <Icon source="chevron-right" size={20} color={theme.colors.onSurfaceVariant} />
               </View>
-              <Text style={{ color: theme.colors.onSurfaceVariant }}>›</Text>
-            </Surface>
+            </TouchableRipple>
           ))}
+          <Button mode="text" compact style={{ alignSelf: "flex-start", marginTop: 4 }}>
+            See all
+          </Button>
+        </View>
+        <View style={styles.groupsSectionHeader} testID="preview-groups-header">
+          <Text
+            variant="labelLarge"
+            style={{ color: theme.colors.onSurfaceVariant, fontWeight: "700" }}
+          >
+            Groups
+          </Text>
+          <Button mode="text" compact testID="preview-new-group">
+            New group
+          </Button>
         </View>
         {GROUPS.map((group) => (
           <Surface
@@ -268,31 +291,12 @@ function HomeListPreview() {
               ) : null}
             </View>
             <GroupBalanceBadge
-              balanceData={{ group_id: group.id, balances: group.balances }}
+              loading={balancesLoading}
+              balanceData={balancesLoading ? undefined : { group_id: group.id, balances: group.balances }}
               currentUserId="u-you"
             />
           </Surface>
         ))}
-
-        {/* Loading badge sample — cold paint must not claim Even */}
-        <Surface
-          style={[styles.groupRow, { backgroundColor: theme.colors.surface }]}
-          elevation={0}
-          testID="preview-balance-loading-row"
-        >
-          <View style={{ flex: 1, paddingRight: 12 }}>
-            <Text
-              variant="titleMedium"
-              style={{ fontWeight: "700", color: theme.colors.onSurface, letterSpacing: -0.2 }}
-            >
-              Loading balances…
-            </Text>
-            <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}>
-              Placeholder until all-balances resolves
-            </Text>
-          </View>
-          <GroupBalanceBadge loading balanceData={undefined} currentUserId="u-you" />
-        </Surface>
 
         <List.Accordion
           title={`Archived (${ARCHIVED_GROUPS.length})`}
@@ -308,6 +312,7 @@ function HomeListPreview() {
           )}
           expanded={archivedExpanded}
           onPress={() => setArchivedExpanded(!archivedExpanded)}
+          testID="preview-archived-accordion"
         >
           <View style={[styles.accordionContent, { backgroundColor: theme.colors.background }]}>
             {ARCHIVED_GROUPS.map((group) => (
@@ -416,6 +421,7 @@ function HomeListPreview() {
             </View>
           ) : null}
         </View>
+        <View testID="home-list-clearance" style={{ height: 32 }} />
       </View>
     </PreviewShell>
   );
@@ -508,7 +514,22 @@ function StatsPreview() {
 }
 
 export const HomePolishPreviewScreen: React.FC = () => {
-  const [surface, setSurface] = useState<SurfaceId>("home-list");
+  const [surface, setSurface] = useState<SurfaceId>(() => {
+    if (typeof window === "undefined") return "home-list";
+    const requested = new URLSearchParams(window.location.search).get("surface");
+    const allowed: SurfaceId[] = [
+      "home-empty",
+      "home-list",
+      "home-loading",
+      "group-home",
+      "group-loading",
+      "stats",
+      "split-loading",
+      "split-form",
+      "split-mode",
+    ];
+    return allowed.includes(requested as SurfaceId) ? (requested as SurfaceId) : "home-list";
+  });
 
   return (
     <PaperProvider theme={lightTheme}>
@@ -527,25 +548,29 @@ export const HomePolishPreviewScreen: React.FC = () => {
           }}
         >
           <Text variant="labelLarge" style={{ marginBottom: 8, fontWeight: "700" }}>
-            Home polish preview — Former flat cards + Archived nested
+            Home polish preview — Groups header, compact bills, split form
           </Text>
           <SegmentedButtons
             value={surface}
             onValueChange={(v) => setSurface(v as SurfaceId)}
             buttons={[
-              { value: "home-empty", label: "Empty" },
               { value: "home-list", label: "Home" },
-              { value: "group-loading", label: "Loading" },
-              { value: "group-home", label: "Group" },
-              { value: "stats", label: "Stats" },
+              { value: "home-loading", label: "Bal…" },
+              { value: "split-form", label: "Split" },
+              { value: "split-loading", label: "Load" },
+              { value: "split-mode", label: "Mode" },
             ]}
           />
         </View>
         {surface === "home-empty" ? <HomeEmptyPreview /> : null}
         {surface === "home-list" ? <HomeListPreview /> : null}
+        {surface === "home-loading" ? <HomeListPreview balancesLoading /> : null}
         {surface === "group-loading" ? <GroupHomePreview loading /> : null}
         {surface === "group-home" ? <GroupHomePreview /> : null}
         {surface === "stats" ? <StatsPreview /> : null}
+        {surface === "split-loading" ? <SplitBillFormPreview loadingPeople disabledCreate /> : null}
+        {surface === "split-form" ? <SplitBillFormPreview /> : null}
+        {surface === "split-mode" ? <SplitBillFormPreview modeMenuOpen /> : null}
       </SafeAreaView>
     </PaperProvider>
   );
@@ -575,17 +600,23 @@ const styles = StyleSheet.create({
     bottom: 24,
     borderRadius: 28,
   },
-  fabSurface: {
-    position: "absolute",
-    right: 16,
-    bottom: 24,
-    borderRadius: 8,
-  },
-  fabContent: {
-    minHeight: 56,
-    paddingHorizontal: 16,
+  groupsSectionHeader: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "space-between",
+    minHeight: 44,
+    marginBottom: 8,
+  },
+  recentBillRow: {
+    minHeight: 48,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  recentBillContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 2,
+    gap: 8,
   },
   sectionAccordion: {
     marginTop: 20,

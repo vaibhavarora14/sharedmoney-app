@@ -186,6 +186,9 @@ function harnessWithFormer(loading = false) {
     "../utils/posthogEvents": { ANALYTICS_EVENTS: {} },
     "../utils/recentBillSplits": {
       listRecentBillSplits: async () => [],
+      RECENT_BILLS_PREVIEW_COUNT: 3,
+      formatRecentBillAmount: (minor, currency) => `$${(minor / 100).toFixed(2)}`,
+      relativeBillDate: () => "Today",
     },
     "../components/NotificationBell": { NotificationBell: "NotificationBell" },
     "../components/Skeleton": { Skeleton: "Skeleton", SkeletonGroup: "SkeletonGroup" },
@@ -277,11 +280,23 @@ function harnessWithFormer(loading = false) {
     },
     setFormerExpanded(expanded) {
       // showCreateGroup, showSplitBill, splitBillToken, recentBills,
-      // newGroupHeight, formerGroupsExpanded.
+      // showAllRecentBills, formerGroupsExpanded.
       state[5] = expanded;
     },
   };
 }
+
+test("Home list uses Groups header New group action and clearance, not a FAB", () => {
+  const tree = harnessWithFormer().render();
+  assert.equal(nodes(tree).some((n) => n.type === "FAB"), false);
+  assert.ok(nodes(tree).find((n) => n.props?.testID === "groups-section-header"));
+  const action = nodes(tree).find((n) => n.props?.testID === "new-group-action");
+  assert.ok(action);
+  assert.equal(action.props.mode, "text");
+  assert.match(String(action.props.children), /New group/);
+  const clearance = nodes(tree).find((n) => n.props?.testID === "home-list-clearance");
+  assert.equal(flatten(clearance.props.style).height, 32);
+});
 
 test("expanded Former children render flat Surface cards like active, not hairlines", () => {
   const app = harnessWithFormer();
@@ -454,7 +469,14 @@ test("Home empty state keeps a single Split a bill CTA and no duplicate header e
       if (id === "../utils/groupListSections") {
         return { partitionGroupsBySection: () => ({ activeGroups: [], archivedGroups: [], formerGroups: [] }) };
       }
-      if (id === "../utils/recentBillSplits") return { listRecentBillSplits: async () => [] };
+      if (id === "../utils/recentBillSplits") {
+        return {
+          listRecentBillSplits: async () => [],
+          RECENT_BILLS_PREVIEW_COUNT: 3,
+          formatRecentBillAmount: () => "$0.00",
+          relativeBillDate: () => "Today",
+        };
+      }
       if (id === "../utils/sentryTelemetry") return { recordSentryListCounts: () => {} };
       if (id === "../utils/posthogAnalytics") return { captureIdentifiedAnalyticsEvent: () => {} };
       if (id === "../utils/posthogEvents") return { ANALYTICS_EVENTS: {} };

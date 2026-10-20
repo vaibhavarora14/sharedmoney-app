@@ -27,7 +27,14 @@ function loadRecent() {
     if (id === "./billSplit" || id.endsWith("/billSplit")) {
       return {
         BILL_TOKEN_PATTERN: /^[a-f0-9]{64}$/,
-        formatBillAmount: (minor, currency) => `${currency} ${(minor / 100).toFixed(2)}`,
+      };
+    }
+    if (id === "./currency" || id.endsWith("/currency")) {
+      return {
+        formatCurrency: (amount, currency) => {
+          const symbol = currency === "EUR" ? "€" : currency === "INR" ? "₹" : "$";
+          return `${symbol}${Number(amount).toFixed(2)}`;
+        },
       };
     }
     return require(id);
@@ -35,32 +42,55 @@ function loadRecent() {
   return { ...module.exports, store };
 }
 
-test("recent bill titles keep amount + people for Home reopen rows", () => {
-  const { recentBillTitle } = loadRecent();
-  assert.equal(recentBillTitle(1250, "USD"), "USD 12.50");
-  assert.equal(recentBillTitle(1250, "USD", 3), "USD 12.50 · 3 people");
+test("recent bill identity prefers name, then payee, then creator", () => {
+  const { recentBillIdentity } = loadRecent();
+  assert.equal(recentBillIdentity({ name: "Dinner" }), "Dinner");
+  assert.equal(recentBillIdentity({ firstPayeeName: "Maya" }), "Maya");
+  assert.equal(recentBillIdentity({ creatorName: "Alex" }), "Alex");
+  assert.equal(recentBillIdentity({}), "Bill");
 });
 
-test("rememberRecentBillSplit keeps the newest 3 and reopens by token", async () => {
-  const { rememberRecentBillSplit, listRecentBillSplits } = loadRecent();
+test("formatRecentBillAmount uses symbol currency formatting", () => {
+  const { formatRecentBillAmount } = loadRecent();
+  assert.equal(formatRecentBillAmount(1250, "USD"), "$12.50");
+  assert.equal(formatRecentBillAmount(120000, "INR"), "₹1200.00");
+});
+
+test("relativeBillDate covers Today and Nd ago", () => {
+  const { relativeBillDate } = loadRecent();
+  const now = Date.parse("2026-10-20T12:00:00.000Z");
+  assert.equal(relativeBillDate("2026-10-20T08:00:00.000Z", now), "Today");
+  assert.equal(relativeBillDate("2026-10-18T08:00:00.000Z", now), "2d ago");
+});
+
+test("rememberRecentBillSplit keeps newest history and last-used currency", async () => {
+  const {
+    rememberRecentBillSplit,
+    listRecentBillSplits,
+    readLastBillSplitCurrency,
+    RECENT_BILLS_PREVIEW_COUNT,
+  } = loadRecent();
+  assert.equal(RECENT_BILLS_PREVIEW_COUNT, 3);
   const tokenA = "a".repeat(64);
   const tokenB = "b".repeat(64);
   const tokenC = "c".repeat(64);
   const tokenD = "d".repeat(64);
   await rememberRecentBillSplit("user-1", {
-    token: tokenA, amount_minor: 1000, currency: "USD", mode: "equal", people_count: 2,
+    token: tokenA, amount_minor: 1000, currency: "USD", mode: "equal", people_count: 2, name: "A",
   });
   await rememberRecentBillSplit("user-1", {
-    token: tokenB, amount_minor: 2000, currency: "USD", mode: "shares", people_count: 3,
+    token: tokenB, amount_minor: 2000, currency: "USD", mode: "shares", people_count: 3, firstPayeeName: "Bo",
   });
   await rememberRecentBillSplit("user-1", {
-    token: tokenC, amount_minor: 3000, currency: "EUR", mode: "unequal", people_count: 2,
+    token: tokenC, amount_minor: 3000, currency: "EUR", mode: "unequal", people_count: 2, creatorName: "Alex",
   });
   await rememberRecentBillSplit("user-1", {
-    token: tokenD, amount_minor: 4000, currency: "USD", mode: "equal", people_count: 4,
+    token: tokenD, amount_minor: 4000, currency: "USD", mode: "equal", people_count: 4, name: "Cabin",
   });
   const rows = await listRecentBillSplits("user-1");
-  assert.equal(rows.length, 3);
-  assert.deepEqual(rows.map((row) => row.token), [tokenD, tokenC, tokenB]);
-  assert.equal(rows[0].title, "USD 40.00 · 4 people");
+  assert.equal(rows.length, 4);
+  assert.deepEqual(rows.map((row) => row.token), [tokenD, tokenC, tokenB, tokenA]);
+  assert.equal(rows[0].identity, "Cabin");
+  assert.equal(rows[0].people_count, 4);
+  assert.equal(await readLastBillSplitCurrency(), "USD");
 });
