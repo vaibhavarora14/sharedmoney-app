@@ -25,6 +25,14 @@ import {
   SETTLE_OUTSIDE_APP_HELP,
   UPDATE_SETTLEMENT_LABEL,
 } from "../utils/settleCopy";
+import {
+  formatShareAmountInput,
+  parseShareAmountInput,
+  settleSharePersonName,
+} from "../utils/settleShareMessage";
+
+/** Mid-sentence pronoun in the “X paid Y” header (never title-case). */
+const YOU_LABEL = "you";
 
 interface SettlementFormScreenProps {
   visible: boolean;
@@ -269,7 +277,12 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
 
     // If editing, pre-fill from settlement
     if (settlement) {
-      setAmount(settlement.amount.toString());
+      setAmount(
+        formatShareAmountInput(
+          settlement.amount,
+          settlement.currency || effectiveDefaultCurrency,
+        ),
+      );
       setNotes(settlement.notes || "");
       setDate(toDateInputValue(settlement.created_at));
       setSelectedFromParticipantId(settlement.from_participant_id || "");
@@ -280,11 +293,20 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
       const member = groupMembers.find(m => m.user_id === balance.user_id);
       // For invited users, balance.user_id IS the participant_id
       setSelectedToParticipantId(balance.participant_id || member?.participant_id || balance.user_id);
-      // Pre-fill with absolute balance amount as suggestion
-      setAmount(Math.abs(balance.amount).toFixed(2));
+      // Prefill whole amounts without .00, with grouping (matches share/remind copy)
+      setAmount(
+        formatShareAmountInput(
+          Math.abs(balance.amount),
+          balance.currency || effectiveDefaultCurrency,
+        ),
+      );
       setDate(toDateInputValue(null));
     } else if (isAdminMode) {
-      if (initialAmount) setAmount(initialAmount.toFixed(2));
+      if (initialAmount) {
+        setAmount(
+          formatShareAmountInput(initialAmount, effectiveDefaultCurrency),
+        );
+      }
       setSelectedFromParticipantId(fromParticipantId || "");
       setSelectedToParticipantId(toParticipantId || "");
       setDate(toDateInputValue(null));
@@ -306,14 +328,15 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
     fromParticipantId,
     toParticipantId,
     groupMembers,
+    effectiveDefaultCurrency,
   ]);
 
   const validateForm = (): boolean => {
     let isValid = true;
 
-    // Validate amount
-    const amountNum = parseFloat(amount);
-    if (!amount || isNaN(amountNum) || amountNum <= 0) {
+    // Validate amount (commas from share-style prefill are allowed)
+    const amountNum = parseShareAmountInput(amount);
+    if (amountNum == null || amountNum <= 0) {
       setAmountError("Please enter a valid amount greater than 0");
       isValid = false;
     } else {
@@ -342,7 +365,10 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
       return;
     }
 
-    const amountNum = parseFloat(amount);
+    const amountNum = parseShareAmountInput(amount);
+    if (amountNum == null || amountNum <= 0) {
+      return;
+    }
 
     try {
       setLoading(true);
@@ -472,16 +498,15 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
   };
 
   const getParticipantDisplayName = (participantId: string): string => {
-    // 1. Try participants list (source of truth including names/emails)
+    // Prefer participants list (names/emails), else groupMembers — first name / email local-part
     const participant = participants.find((p: Participant) => p.id === participantId);
-    if (participant?.full_name) return participant.full_name;
-    if (participant?.email) return participant.email;
-
-    // 2. Fallback to groupMembers
+    if (participant) {
+      return settleSharePersonName(participant);
+    }
     const member = groupMembers.find((m) => m.participant_id === participantId);
-    if (member?.full_name) return member.full_name;
-    if (member?.email) return member.email;
-
+    if (member) {
+      return settleSharePersonName(member);
+    }
     return `Member ${participantId.substring(0, 8)}`;
   };
 
@@ -561,30 +586,35 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                     
                     fromName =
                       headerFromId === currentParticipantId
-                        ? "You"
+                        ? YOU_LABEL
                         : getParticipantDisplayName(headerFromId);
                     toName =
                       headerToId === currentParticipantId
-                        ? "You"
+                        ? YOU_LABEL
                         : getParticipantDisplayName(headerToId);
                   } else if (isAdminMode) {
-                    fromName = adminPayer?.full_name || adminPayer?.email || "Payer";
-                    toName = adminReceiver?.full_name || adminReceiver?.email || "Receiver";
-                    if (adminPayer?.user_id === currentUserId) fromName = "You";
-                    if (adminReceiver?.user_id === currentUserId) toName = "You";
+                    fromName = adminPayer
+                      ? settleSharePersonName(adminPayer)
+                      : "Payer";
+                    toName = adminReceiver
+                      ? settleSharePersonName(adminReceiver)
+                      : "Receiver";
+                    if (adminPayer?.user_id === currentUserId) fromName = YOU_LABEL;
+                    if (adminReceiver?.user_id === currentUserId) toName = YOU_LABEL;
                   } else if (balance) {
+                    const counterparty = settleSharePersonName(balance);
                     if (isPaying) {
-                      fromName = "You";
-                      toName = balance.full_name || balance.email || "Member";
+                      fromName = YOU_LABEL;
+                      toName = counterparty;
                     } else {
-                      fromName = balance.full_name || balance.email || "Member";
-                      toName = "You";
+                      fromName = counterparty;
+                      toName = YOU_LABEL;
                     }
                   } else if (selectedToParticipantId) {
                      // Manual entry
-                     fromName = "You";
+                     fromName = YOU_LABEL;
                      const member = availableUsers.find(u => u.participant_id === selectedToParticipantId);
-                     toName = member?.full_name || member?.email || "Member";
+                     toName = member ? settleSharePersonName(member) : "Member";
                   } else {
                     return (
                       <Text variant="titleMedium" style={{ color: theme.colors.onSurfaceVariant }}>
@@ -618,7 +648,10 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                   ]}
                 >
                   {formatCurrency(
-                    parseFloat(amount) || initialAmount || settlement?.amount || 0,
+                    parseShareAmountInput(amount) ||
+                      initialAmount ||
+                      settlement?.amount ||
+                      0,
                     effectiveDefaultCurrency
                   )}
                 </Text>

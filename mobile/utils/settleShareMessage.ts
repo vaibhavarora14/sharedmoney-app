@@ -1,4 +1,4 @@
-import { formatCurrency } from "./currency";
+import { formatCurrency, getCurrencySymbol } from "./currency";
 import { isValidE164Phone, normalizePhoneToE164 } from "./phoneValidation";
 
 export type SettleShareLine = {
@@ -98,6 +98,32 @@ export function formatShareCurrency(
   // formatCurrency always uses en-US fraction digits for non-zero-decimal codes.
   if (/\.\d*[1-9]\d*$/.test(formatted)) return formatted;
   return formatted.replace(/\.0+$/, "");
+}
+
+/**
+ * Amount field prefill matching share/remind grouping: `30,000` / `431.20`.
+ * No currency symbol (the input affix shows that).
+ */
+export function formatShareAmountInput(
+  amount: number,
+  currencyCode: string,
+): string {
+  const withSymbol = formatShareCurrency(amount, currencyCode);
+  const symbol = getCurrencySymbol(currencyCode);
+  if (withSymbol.startsWith(symbol)) {
+    return withSymbol.slice(symbol.length);
+  }
+  return withSymbol;
+}
+
+/** Parse an amount typed/prefilled with optional thousands separators. */
+export function parseShareAmountInput(text: string): number | null {
+  const trimmed = text.trim().replace(/,/g, "");
+  if (!trimmed) return null;
+  if (!/^\d+(\.\d{1,2})?$/.test(trimmed)) return null;
+  const value = Number.parseFloat(trimmed);
+  if (!Number.isFinite(value) || value < 0) return null;
+  return value;
 }
 
 /**

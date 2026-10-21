@@ -291,8 +291,79 @@ test("obligation mode fixes parties and does not expose participant selectors", 
   assert.equal(nodes(tree).some(n => typeof n.props?.testID === "string" && n.props.testID.startsWith("settlement-from-")), false);
   assert.equal(nodes(tree).some(n => typeof n.props?.testID === "string" && n.props.testID.startsWith("settlement-to-")), false);
 
-  // Header displays Bob paid You
-  assert.match(text(tree), /Bob\s*paid\s*You/);
+  // Header displays Bob paid you (lowercase you mid-sentence)
+  assert.match(text(tree), /Bob\s*paid\s*you/);
+});
+
+test("obligation header uses email local-part and grouped whole-amount prefill", async () => {
+  const groupMembers = [
+    { user_id: "me", participant_id: "p_me", full_name: "Alice", email: "alice@example.com" },
+    { user_id: "u_diana", participant_id: "p_diana", full_name: null, email: "diana@test.com" },
+  ];
+
+  const balance = {
+    user_id: "u_diana",
+    participant_id: "p_diana",
+    full_name: null,
+    email: "diana@test.com",
+    amount: 30000, // Diana owes you
+    currency: "INR",
+  };
+
+  const saveCalls = [];
+  const session = SettlementForm.createSession({
+    visible: true,
+    balance,
+    settlement: null,
+    groupMembers,
+    currentUserId: "me",
+    groupId: "g1",
+    onSave: async (data) => {
+      saveCalls.push(data);
+    },
+    onDismiss: () => {},
+  });
+
+  assert.match(text(session.tree), /diana\s*paid\s*you/);
+  assert.doesNotMatch(text(session.tree), /diana@test\.com/);
+  assert.doesNotMatch(text(session.tree), /paid\s*You/);
+
+  const amountInput = byId(session.tree, "settlement-amount-input");
+  assert.equal(amountInput.props.value, "30,000");
+
+  await byId(session.tree, "settlement-save-button").props.onPress();
+  assert.equal(saveCalls.length, 1);
+  assert.equal(saveCalls[0].amount, 30000);
+});
+
+test("you-owe header is lowercase you and keeps non-zero decimals in amount", () => {
+  const groupMembers = [
+    { user_id: "me", participant_id: "p_me", full_name: "Alice", email: "alice@example.com" },
+    { user_id: "u_bob", participant_id: "p_bob", full_name: "Bob Smith", email: "bob@example.com" },
+  ];
+
+  const balance = {
+    user_id: "u_bob",
+    participant_id: "p_bob",
+    full_name: "Bob Smith",
+    email: "bob@example.com",
+    amount: -431.2, // You owe Bob
+    currency: "INR",
+  };
+
+  const tree = SettlementForm({
+    visible: true,
+    balance,
+    settlement: null,
+    groupMembers,
+    currentUserId: "me",
+    groupId: "g1",
+    onSave: async () => {},
+    onDismiss: () => {},
+  });
+
+  assert.match(text(tree), /you\s*paid\s*Bob/);
+  assert.equal(byId(tree, "settlement-amount-input").props.value, "431.20");
 });
 
 test("owes-you modal shows secondary Remind under primary Record payment", () => {
