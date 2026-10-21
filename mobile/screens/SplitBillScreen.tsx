@@ -27,7 +27,14 @@ import { Skeleton, SkeletonGroup } from "../components/Skeleton";
 import { SplitAmongEditor } from "../components/SplitAmongEditor";
 import { WEB_MAX_WIDTH } from "../constants/layout";
 import { useAuth } from "../contexts/AuthContext";
-import { confirmBillSplit, createBillSplit, readBillSplit, useBillSplitPeople } from "../hooks/useBillSplit";
+import {
+  BillSplitNetworkError,
+  confirmBillSplit,
+  createBillSplit,
+  readBillSplit,
+  useBillSplitPeople,
+} from "../hooks/useBillSplit";
+import { isBenignConnectivityError } from "../utils/networkErrors";
 import { useProfile } from "../hooks/useProfile";
 import type { Participant } from "../types";
 import { allocateBillSplit, billAmountMinor, billSplitUrl, type BillSplitMode } from "../utils/billSplit";
@@ -112,6 +119,97 @@ function BillDetailsSkeleton() {
 
 function formatSplitAmount(minor: number, currency: string): string {
   return formatCurrency(minor / 100, currency);
+}
+
+/** Dead / expired one-time bill link — top-anchored, no Retry. */
+export function BillLinkUnavailable({
+  onGoHome,
+}: {
+  onGoHome: () => void;
+}) {
+  const theme = useTheme();
+  return (
+    <View style={styles.statusPanel} testID="bill-link-unavailable">
+      <Text
+        variant="headlineSmall"
+        style={[styles.statusTitle, { color: theme.colors.onBackground }]}
+      >
+        This bill link isn’t working
+      </Text>
+      <Text
+        variant="bodyLarge"
+        style={{ color: theme.colors.onSurfaceVariant, lineHeight: 24 }}
+      >
+        It may have expired or been removed. Ask whoever sent it for a new link.
+      </Text>
+      <Button
+        mode="contained"
+        onPress={onGoHome}
+        style={styles.statusPrimary}
+        contentStyle={styles.statusPrimaryContent}
+        testID="bill-link-go-home"
+      >
+        Go to SharedMoney
+      </Button>
+    </View>
+  );
+}
+
+/**
+ * Load failure for a bill link — Retry, not the dead-link copy.
+ * When `offline` is true, use the locked “You’re offline” copy.
+ */
+export function BillLinkOffline({
+  onRetry,
+  offline = true,
+}: {
+  onRetry: () => void;
+  offline?: boolean;
+}) {
+  const theme = useTheme();
+  return (
+    <View
+      style={styles.statusPanel}
+      testID={offline ? "bill-link-offline" : "bill-link-load-error"}
+    >
+      <Text
+        variant="headlineSmall"
+        style={[styles.statusTitle, { color: theme.colors.onBackground }]}
+      >
+        {offline ? "You’re offline" : "Couldn’t load this bill"}
+      </Text>
+      <Text
+        variant="bodyLarge"
+        style={{ color: theme.colors.onSurfaceVariant, lineHeight: 24 }}
+      >
+        {offline
+          ? "Check your connection and try again."
+          : "Something went wrong loading this link. Try again."}
+      </Text>
+      <Button
+        mode="contained"
+        onPress={onRetry}
+        style={styles.statusPrimary}
+        contentStyle={styles.statusPrimaryContent}
+        testID="bill-link-retry"
+      >
+        Retry
+      </Button>
+    </View>
+  );
+}
+
+function isBillSplitOfflineError(error: unknown): boolean {
+  if (error instanceof BillSplitNetworkError) return true;
+  if (
+    error &&
+    typeof error === "object" &&
+    "name" in error &&
+    (error as { name?: string }).name === "BillSplitNetworkError"
+  ) {
+    return true;
+  }
+  return isBenignConnectivityError(error);
 }
 
 function RecentBillsBlock({
@@ -464,7 +562,13 @@ function BillSplitForm({
   </>;
 }
 
-function BillSplitDetails({ token }: { token: string }) {
+function BillSplitDetails({
+  token,
+  onGoHome,
+}: {
+  token: string;
+  onGoHome: () => void;
+}) {
   const theme = useTheme();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -528,8 +632,17 @@ function BillSplitDetails({ token }: { token: string }) {
   };
 
   if (session.isPending) return <BillDetailsSkeleton />;
-  if (session.isError) return <><Text>Couldn’t load this bill.</Text><Button onPress={() => void session.refetch()}>Try again</Button></>;
-  if (!session.data) return <><Text variant="headlineSmall">Bill not found</Text><Text>This link is invalid or has expired.</Text></>;
+  if (session.isError) {
+    // Dead/expired tokens return null with no error. isError ⇒ load failure; use
+    // offline copy when we can tell it's connectivity, otherwise still Retry.
+    return (
+      <BillLinkOffline
+        onRetry={() => void session.refetch()}
+        offline={isBillSplitOfflineError(session.error)}
+      />
+    );
+  }
+  if (!session.data) return <BillLinkUnavailable onGoHome={onGoHome} />;
   const modeLabel = session.data.mode === "unequal"
     ? "Exact amounts"
     : session.data.mode === "shares"
@@ -577,7 +690,7 @@ export function SplitBillScreen({
         <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === "ios" ? "padding" : "height"}>
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
             {token
-              ? <BillSplitDetails key={token} token={token} />
+              ? <BillSplitDetails key={token} token={token} onGoHome={onDismiss} />
               : (
                 <BillSplitForm
                   draft={draft}
@@ -775,6 +888,22 @@ export function SplitBillFormPreview({
 const styles = StyleSheet.create({
   root: { flex: 1 },
   content: { padding: 20, paddingBottom: 40, gap: 16, width: "100%", maxWidth: WEB_MAX_WIDTH, alignSelf: "center" },
+  statusPanel: {
+    gap: 12,
+    paddingTop: 8,
+    alignItems: "stretch",
+  },
+  statusTitle: {
+    fontWeight: "700",
+  },
+  statusPrimary: {
+    marginTop: 12,
+    alignSelf: "stretch",
+    borderRadius: 24,
+  },
+  statusPrimaryContent: {
+    height: 48,
+  },
   recentBills: { gap: 4, marginBottom: 4 },
   recentBillRow: {
     minHeight: 48,
