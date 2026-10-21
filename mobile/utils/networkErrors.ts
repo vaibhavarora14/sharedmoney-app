@@ -84,13 +84,22 @@ export function isBenignConnectivityError(error: unknown): boolean {
       "Unable to connect. Check your internet connection and try again." ||
     message === "Request timed out. Check your connection and try again." ||
     message.includes("Network request failed") ||
-    message.includes("Failed to fetch")
+    message.includes("Failed to fetch") ||
+    message.includes("NetworkError") ||
+    message.includes("ECONNREFUSED") ||
+    message.includes("Could not connect") ||
+    /connection (refused|reset|timed out)/i.test(message)
   ) {
     return true;
   }
 
   // Classic fetch TypeError with a network-ish message
   if (name === "TypeError" && /network|fetch|internet|connect/i.test(message)) {
+    return true;
+  }
+
+  // Supabase / Auth retryable fetch failures when the API is unreachable.
+  if (/AuthRetryableFetchError|FetchError/i.test(name)) {
     return true;
   }
 

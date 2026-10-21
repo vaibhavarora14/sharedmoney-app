@@ -43,8 +43,15 @@ export function logError(
       console.error(err, context || "");
     }
 
+    const tags =
+      context?.tags && typeof context.tags === "object"
+        ? (context.tags as Record<string, string>)
+        : undefined;
+    const { tags: _tags, ...extra } = context ?? {};
+
     Sentry.captureException(err, {
-      extra: context,
+      extra,
+      ...(tags ? { tags } : {}),
     });
   } catch (captureErr) {
     if (__DEV__) {

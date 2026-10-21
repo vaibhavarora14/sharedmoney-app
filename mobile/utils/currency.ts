@@ -8,6 +8,19 @@ import {
 
 export { CURRENCIES, filterCurrencies, getIsoCurrency };
 
+type LocaleReader = () => Array<{ currencyCode?: string | null }>;
+
+/** Soft-bind expo-localization so Node unit tests can load this module without native Expo. */
+let readLocales: LocaleReader | null = null;
+try {
+  // Soft native dependency — documented exception to top-level-only imports.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const Localization = require("expo-localization") as { getLocales?: LocaleReader };
+  readLocales = Localization.getLocales ?? null;
+} catch {
+  readLocales = null;
+}
+
 export function getCurrencyName(currencyCode: string): string {
   return getIsoCurrency(currencyCode)?.name || currencyCode.toUpperCase();
 }
@@ -19,6 +32,13 @@ export function getCurrencyName(currencyCode: string): string {
  */
 export function getDefaultCurrency(): string {
   return process.env.EXPO_PUBLIC_DEFAULT_CURRENCY || 'INR';
+}
+
+/** Device locale currency when available, else getDefaultCurrency(). */
+export function getLocaleCurrencyCode(): string {
+  const code = readLocales?.()?.[0]?.currencyCode;
+  if (code && /^[A-Z]{3}$/i.test(code)) return code.toUpperCase();
+  return getDefaultCurrency();
 }
 
 /**

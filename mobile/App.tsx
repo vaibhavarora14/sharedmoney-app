@@ -31,6 +31,11 @@ import {
 } from "react-native-paper";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { BottomNavBar } from "./components/BottomNavBar";
+import { CrashErrorFallback } from "./components/CrashErrorFallback";
+import {
+  resolveDevPreview,
+  type DevPreviewKind,
+} from "./utils/devPreview";
 import { ExpenseFormOverlay } from "./components/ExpenseFormOverlay";
 import { ForceUpdateModal } from "./components/ForceUpdateModal";
 import { BannerNotice, InAppBanner } from "./components/InAppBanner";
@@ -208,13 +213,56 @@ const queryClient = new QueryClient({
   },
 });
 
-// ... imports
+const DEV_CRASH_PREVIEW_ID = "SM-7K3Q-92";
+
+/** Module-level so remounts during auth bootstrap don't drop the QA deep link. */
+let pendingDevBillPreview: "dead" | "offline" | null = null;
+let pendingDevCrashPreview: "first" | "repeat" | "copied" | null = null;
+let pendingDevForceCrash = false;
+
+/** __DEV__ only — no-ops in production so preview query params cannot hijack deep links. */
+function applyDevPreview(kind: DevPreviewKind): boolean {
+  if (!__DEV__ || !kind) return false;
+  if (kind === "crash") {
+    pendingDevForceCrash = true;
+    return true;
+  }
+  if (kind === "crash-first") {
+    pendingDevCrashPreview = "first";
+    return true;
+  }
+  if (kind === "crash-repeat") {
+    pendingDevCrashPreview = "repeat";
+    return true;
+  }
+  if (kind === "crash-copied") {
+    pendingDevCrashPreview = "copied";
+    return true;
+  }
+  if (kind === "bill-dead") {
+    pendingDevBillPreview = "dead";
+    return true;
+  }
+  if (kind === "bill-offline") {
+    pendingDevBillPreview = "offline";
+    return true;
+  }
+  return false;
+}
 
 function AppContent() {
   const [billSplitToken, setBillSplitToken] = useState<string | null>(() =>
     Platform.OS === "web" && typeof window !== "undefined"
       ? extractBillSplitToken(window.location.href) : null
   );
+  // __DEV__ only: flipped by sharedmoney://dev/* / ?preview=* deep links.
+  const [devForceCrash, setDevForceCrash] = useState(pendingDevForceCrash);
+  const [devBillPreview, setDevBillPreview] = useState<"dead" | "offline" | null>(
+    pendingDevBillPreview,
+  );
+  const [devCrashPreview, setDevCrashPreview] = useState<
+    null | "first" | "repeat" | "copied"
+  >(pendingDevCrashPreview);
   const { session, loading, signOut, user } = useAuth();
   const theme = useTheme();
   const dimensions = useWindowDimensions();
@@ -646,6 +694,22 @@ function AppContent() {
   // Handle deep links: initial URL (cold start / web navigation) + url events.
   useEffect(() => {
     const handleUrl = async (url: string | null) => {
+      if (__DEV__ && url) {
+        log("dev deep link received", { url }, "debug");
+      }
+      // resolveDevPreview / applyDevPreview are __DEV__-gated: production web and
+      // release builds ignore ?preview=crash-first (and siblings) entirely.
+      const devPreview = resolveDevPreview(url, __DEV__);
+      if (applyDevPreview(devPreview)) {
+        log("dev preview applied", { devPreview }, "debug");
+        if (devPreview === "crash") setDevForceCrash(true);
+        if (devPreview === "crash-first") setDevCrashPreview("first");
+        if (devPreview === "crash-repeat") setDevCrashPreview("repeat");
+        if (devPreview === "crash-copied") setDevCrashPreview("copied");
+        if (devPreview === "bill-dead") setDevBillPreview("dead");
+        if (devPreview === "bill-offline") setDevBillPreview("offline");
+        return;
+      }
       const billToken = extractBillSplitToken(url);
       if (billToken) {
         setBillSplitToken(billToken);
@@ -1170,12 +1234,64 @@ function AppContent() {
     );
   }
 
+  // Render-time throw so the root ErrorBoundary paints CrashErrorFallback.
+  // Stripped from production builds via the __DEV__ gate (never ships).
+  if (__DEV__ && devForceCrash) {
+    throw new Error("SharedMoney __DEV__ crash trigger");
+  }
+
+  // __DEV__ crash-screen previews for simulator screenshots (no throw needed).
+  if (__DEV__ && devCrashPreview) {
+    const preview =
+      devCrashPreview === "first"
+        ? { supportReferenceId: null as string | null }
+        : {
+            supportReferenceId: DEV_CRASH_PREVIEW_ID,
+            copiedVisible: devCrashPreview === "copied",
+          };
+    return (
+      <CrashErrorFallback
+        error={new Error("SharedMoney __DEV__ crash preview")}
+        resetErrorBoundary={() => setDevCrashPreview(null)}
+        preview={preview}
+      />
+    );
+  }
+
+  const dismissBillLinkToHome = () => {
+    // Cold-start deep links have no in-app back stack — always land on Home
+    // (groups) or sign-in when logged out, never a blank stack / app exit.
+    setBillSplitToken(null);
+    setDevBillPreview(null);
+    setCurrentRoute("groups");
+    setSelectedGroup(null);
+    clearJoinPathFromWebUrl();
+  };
+
+  // __DEV__ bill-link empty states for simulator screenshots (no network needed).
+  if (__DEV__ && devBillPreview) {
+    return (
+      <SplitBillScreen
+        key={`dev-bill-${devBillPreview}`}
+        token={"f".repeat(64)}
+        forceStatus={devBillPreview}
+        presentation="root"
+        onDismiss={dismissBillLinkToHome}
+      />
+    );
+  }
+
   // Bill links are session acknowledgements, independent of group/auth gates.
+  // presentation="root": cold-start / deep-link entry — Back goes Home, not Modal-pop.
   if (billSplitToken) {
-    return <SplitBillScreen key={billSplitToken} token={billSplitToken} onDismiss={() => {
-      setBillSplitToken(null);
-      clearJoinPathFromWebUrl();
-    }} />;
+    return (
+      <SplitBillScreen
+        key={billSplitToken}
+        token={billSplitToken}
+        presentation="root"
+        onDismiss={dismissBillLinkToHome}
+      />
+    );
   }
 
   // Keep the Groups layout in place through the auth/profile bootstrap gate.
@@ -1531,7 +1647,7 @@ function AppContent() {
   );
 }
 
-// Error Fallback Component
+// Cleared crash UI — never show raw errors/stacks to users (Sentry still gets them).
 function ErrorFallback({
   error,
   resetErrorBoundary,
@@ -1539,35 +1655,11 @@ function ErrorFallback({
   error: unknown;
   resetErrorBoundary: () => void;
 }) {
-  const theme = useTheme();
-  const err = error instanceof Error ? error : new Error(String(error));
-
-  // Still log to console in dev via the centralized logger, and ensure
-  // the error is captured by Sentry in all environments.
-  logError(err, { source: "ErrorFallback" });
-
   return (
-    <View
-      style={[
-        styles.errorContainer,
-        { backgroundColor: theme.colors.background },
-      ]}
-    >
-      <RNText style={[styles.errorTitle, { color: theme.colors.error }]}>
-        Something went wrong
-      </RNText>
-      <RNText style={[styles.errorMessage, { color: theme.colors.onSurface }]}>
-        {err.message}
-      </RNText>
-      <RNText
-        style={[styles.errorStack, { color: theme.colors.onSurfaceVariant }]}
-      >
-        {err.stack}
-      </RNText>
-      <Button onPress={resetErrorBoundary} mode="contained">
-        Try Again
-      </Button>
-    </View>
+    <CrashErrorFallback
+      error={error}
+      resetErrorBoundary={resetErrorBoundary}
+    />
   );
 }
 
@@ -1648,26 +1740,13 @@ export default function App() {
   const colorScheme = useColorScheme();
 
   return (
-    <ErrorBoundary
-      FallbackComponent={ErrorFallback}
-      onError={(error, errorInfo) => {
-        logError(error, {
-          source: "ErrorBoundary",
-          info: errorInfo,
-        });
-      }}
-      onReset={() => {
-        // Error boundary reset
-      }}
-    >
-      <SafeAreaProvider>
-        <QueryClientProvider client={queryClient}>
-          <ThemePreferenceProvider systemColorScheme={colorScheme}>
-            <ThemedAppShell />
-          </ThemePreferenceProvider>
-        </QueryClientProvider>
-      </SafeAreaProvider>
-    </ErrorBoundary>
+    <SafeAreaProvider>
+      <QueryClientProvider client={queryClient}>
+        <ThemePreferenceProvider systemColorScheme={colorScheme}>
+          <ThemedAppShell />
+        </ThemePreferenceProvider>
+      </QueryClientProvider>
+    </SafeAreaProvider>
   );
 }
 
@@ -1677,18 +1756,33 @@ function ThemedAppShell() {
 
   return (
     <PaperProvider theme={theme}>
-      <View
-        style={[
-          styles.mainContainer,
-          { backgroundColor: theme.colors.background },
-        ]}
+      {/*
+        ErrorBoundary sits under PaperProvider so the crash screen inherits
+        light/dark theme, and above Auth so a render crash still clears chrome.
+      */}
+      <ErrorBoundary
+        FallbackComponent={ErrorFallback}
+        onError={() => {
+          // Reporting (with support reference ID on repeat crashes) happens in
+          // CrashErrorFallback so the ID is attached to the same Sentry event.
+        }}
+        onReset={() => {
+          // Crash session counter intentionally persists across Reload.
+        }}
       >
-        <UpgradeProvider>
-          <AuthProvider>
-            <AppFrame />
-          </AuthProvider>
-        </UpgradeProvider>
-      </View>
+        <View
+          style={[
+            styles.mainContainer,
+            { backgroundColor: theme.colors.background },
+          ]}
+        >
+          <UpgradeProvider>
+            <AuthProvider>
+              <AppFrame />
+            </AuthProvider>
+          </UpgradeProvider>
+        </View>
+      </ErrorBoundary>
     </PaperProvider>
   );
 }
@@ -1869,26 +1963,5 @@ const styles = StyleSheet.create({
     margin: 16,
     left: 0,
     bottom: 0,
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-  },
-  errorTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    marginBottom: 10,
-  },
-  errorMessage: {
-    fontSize: 14,
-    marginBottom: 20,
-    textAlign: "center",
-  },
-  errorStack: {
-    fontSize: 12,
-    marginBottom: 20,
-    textAlign: "center",
   },
 });

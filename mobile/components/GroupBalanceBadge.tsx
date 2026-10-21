@@ -8,10 +8,13 @@ import {
   useCurrencyPreferences,
 } from '../hooks/useCurrencyPreferences';
 import { Balance } from '../types';
-import { balanceAmountColor, GROUP_LIST_EVEN_LABEL } from '../utils/balanceRowLabels';
+import { balanceAmountColor, GROUP_LIST_EVEN_LABEL, groupListBalanceWords } from '../utils/balanceRowLabels';
 import { formatCurrency } from '../utils/currency';
 import { formatUnifiedHeadline, unifyBalances } from '../utils/currencyMerge';
 import { createPreviewRateBook } from '../utils/previewRates';
+
+/** Match final amount-line height so loading does not resize the row. */
+const AMOUNT_TEXT_HEIGHT = 16;
 
 interface GroupBalanceData {
   group_id: string;
@@ -63,7 +66,9 @@ export const GroupBalanceBadge: React.FC<GroupBalanceBadgeProps> = ({
       style={[styles.balanceStatus, style]}
       testID="group-balance-loading"
     >
-      <Skeleton width="100%" height={12} />
+      <View style={styles.amountSkeletonSlot}>
+        <Skeleton width="92%" height={AMOUNT_TEXT_HEIGHT} borderRadius={4} />
+      </View>
     </SkeletonGroup>
   );
 
@@ -120,11 +125,14 @@ export const GroupBalanceBadge: React.FC<GroupBalanceBadgeProps> = ({
         ? 1
         : -1;
     const textColor = balanceAmountColor(signedAmount, theme.colors, { dark: theme.dark });
+    const headline = formatUnifiedHeadline(unified);
     return (
       <View style={[styles.balanceStatus, style]} testID="group-balance-amount">
-        <Text style={[styles.balanceText, { color: textColor, fontWeight: '700' }]}>
-          {signedAmount > 0 ? '+' : signedAmount < 0 ? '−' : ''}
-          {formatUnifiedHeadline(unified)}
+        <Text
+          style={[styles.balanceText, { color: textColor, fontWeight: '700' }]}
+          numberOfLines={2}
+        >
+          {groupListBalanceWords(signedAmount, headline)}
         </Text>
       </View>
     );
@@ -136,13 +144,17 @@ export const GroupBalanceBadge: React.FC<GroupBalanceBadgeProps> = ({
   const mainBalance = netBalances[0];
   const isMultiCurrency = netBalances.length > 1;
   const textColor = balanceAmountColor(mainBalance.amount, theme.colors, { dark: theme.dark });
+  const absolute = formatCurrency(Math.abs(mainBalance.amount), mainBalance.currency);
+  const label = groupListBalanceWords(mainBalance.amount, absolute)
+    + (isMultiCurrency ? ' (+)' : '');
 
   return (
     <View style={[styles.balanceStatus, style]} testID="group-balance-amount">
-      <Text style={[styles.balanceText, { color: textColor, fontWeight: '700' }]}>
-        {mainBalance.amount > 0 ? '+' : mainBalance.amount < 0 ? '−' : ''}
-        {formatCurrency(mainBalance.amount, mainBalance.currency)}
-        {isMultiCurrency ? ' (+)' : ''}
+      <Text
+        style={[styles.balanceText, { color: textColor, fontWeight: '700' }]}
+        numberOfLines={2}
+      >
+        {label}
       </Text>
     </View>
   );
@@ -159,8 +171,15 @@ const styles = StyleSheet.create({
   },
   balanceText: {
     fontSize: 13,
+    lineHeight: AMOUNT_TEXT_HEIGHT,
     fontWeight: '500',
     letterSpacing: -0.1,
     textAlign: 'right',
+  },
+  amountSkeletonSlot: {
+    width: '100%',
+    height: AMOUNT_TEXT_HEIGHT,
+    justifyContent: 'center',
+    alignItems: 'flex-end',
   },
 });

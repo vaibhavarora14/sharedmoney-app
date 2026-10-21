@@ -3,7 +3,16 @@ import { useAuth } from "../contexts/AuthContext";
 import { supabase } from "../supabase";
 import { fetchWithAuth } from "../utils/api";
 import { BILL_TOKEN_PATTERN, type BillSplitMode, type BillSplitSession } from "../utils/billSplit";
+import { isBenignConnectivityError } from "../utils/networkErrors";
 import type { ExistingPerson } from "../utils/peoplePicker";
+
+/** Thrown when a bill-link fetch failed for connectivity reasons (Retry UI). */
+export class BillSplitNetworkError extends Error {
+  constructor(message = "You're offline") {
+    super(message);
+    this.name = "BillSplitNetworkError";
+  }
+}
 
 export function useBillSplitPeople() {
   const { user } = useAuth();
@@ -33,7 +42,14 @@ export async function createBillSplit(input: {
 
 export async function readBillSplit(token: string): Promise<BillSplitSession | null> {
   const { data, error } = await supabase.rpc("get_bill_split_session", { p_token: token });
-  if (error) throw new Error("Could not load this bill. Please try again.");
+  if (error) {
+    // Dead/expired tokens return null data with no error from the RPC.
+    // Preserve connectivity failures so the screen can show "You're offline" + Retry.
+    if (isBenignConnectivityError(error)) {
+      throw new BillSplitNetworkError();
+    }
+    throw new Error("Could not load this bill. Please try again.");
+  }
   return data as BillSplitSession | null;
 }
 

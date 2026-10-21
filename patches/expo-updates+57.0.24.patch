@@ -1,0 +1,57 @@
+diff --git a/node_modules/expo-updates/android/src/main/java/expo/modules/updates/loader/Loader.kt b/node_modules/expo-updates/android/src/main/java/expo/modules/updates/loader/Loader.kt
+index be2a19f..f6fc80c 100644
+--- a/node_modules/expo-updates/android/src/main/java/expo/modules/updates/loader/Loader.kt
++++ b/node_modules/expo-updates/android/src/main/java/expo/modules/updates/loader/Loader.kt
+@@ -145,9 +145,22 @@ abstract class Loader protected constructor(
+   private suspend fun processUpdate(update: Update): LoaderResult {
+     if (update.isDevelopmentMode) {
+       // insert into database but don't try to load any assets;
+-      // the RN runtime will take care of that and we don't want to cache anything
++      // the RN runtime will take care of that and we don't want to cache anything.
++      // Dev / Expo Go reloads can race on UNIQUE(scope_key, commit_time); skip insert
++      // when this update id is already stored, and ignore duplicate-key failures.
+       val updateEntity = update.updateEntity
+-      database.updateDao().insertUpdate(updateEntity!!)
++      val existing = database.updateDao().loadUpdateWithId(updateEntity!!.id)
++      if (existing == null) {
++        try {
++          database.updateDao().insertUpdate(updateEntity)
++        } catch (e: Exception) {
++          val message = e.message ?: ""
++          if (!message.contains("UNIQUE constraint failed") && !message.contains("2067")) {
++            throw e
++          }
++          logger.warn("Ignoring duplicate development update insert ($message).")
++        }
++      }
+       database.updateDao().markUpdateFinished(updateEntity)
+       this.updateEntity = updateEntity
+       return finish()
+diff --git a/node_modules/expo-updates/ios/EXUpdates/AppLoader/AppLoader.swift b/node_modules/expo-updates/ios/EXUpdates/AppLoader/AppLoader.swift
+index 17e9e4e..abccf97 100644
+--- a/node_modules/expo-updates/ios/EXUpdates/AppLoader/AppLoader.swift
++++ b/node_modules/expo-updates/ios/EXUpdates/AppLoader/AppLoader.swift
+@@ -131,7 +131,22 @@ open class AppLoader: NSObject {
+     if updateManifest.isDevelopmentMode {
+       database.databaseQueue.async {
+         do {
+-          try self.database.addUpdate(updateManifest, config: self.config)
++          // Dev / Expo Go reloads often re-insert the same (scope_key, commit_time).
++          // Match the production path: skip insert when this update id is already stored,
++          // and treat UNIQUE constraint races as already-present rather than failing the load.
++          let existingUpdate = try? self.database.update(withId: updateManifest.updateId, config: self.config)
++          if existingUpdate == nil {
++            do {
++              try self.database.addUpdate(updateManifest, config: self.config)
++            } catch {
++              let message = String(describing: error)
++              if message.contains("UNIQUE constraint failed") || message.contains("2067") {
++                self.logger.warn(message: "AppLoader: Ignoring duplicate development update insert (\(message)).")
++              } else {
++                throw error
++              }
++            }
++          }
+           try self.database.markUpdateFinished(updateManifest)
+         } catch {
+           self.finish(withError: UpdatesError.appLoaderUnknownError(cause: error))

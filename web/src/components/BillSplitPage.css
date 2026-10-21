@@ -41,3 +41,25 @@
 .bill-split-unavailable { display: grid; gap: 1rem; }
 .bill-split-actions { display: flex; flex-wrap: wrap; gap: .75rem; }
 .bill-split-actions .cta { cursor: pointer; font: inherit; font-weight: 600; }
+.bill-split-skeleton { display: grid; gap: 1.25rem; }
+.bill-split-skeleton-line {
+  display: block;
+  border-radius: var(--radius-1);
+  background: linear-gradient(90deg, var(--color-surface-alt) 0%, var(--color-border) 50%, var(--color-surface-alt) 100%);
+  background-size: 200% 100%;
+  animation: bill-split-skeleton-pulse 1.4s ease-in-out infinite;
+}
+.bill-split-skeleton-kicker { width: 7rem; height: .875rem; }
+.bill-split-skeleton-total { width: 11rem; height: 2.5rem; }
+.bill-split-skeleton-copy { width: 90%; height: 1rem; }
+.bill-split-skeleton-people { margin: 0; }
+.bill-split-skeleton-name { width: 8rem; height: 1.1rem; }
+.bill-split-skeleton-amount { width: 5rem; height: 1.1rem; }
+.bill-split-skeleton-button { width: 10rem; height: 2.75rem; margin-top: .25rem; }
+@keyframes bill-split-skeleton-pulse {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bill-split-skeleton-line { animation: none; }
+}

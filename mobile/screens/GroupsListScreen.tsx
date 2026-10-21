@@ -6,7 +6,6 @@ import {
   Appbar,
   Button,
   Icon,
-  List,
   Surface,
   Text,
   TouchableRipple,
@@ -39,6 +38,14 @@ import { ANALYTICS_EVENTS } from "../utils/posthogEvents";
 import { getSeenGroupIds, markGroupSeen } from "../utils/seenGroups";
 import { partitionGroupsBySection } from "../utils/groupListSections";
 import { recordSentryListCounts } from "../utils/sentryTelemetry";
+import { balanceAmountColor, groupListBalanceWords } from "../utils/balanceRowLabels";
+import { formatCurrency } from "../utils/currency";
+import {
+  listRecentBillSplits,
+  summarizeUnsettledOneTimeBills,
+  type OneTimeBillsHomeSummary,
+  type RecentBillSplit,
+} from "../utils/recentBillSplits";
 import { CreateGroupScreen } from "./CreateGroupScreen";
 import { SplitBillScreen } from "./SplitBillScreen";
 
@@ -63,7 +70,8 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
 }) => {
   const [showCreateGroup, setShowCreateGroup] = useState<boolean>(false);
   const [showSplitBill, setShowSplitBill] = useState(false);
-  const [newGroupHeight, setNewGroupHeight] = useState(56);
+  const [splitBillToken, setSplitBillToken] = useState<string | undefined>();
+  const [recentBills, setRecentBills] = useState<RecentBillSplit[]>([]);
   const [formerGroupsExpanded, setFormerGroupsExpanded] = useState<boolean>(false);
   const [archivedGroupsExpanded, setArchivedGroupsExpanded] = useState<boolean>(false);
   const [seenGroupIds, setSeenGroupIds] = useState<Set<string> | null>(null);
@@ -134,6 +142,27 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
     };
   }, [user?.id, loading, groups]);
 
+  // Recent one-time bills so closing a bill still leaves a reopen path on Home.
+  useEffect(() => {
+    if (!user?.id) {
+      setRecentBills([]);
+      return;
+    }
+    let mounted = true;
+    listRecentBillSplits(user.id).then((rows) => {
+      if (mounted) setRecentBills(rows);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [user?.id, showSplitBill]);
+
+  const openSplitBill = (token?: string) => {
+    setSplitBillToken(token);
+    setShowSplitBill(true);
+  };
+  const oneTimeSummary: OneTimeBillsHomeSummary | null = summarizeUnsettledOneTimeBills(recentBills);
+
   const handleGroupPress = (group: Group) => {
     if (user?.id) {
       // Clear the NEW badge as soon as the group is opened.
@@ -189,8 +218,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
   }, [loading, groups.length]);
 
   // Helper function to render a group item.
-  // nested=true: Archived children — indented hairline rows (not twin active cards).
-  // Former uses the same non-nested Surface cards as active (marginBottom 9).
+  // nested=true: Archived/Former children — indented hairline rows (not active cards).
   const renderGroupItem = (group: Group, options?: { nested?: boolean }) => {
     const nested = Boolean(options?.nested);
     const isNew =
@@ -382,12 +410,15 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
         ) : null}
       </Appbar.Header>
 
-      <Button mode="outlined" icon="call-split" testID="split-bill-entry"
-        style={{ marginHorizontal: 16, marginTop: 12, marginBottom: 4 }}
-        onPress={() => setShowSplitBill(true)}>Split a bill</Button>
-
       {isInitialLoading ? (
-        <GroupsHomeSkeletonRows />
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          testID="groups-loading-placeholders"
+        >
+          <GroupsHomeSkeletonRows embedded />
+        </ScrollView>
       ) : (
         <ScrollView
           style={styles.scrollView}
@@ -452,83 +483,184 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                   maxWidth: 280,
                 }}
               >
-                Split a one-time bill, or create a group for ongoing expenses.
+                Create a group for ongoing shared expenses with friends or roommates.
               </Text>
               <Button
                 mode="contained"
                 onPress={() => setShowCreateGroup(true)}
                 testID="groups-empty-create"
+                style={styles.emptyCreateGroup}
+                contentStyle={{ minHeight: 48 }}
               >
-                Create group
+                Create a group
+              </Button>
+              <Button
+                mode="text"
+                compact
+                onPress={() => openSplitBill()}
+                testID="home-empty-one-time-split"
+                style={{ marginTop: 8 }}
+                labelStyle={{ fontWeight: "500" }}
+              >
+                Just one bill? Split it without a group
               </Button>
             </View>
           ) : (
             <>
+              <View style={styles.groupsSectionHeader} testID="groups-section-header">
+                <Text variant="labelLarge" style={[styles.sectionHeaderLabel, { color: theme.colors.onSurfaceVariant }]}>
+                  Groups
+                </Text>
+                <Button
+                  mode="text"
+                  compact
+                  testID="new-group-action"
+                  onPress={() => setShowCreateGroup(true)}
+                  accessibilityLabel="New group"
+                >
+                  New group
+                </Button>
+              </View>
+
               {/* Active Groups */}
               {activeGroups.map((group) => renderGroupItem(group))}
 
-              {/* Archived Groups — mute chip + demoted nested hairline children */}
-              {archivedGroups.length > 0 && (
-                <List.Accordion
-                  title={`Archived (${archivedGroups.length})`}
-                  titleStyle={[
-                    styles.sectionAccordionTitle,
-                    { color: theme.colors.onSurfaceVariant },
-                  ]}
-                  style={[
-                    styles.sectionAccordion,
-                    { backgroundColor: theme.colors.surface },
-                  ]}
-                  left={(props) => (
-                    <List.Icon
-                      {...props}
-                      icon="archive-outline"
-                      color={theme.colors.onSurfaceVariant}
-                      style={styles.sectionAccordionIcon}
-                    />
-                  )}
-                  expanded={archivedGroupsExpanded}
-                  onPress={() => setArchivedGroupsExpanded(!archivedGroupsExpanded)}
+              {/* Quiet one-time bills row — after active groups, above Archived/Former. */}
+              {oneTimeSummary ? (
+                <Surface
+                  style={[styles.groupItem, { backgroundColor: theme.colors.surface, marginTop: 4 }]}
+                  elevation={0}
+                >
+                  <TouchableOpacity
+                    testID="one-time-bills-row"
+                    style={[styles.groupTouchable, expandedText && styles.groupTouchableExpanded]}
+                    onPress={() => openSplitBill()}
+                    activeOpacity={0.7}
+                    accessibilityRole="button"
+                    accessibilityLabel={`One-time bills, ${
+                      oneTimeSummary.unsettled_count === 1
+                        ? "1 unsettled"
+                        : `${oneTimeSummary.unsettled_count} unsettled`
+                    }, ${groupListBalanceWords(
+                      oneTimeSummary.net_minor / 100,
+                      formatCurrency(Math.abs(oneTimeSummary.net_minor) / 100, oneTimeSummary.currency),
+                    )}`}
+                  >
+                    <View style={[styles.groupMainContent, expandedText && styles.groupMainContentExpanded]}>
+                      <View style={styles.groupInfo}>
+                        <Text
+                          variant="titleMedium"
+                          style={[styles.groupName, { color: theme.colors.onSurface }]}
+                          numberOfLines={1}
+                        >
+                          One-time bills
+                        </Text>
+                        <Text
+                          variant="bodySmall"
+                          style={[styles.groupSubtitle, { color: theme.colors.onSurfaceVariant }]}
+                          numberOfLines={1}
+                        >
+                          {oneTimeSummary.unsettled_count === 1
+                            ? "1 unsettled"
+                            : `${oneTimeSummary.unsettled_count} unsettled`}
+                        </Text>
+                      </View>
+                    </View>
+                    <View
+                      style={[
+                        styles.oneTimeBalanceSlot,
+                        expandedText && styles.balanceBadgeExpanded,
+                      ]}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 13,
+                          lineHeight: 16,
+                          fontWeight: "700",
+                          textAlign: "right",
+                          color: balanceAmountColor(
+                            oneTimeSummary.net_minor / 100,
+                            theme.colors,
+                            { dark: theme.dark },
+                          ),
+                        }}
+                        numberOfLines={2}
+                      >
+                        {groupListBalanceWords(
+                          oneTimeSummary.net_minor / 100,
+                          formatCurrency(
+                            Math.abs(oneTimeSummary.net_minor) / 100,
+                            oneTimeSummary.currency,
+                          ),
+                        )}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                </Surface>
+              ) : null}
+
+              {/* Archived + Former share one disclosure: header card, inset icon,
+                  compact divider children (not active Surface cards). */}
+              {archivedGroups.length > 0 ? (
+                <View
+                  style={[styles.sectionAccordion, { backgroundColor: theme.colors.surface }]}
                   testID="archived-groups-accordion"
                 >
-                  <View
-                    style={[
-                      styles.accordionContent,
-                      { backgroundColor: theme.colors.background },
-                    ]}
+                  <TouchableRipple
+                    onPress={() => setArchivedGroupsExpanded(!archivedGroupsExpanded)}
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded: archivedGroupsExpanded }}
+                    accessibilityLabel={`Archived, ${archivedGroups.length} groups`}
+                    style={styles.sectionDisclosureHeader}
                   >
-                    {archivedGroups.map((group) =>
-                      renderGroupItem(group, { nested: true })
-                    )}
-                  </View>
-                </List.Accordion>
-              )}
+                    <View style={styles.sectionDisclosureHeaderRow}>
+                      <Icon
+                        source="archive-outline"
+                        size={20}
+                        color={theme.colors.onSurfaceVariant}
+                      />
+                      <Text
+                        style={[
+                          styles.sectionAccordionTitle,
+                          { color: theme.colors.onSurfaceVariant, flex: 1 },
+                        ]}
+                      >
+                        {`Archived (${archivedGroups.length})`}
+                      </Text>
+                      <Icon
+                        source={archivedGroupsExpanded ? "chevron-up" : "chevron-down"}
+                        size={20}
+                        color={theme.colors.onSurfaceVariant}
+                      />
+                    </View>
+                  </TouchableRipple>
+                  {archivedGroupsExpanded ? (
+                    <View
+                      style={[styles.sectionDisclosureContent, { backgroundColor: theme.colors.background }]}
+                    >
+                      {archivedGroups.map((group) => renderGroupItem(group, { nested: true }))}
+                    </View>
+                  ) : null}
+                </View>
+              ) : null}
 
-              {/* Former Groups — mute chip header (not List.Accordion): Paper
-                  Accordion clones children and collapses card gaps on web.
-                  Flat Surface cards with the same padding/gap as active. */}
-              {formerGroups.length > 0 && (
+              {formerGroups.length > 0 ? (
                 <View
-                  style={[
-                    styles.sectionAccordion,
-                    { backgroundColor: theme.colors.surface },
-                  ]}
+                  style={[styles.sectionAccordion, { backgroundColor: theme.colors.surface }]}
                   testID="former-groups-accordion"
                 >
                   <TouchableRipple
-                    onPress={() =>
-                      setFormerGroupsExpanded(!formerGroupsExpanded)
-                    }
+                    onPress={() => setFormerGroupsExpanded(!formerGroupsExpanded)}
                     accessibilityRole="button"
                     accessibilityState={{ expanded: formerGroupsExpanded }}
                     accessibilityLabel={`Former, ${formerGroups.length} groups`}
-                    style={styles.formerAccordionHeader}
+                    style={styles.sectionDisclosureHeader}
                   >
-                    <View style={styles.formerAccordionHeaderRow}>
-                      <List.Icon
-                        icon="history"
+                    <View style={styles.sectionDisclosureHeaderRow}>
+                      <Icon
+                        source="history"
+                        size={20}
                         color={theme.colors.onSurfaceVariant}
-                        style={styles.sectionAccordionIcon}
                       />
                       <Text
                         style={[
@@ -538,65 +670,40 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                       >
                         {`Former (${formerGroups.length})`}
                       </Text>
-                      <List.Icon
-                        icon={
-                          formerGroupsExpanded ? "chevron-up" : "chevron-down"
-                        }
+                      <Icon
+                        source={formerGroupsExpanded ? "chevron-up" : "chevron-down"}
+                        size={20}
                         color={theme.colors.onSurfaceVariant}
                       />
                     </View>
                   </TouchableRipple>
                   {formerGroupsExpanded ? (
                     <View
-                      style={[
-                        styles.formerAccordionContent,
-                        { backgroundColor: theme.colors.background },
-                      ]}
+                      style={[styles.sectionDisclosureContent, { backgroundColor: theme.colors.background }]}
                     >
-                      {formerGroups.map((group) => renderGroupItem(group))}
+                      {formerGroups.map((group) => renderGroupItem(group, { nested: true }))}
                     </View>
                   ) : null}
                 </View>
-              )}
+              ) : null}
             </>
           )}
 
-          {/* Bottom padding for FAB when present */}
-          <View
-            testID="new-group-clearance"
-            style={{ height: hasAnyVisibleGroups ? newGroupHeight + 24 : 24 }}
-          />
+          {/* Bottom padding so Archived / Former never sit under chrome. */}
+          <View testID="home-list-clearance" style={{ height: 32 }} />
         </ScrollView>
       )}
 
-      {/* Single primary CTA — solid action when groups exist; empty state owns Create group alone. */}
-      {hasAnyVisibleGroups ? (
-        <View style={styles.fab} pointerEvents="box-none">
-          <Surface
-            testID="new-group-surface"
-            style={[styles.fabSurface, { backgroundColor: theme.colors.primary }]}
-            elevation={2}
-            onLayout={({ nativeEvent }) => setNewGroupHeight(nativeEvent.layout.height)}
-          >
-            <TouchableRipple
-              testID="new-group-action"
-              style={styles.fabRipple}
-              onPress={() => setShowCreateGroup(true)}
-              accessibilityRole="button"
-              accessibilityLabel="New Group"
-            >
-              <View style={styles.fabContent} pointerEvents="none">
-                <Icon source="plus" size={24} color={theme.colors.onPrimary} />
-                <Text variant="labelLarge" style={[styles.fabLabel, { color: theme.colors.onPrimary }]}>
-                  New Group
-                </Text>
-              </View>
-            </TouchableRipple>
-          </Surface>
-        </View>
+      {showSplitBill ? (
+        <SplitBillScreen
+          key={splitBillToken ?? "new-bill"}
+          token={splitBillToken}
+          onDismiss={() => {
+            setShowSplitBill(false);
+            setSplitBillToken(undefined);
+          }}
+        />
       ) : null}
-
-      {showSplitBill ? <SplitBillScreen onDismiss={() => setShowSplitBill(false)} /> : null}
       <CreateGroupScreen
         visible={showCreateGroup}
         onCreateGroup={async (groupData) => {
@@ -610,36 +717,40 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
 };
 
 /** Shared by the groups query and the auth/profile bootstrap gate. */
-export function GroupsHomeSkeletonRows() {
+export function GroupsHomeSkeletonRows({ embedded = false }: { embedded?: boolean } = {}) {
   const theme = useTheme();
   const { fontScale } = useWindowDimensions();
   const expandedText = fontScale > 1;
+  const rows = (
+    <SkeletonGroup>
+      {[0, 1, 2, 3, 4, 5].map((key) => (
+        <Surface key={key} style={[styles.groupItem, { backgroundColor: theme.colors.surface }]} elevation={0}>
+          <View style={[styles.groupTouchable, expandedText && styles.groupTouchableExpanded]}>
+            <View style={[styles.groupMainContent, expandedText && styles.groupMainContentExpanded]}>
+              <View style={styles.groupInfo}>
+                <View style={{ height: theme.fonts.titleMedium.lineHeight * fontScale, justifyContent: "center" }}>
+                  <Skeleton width={key % 2 ? "80%" : "60%"} height={16} />
+                </View>
+                {/* Uncached first paint: assume the common row with a description line. */}
+                <View testID="group-skeleton-subtitle" style={[styles.groupSubtitle,
+                  { height: theme.fonts.bodySmall.lineHeight * fontScale, justifyContent: "center" }]}>
+                  <Skeleton width={key % 2 ? "45%" : "35%"} height={10} />
+                </View>
+              </View>
+            </View>
+            <View style={[{ width: GROUP_BALANCE_SLOT_WIDTH, paddingHorizontal: 2, paddingVertical: 2 }, expandedText && styles.balanceBadgeExpanded]}>
+              <Skeleton width="100%" height={12} />
+            </View>
+          </View>
+        </Surface>
+      ))}
+    </SkeletonGroup>
+  );
+  if (embedded) return rows;
   return (
     <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}
       showsVerticalScrollIndicator={false} testID="groups-loading-placeholders">
-      <SkeletonGroup>
-        {[0, 1, 2, 3, 4, 5].map((key) => (
-          <Surface key={key} style={[styles.groupItem, { backgroundColor: theme.colors.surface }]} elevation={0}>
-            <View style={[styles.groupTouchable, expandedText && styles.groupTouchableExpanded]}>
-              <View style={[styles.groupMainContent, expandedText && styles.groupMainContentExpanded]}>
-                <View style={styles.groupInfo}>
-                  <View style={{ height: theme.fonts.titleMedium.lineHeight * fontScale, justifyContent: "center" }}>
-                    <Skeleton width={key % 2 ? "80%" : "60%"} height={16} />
-                  </View>
-                  {/* Uncached first paint: assume the common row with a description line. */}
-                  <View testID="group-skeleton-subtitle" style={[styles.groupSubtitle,
-                    { height: theme.fonts.bodySmall.lineHeight * fontScale, justifyContent: "center" }]}>
-                    <Skeleton width={key % 2 ? "45%" : "35%"} height={10} />
-                  </View>
-                </View>
-              </View>
-              <View style={[{ width: GROUP_BALANCE_SLOT_WIDTH, paddingHorizontal: 2, paddingVertical: 2 }, expandedText && styles.balanceBadgeExpanded]}>
-                <Skeleton width="100%" height={12} />
-              </View>
-            </View>
-          </Surface>
-        ))}
-      </SkeletonGroup>
+      {rows}
     </ScrollView>
   );
 }
@@ -651,9 +762,14 @@ export function GroupsHomeSkeleton() {
       <Appbar.Header style={{ backgroundColor: theme.colors.background }}>
         <Appbar.Content title="Your Groups" titleStyle={{ fontWeight: "bold" }} />
       </Appbar.Header>
-      <Button mode="outlined" icon="call-split" disabled
-        style={{ marginHorizontal: 16, marginTop: 12, marginBottom: 4 }}>Split a bill</Button>
-      <GroupsHomeSkeletonRows />
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        testID="groups-loading-placeholders"
+      >
+        <GroupsHomeSkeletonRows embedded />
+      </ScrollView>
     </View>
   );
 }
@@ -674,10 +790,33 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: 16,
   },
+  sectionHeaderLabel: {
+    fontWeight: "700",
+    letterSpacing: 0.2,
+  },
+  groupsSectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    minHeight: 44,
+    marginBottom: 8,
+  },
   emptyContainer: {
     paddingVertical: 64,
     alignItems: "center",
     justifyContent: "center",
+  },
+  emptyCreateGroup: {
+    alignSelf: "stretch",
+    maxWidth: 320,
+  },
+  oneTimeBalanceSlot: {
+    width: GROUP_BALANCE_SLOT_WIDTH,
+    flexShrink: 0,
+    alignItems: "flex-end",
+    justifyContent: "center",
+    paddingHorizontal: 2,
+    paddingVertical: 2,
   },
   groupItem: {
     marginBottom: 9,
@@ -731,33 +870,6 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 16,
   },
-  fab: {
-    position: "absolute",
-    left: 16,
-    right: 16,
-    bottom: 26,
-    alignItems: "flex-end",
-  },
-  fabSurface: {
-    maxWidth: "100%",
-    borderRadius: 8,
-  },
-  fabRipple: {
-    borderRadius: 8,
-    overflow: "hidden",
-  },
-  fabContent: {
-    minHeight: 56,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  fabLabel: {
-    marginHorizontal: 8,
-    flexShrink: 1,
-  },
   // New Styles
   groupSubtitle: {
     marginTop: 2,
@@ -786,15 +898,12 @@ const styles = StyleSheet.create({
     marginTop: 12,
     maxWidth: "100%",
   },
-  // Secondary Home sections (Former / Archived): mute 13/600 labels + light
-  // surface chip. Archived expands to indented hairlines; Former expands to
-  // the same flat surface cards as active (comfortable padding, not crushed).
+  // Secondary Home sections (Archived / Former): one disclosure card, inset icons,
+  // compact divider children for both.
   sectionAccordion: {
     marginTop: 20,
     marginBottom: 8,
     borderRadius: 12,
-    paddingVertical: 2,
-    paddingHorizontal: 4,
     // Expand/collapse hit target ≥44pt (Design soft note from #351/#357).
     minHeight: 44,
     overflow: "hidden",
@@ -805,45 +914,31 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     letterSpacing: 0.2,
   },
-  sectionAccordionIcon: {
-    marginLeft: 0,
-    marginRight: 0,
-  },
-  accordionContent: {
-    paddingHorizontal: 0,
-    paddingLeft: 0,
-    marginLeft: 0,
-    marginRight: 0,
-    paddingTop: 4,
-    // Pull nested rows onto page canvas under the mute chip.
-    marginHorizontal: -4,
-  },
-  // Former: custom expand (not List.Accordion) so Surface card margins paint.
-  formerAccordionHeader: {
+  sectionDisclosureHeader: {
     minHeight: 44,
     justifyContent: "center",
   },
-  formerAccordionHeaderRow: {
+  sectionDisclosureHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
     minHeight: 44,
-    paddingRight: 4,
+    // Match active group row content inset (groupTouchable paddingHorizontal).
+    paddingHorizontal: 14,
+    gap: 10,
   },
-  formerAccordionContent: {
-    paddingTop: 8,
-    // Pull cards onto page canvas under the mute chip (same as #357).
-    marginHorizontal: -4,
+  sectionDisclosureContent: {
+    paddingTop: 0,
+    paddingBottom: 4,
   },
-  // Nested Archived children: indent + hairline on canvas (no surface/r14 cards).
+  // Nested Archived/Former children: same horizontal inset as header / active rows.
   nestedGroupRow: {
-    marginLeft: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   nestedGroupTouchable: {
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 12,
-    paddingHorizontal: 4,
+    paddingHorizontal: 14,
     gap: 8,
   },
   nestedGroupName: {
