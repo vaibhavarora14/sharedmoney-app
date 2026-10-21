@@ -121,6 +121,11 @@ function formatSplitAmount(minor: number, currency: string): string {
   return formatCurrency(minor / 100, currency);
 }
 
+/** Native dead-link CTA; web keeps the #376 “Go to SharedMoney” label. */
+export function billLinkGoHomeLabel(platform: string = Platform.OS): string {
+  return platform === "web" ? "Go to SharedMoney" : "Go to Home";
+}
+
 /** Dead / expired one-time bill link — top-anchored, no Retry. */
 export function BillLinkUnavailable({
   onGoHome,
@@ -149,7 +154,7 @@ export function BillLinkUnavailable({
         contentStyle={styles.statusPrimaryContent}
         testID="bill-link-go-home"
       >
-        Go to SharedMoney
+        {billLinkGoHomeLabel()}
       </Button>
     </View>
   );
@@ -163,10 +168,22 @@ export function BillLinkOffline({
   onRetry,
   offline = true,
 }: {
-  onRetry: () => void;
+  onRetry: () => void | Promise<unknown>;
   offline?: boolean;
 }) {
   const theme = useTheme();
+  const [retrying, setRetrying] = useState(false);
+
+  const handleRetry = async () => {
+    if (retrying) return;
+    setRetrying(true);
+    try {
+      await onRetry();
+    } finally {
+      setRetrying(false);
+    }
+  };
+
   return (
     <View
       style={styles.statusPanel}
@@ -188,10 +205,13 @@ export function BillLinkOffline({
       </Text>
       <Button
         mode="contained"
-        onPress={onRetry}
+        onPress={() => void handleRetry()}
+        loading={retrying}
+        disabled={retrying}
         style={styles.statusPrimary}
         contentStyle={styles.statusPrimaryContent}
         testID="bill-link-retry"
+        accessibilityLabel={retrying ? "Retrying" : "Retry"}
       >
         Retry
       </Button>
@@ -565,9 +585,12 @@ function BillSplitForm({
 function BillSplitDetails({
   token,
   onGoHome,
+  onStatusChrome,
 }: {
   token: string;
   onGoHome: () => void;
+  /** Tell the parent to use the “One-time bill” header on dead/offline states. */
+  onStatusChrome?: (active: boolean) => void;
 }) {
   const theme = useTheme();
   const { user } = useAuth();
@@ -579,6 +602,13 @@ function BillSplitDetails({
   const confirming = useRef(false);
   const url = billSplitUrl(token);
   const remembered = useRef(false);
+
+  React.useEffect(() => {
+    const showStatusChrome =
+      session.isError || (!session.isPending && !session.data);
+    onStatusChrome?.(showStatusChrome);
+    return () => onStatusChrome?.(false);
+  }, [session.isError, session.isPending, session.data, onStatusChrome]);
 
   React.useEffect(() => {
     if (!session.data || !user?.id) return;
@@ -637,7 +667,7 @@ function BillSplitDetails({
     // offline copy when we can tell it's connectivity, otherwise still Retry.
     return (
       <BillLinkOffline
-        onRetry={() => void session.refetch()}
+        onRetry={() => session.refetch()}
         offline={isBillSplitOfflineError(session.error)}
       />
     );
@@ -675,29 +705,56 @@ export function SplitBillScreen({
   onDismiss,
   /** __DEV__ screenshot helper — skips the network and paints locked empty states. */
   forceStatus,
+  /**
+   * `root` = app opened on this screen (cold-start deep link). Avoids a Modal
+   * with an empty back stack; Back / Go to Home call onDismiss → Home/sign-in.
+   * `modal` = opened over an existing in-app surface.
+   */
+  presentation = "modal",
 }: {
   token?: string;
   draft?: SplitBillDraft;
   onDismiss: () => void;
   forceStatus?: "dead" | "offline";
+  presentation?: "modal" | "root";
 }) {
   const theme = useTheme();
   const [token, setToken] = useState(initialToken);
-  // Portal.Host keeps Paper menus (Portal) in this modal layer so they paint above the sheet on web.
-  return <Modal visible animationType="slide" presentationStyle="fullScreen" onRequestClose={onDismiss}>
+  const [statusChrome, setStatusChrome] = useState(Boolean(forceStatus));
+  // Dead/offline screens use the singular “One-time bill” header (Design #387).
+  const headerTitle =
+    forceStatus || statusChrome ? "One-time bill" : "Split a bill";
+
+  const body = (
     <Portal.Host>
       <SafeAreaView style={[styles.root, { backgroundColor: theme.colors.background }]}>
         <Appbar.Header elevated style={{ backgroundColor: theme.colors.surface }}>
-          <Appbar.BackAction onPress={onDismiss} /><Appbar.Content title="Split a bill" />
+          <Appbar.BackAction
+            onPress={onDismiss}
+            accessibilityLabel="Go back"
+            testID="split-bill-back"
+          />
+          <Appbar.Content title={headerTitle} testID="split-bill-header-title" />
         </Appbar.Header>
         <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === "ios" ? "padding" : "height"}>
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
             {forceStatus === "dead" ? (
               <BillLinkUnavailable onGoHome={onDismiss} />
             ) : forceStatus === "offline" ? (
-              <BillLinkOffline onRetry={onDismiss} offline />
+              <BillLinkOffline
+                onRetry={async () => {
+                  // Preview has nothing to refetch; keep spinner visible briefly.
+                  await new Promise((resolve) => setTimeout(resolve, 400));
+                }}
+                offline
+              />
             ) : token ? (
-              <BillSplitDetails key={token} token={token} onGoHome={onDismiss} />
+              <BillSplitDetails
+                key={token}
+                token={token}
+                onGoHome={onDismiss}
+                onStatusChrome={setStatusChrome}
+              />
             ) : (
               <BillSplitForm
                 draft={draft}
@@ -709,7 +766,23 @@ export function SplitBillScreen({
         </KeyboardAvoidingView>
       </SafeAreaView>
     </Portal.Host>
-  </Modal>;
+  );
+
+  if (presentation === "root") {
+    return body;
+  }
+
+  // Portal.Host keeps Paper menus (Portal) in this modal layer so they paint above the sheet on web.
+  return (
+    <Modal
+      visible
+      animationType="slide"
+      presentationStyle="fullScreen"
+      onRequestClose={onDismiss}
+    >
+      {body}
+    </Modal>
+  );
 }
 
 /** Design / Expo preview surfaces — mirrors create-form chrome without network. */

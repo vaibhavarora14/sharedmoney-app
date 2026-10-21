@@ -2,6 +2,7 @@ import Constants from "expo-constants";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Clipboard,
+  Image,
   Linking,
   Platform,
   Pressable,
@@ -17,6 +18,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { recordCrash } from "../utils/crashSession";
 import { logError } from "../utils/logger";
 import { buildCrashSupportEmailUrl } from "../utils/supportEmail";
+
+const LOGO_MARK = require("../assets/logo.png");
 
 /**
  * Cleared crash screen for the root ErrorBoundary.
@@ -123,6 +126,13 @@ export function CrashErrorFallback({
       testID="crash-error-fallback"
     >
       <View style={styles.content}>
+        <Image
+          source={LOGO_MARK}
+          style={styles.logoMark}
+          resizeMode="contain"
+          accessibilityLabel="SharedMoney"
+          testID="crash-logo-mark"
+        />
         <Text
           variant="headlineSmall"
           style={[styles.wordmark, { color: theme.colors.onBackground }]}
@@ -224,8 +234,14 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: 28,
+    paddingHorizontal: 24,
     gap: 12,
+    width: "100%",
+  },
+  logoMark: {
+    width: 56,
+    height: 56,
+    marginBottom: 4,
   },
   wordmark: {
     fontWeight: "700",
@@ -261,7 +277,8 @@ const styles = StyleSheet.create({
   },
   reload: {
     marginTop: 12,
-    minWidth: 200,
+    alignSelf: "stretch",
+    marginHorizontal: 0,
     borderRadius: 24,
   },
   reloadContent: {

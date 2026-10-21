@@ -1305,6 +1305,16 @@ function AppContent() {
     );
   }
 
+  const dismissBillLinkToHome = () => {
+    // Cold-start deep links have no in-app back stack — always land on Home
+    // (groups) or sign-in when logged out, never a blank stack / app exit.
+    setBillSplitToken(null);
+    setDevBillPreview(null);
+    setCurrentRoute("groups");
+    setSelectedGroup(null);
+    clearJoinPathFromWebUrl();
+  };
+
   // __DEV__ bill-link empty states for simulator screenshots (no network needed).
   if (__DEV__ && devBillPreview) {
     return (
@@ -1312,17 +1322,23 @@ function AppContent() {
         key={`dev-bill-${devBillPreview}`}
         token={"f".repeat(64)}
         forceStatus={devBillPreview}
-        onDismiss={() => setDevBillPreview(null)}
+        presentation="root"
+        onDismiss={dismissBillLinkToHome}
       />
     );
   }
 
   // Bill links are session acknowledgements, independent of group/auth gates.
+  // presentation="root": cold-start / deep-link entry — Back goes Home, not Modal-pop.
   if (billSplitToken) {
-    return <SplitBillScreen key={billSplitToken} token={billSplitToken} onDismiss={() => {
-      setBillSplitToken(null);
-      clearJoinPathFromWebUrl();
-    }} />;
+    return (
+      <SplitBillScreen
+        key={billSplitToken}
+        token={billSplitToken}
+        presentation="root"
+        onDismiss={dismissBillLinkToHome}
+      />
+    );
   }
 
   // Keep the Groups layout in place through the auth/profile bootstrap gate.
