@@ -24,6 +24,27 @@ export function settleFirstName(name: string | null | undefined): string {
 }
 
 /**
+ * Chat-safe person label for settle share text. Never returns "You".
+ * Prefers the first name from `full_name`, else email local-part.
+ */
+export function settleSharePersonName(person: {
+  full_name?: string | null;
+  email?: string | null;
+}): string {
+  const full = (person.full_name ?? "").trim();
+  if (full && full.toLowerCase() !== "you") {
+    return full.split(/\s+/)[0] || full;
+  }
+  const email = (person.email ?? "").trim();
+  if (email.includes("@")) {
+    const local = email.split("@")[0]?.trim();
+    if (local) return local;
+  }
+  if (email) return email;
+  return "Someone";
+}
+
+/**
  * Digits-only international number for WhatsApp (`wa.me` / `whatsapp://send`).
  * Accepts E.164 (`+9198…`) or already-digit international forms; rejects empty /
  * too-short values. Does not prepend a country code when the input is already a
@@ -65,8 +86,23 @@ export function buildWhatsAppSendUrl(phoneDigits: string, text: string): string 
 }
 
 /**
+ * Currency for shared chat text: keep locale grouping, drop trailing `.00`
+ * for whole amounts, keep fractional digits when non-zero (e.g. ₹431.20).
+ */
+export function formatShareCurrency(
+  amount: number,
+  currencyCode: string,
+): string {
+  const abs = Math.abs(amount);
+  const formatted = formatCurrency(abs, currencyCode);
+  // formatCurrency always uses en-US fraction digits for non-zero-decimal codes.
+  if (/\.\d*[1-9]\d*$/.test(formatted)) return formatted;
+  return formatted.replace(/\.0+$/, "");
+}
+
+/**
  * Per-person remind copy (second person). Link on its own final line.
- * No payment / "Pay to" wording.
+ * Honest about the group link destination — no payment / "Pay to" wording.
  */
 export function buildSettleRemindMessage(input: {
   counterpartyName: string;
@@ -77,37 +113,24 @@ export function buildSettleRemindMessage(input: {
 }): string {
   const first = settleFirstName(input.counterpartyName);
   const group = input.groupName.trim() || "the group";
-  const amount = formatCurrency(Math.abs(input.amount), input.currency);
+  const amount = formatShareCurrency(input.amount, input.currency);
   const link = input.settleLink.trim();
   const body =
-    `Hi ${first}, quick one from ${group}: you owe me ${amount}. No rush. Once you've paid, tap to mark it settled:`;
+    `Hi ${first}, quick one from ${group}: you owe me ${amount}. No rush. Once you've paid, mark it settled in the group:`;
   return link ? `${body}\n${link}` : body;
 }
 
-function isViewerLabel(name: string): boolean {
-  return name.trim().toLowerCase() === "you";
-}
-
-/** One settle-up line; conjugates pay/pays and lowercases "you" as payee. */
+/** One settle-up line. Names must already be chat-safe (never "You"). */
 export function formatSettleSummaryEdgeLine(edge: SettleSummaryEdge): string {
   const from = edge.fromName.trim() || "Someone";
   const to = edge.toName.trim() || "Someone";
-  const amount = formatCurrency(Math.abs(edge.amount), edge.currency);
-  const fromIsYou = isViewerLabel(from);
-  const toIsYou = isViewerLabel(to);
-
-  if (fromIsYou) {
-    return `You pay ${toIsYou ? "you" : to} ${amount}`;
-  }
-  if (toIsYou) {
-    return `${from} pays you ${amount}`;
-  }
+  const amount = formatShareCurrency(edge.amount, edge.currency);
   return `${from} pays ${to} ${amount}`;
 }
 
 /**
  * Whole-group settle-up summary. Words, no arrows. Link on its own final line.
- * Current user reads as "You pay …" / "… pays you" (not "You pays" / "pays You").
+ * Callers must pass real display names — never the pronoun "You".
  */
 export function buildSettleSummaryMessage(input: {
   groupName: string;
@@ -157,7 +180,7 @@ export function buildSettleShareMessage(input: {
     const name = line.counterpartyName.trim() || "Someone";
     const group = line.groupName?.trim();
     const groupSuffix = group ? ` in ${group}` : "";
-    const amount = formatCurrency(Math.abs(line.amount), line.currency);
+    const amount = formatShareCurrency(line.amount, line.currency);
     if (line.direction === "pay") {
       return `You owe ${name} ${amount}${groupSuffix}.`;
     }

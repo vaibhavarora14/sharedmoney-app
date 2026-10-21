@@ -27,6 +27,7 @@ import {
 } from "../utils/groupDashboardStats";
 import {
   buildSettleSummaryMessage,
+  settleSharePersonName,
   type SettleSummaryEdge,
 } from "../utils/settleShareMessage";
 
@@ -39,6 +40,11 @@ interface GroupDashboardProps {
   groupName?: string;
   /** Canonical web group URL appended to the share-summary message. */
   groupLink?: string;
+  /**
+   * Chat-safe label for the current user in share-summary text (never "You").
+   * Prefer profile first name; email local-part is fine as fallback.
+   */
+  viewerShareName?: string;
   balances: Balance[];
   /** Full-set backend stats — never derive spending totals from paginated transactions. */
   groupStats?: GroupStatsResponse | null;
@@ -97,6 +103,7 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
   groupId,
   groupName,
   groupLink,
+  viewerShareName,
   balances,
   groupStats,
   currentUserId,
@@ -268,11 +275,22 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
 
     const isViewer = (person: Balance) =>
       person.user_id === currentUserId
-      || (!!currentUserParticipantId && person.participant_id === currentUserParticipantId);
+      || (!!currentUserParticipantId && person.participant_id === currentUserParticipantId)
+      || person.full_name === "You";
+
+    const viewerLabel = settleSharePersonName({
+      full_name: viewerShareName || null,
+      email: null,
+    });
 
     const labelFor = (person: Balance) => {
-      if (isViewer(person) || person.full_name === "You") return "You";
-      return shortName(person.full_name, person.email);
+      if (isViewer(person)) {
+        // Synthetic debt "You" nodes have no profile — use the viewer label.
+        if (person.full_name === "You" || !person.full_name?.trim()) {
+          return viewerLabel;
+        }
+      }
+      return settleSharePersonName(person);
     };
 
     return debts
@@ -291,6 +309,7 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
     debts,
     hasMultipleCurrencies,
     unifyEnabled,
+    viewerShareName,
   ]);
 
   const shareSummaryMessage = useMemo(() => {

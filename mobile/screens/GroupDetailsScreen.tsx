@@ -44,6 +44,7 @@ import {
   TransactionsEmptyState,
 } from "../components/TransactionsSection";
 import { useAuth } from "../contexts/AuthContext";
+import { useProfile } from "../hooks/useProfile";
 import { SCREEN_TRANSITION_MS } from "../constants/layout";
 import { useActivity } from "../hooks/useActivity";
 import { useBalances } from "../hooks/useBalances";
@@ -92,7 +93,10 @@ import {
   settleRemindLabel,
   type SettleRemindChannel,
 } from "../utils/openSettleRemind";
-import { buildSettleRemindMessage } from "../utils/settleShareMessage";
+import {
+  buildSettleRemindMessage,
+  settleSharePersonName,
+} from "../utils/settleShareMessage";
 import { shareSettleDraft } from "../utils/shareSettleDraft";
 import type { GroupShareSummaryPayload } from "../components/GroupDashboard";
 import {
@@ -309,6 +313,11 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     string | null
   >(null);
   const { session, signOut } = useAuth();
+  const { data: profile } = useProfile();
+  const viewerShareName = settleSharePersonName({
+    full_name: profile?.full_name,
+    email: session?.user?.email,
+  });
   const theme = useTheme();
   const {
     preferredCurrency,
@@ -1754,6 +1763,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                 groupId={group.id}
                 groupName={group.name}
                 groupLink={getGroupLinkUrl(group.id)}
+                viewerShareName={viewerShareName}
                 balances={balancesData?.group_balances?.[0]?.balances || []}
                 groupStats={groupStats}
                 currentUserId={session?.user?.id}

@@ -5,8 +5,10 @@ import {
   buildSettleSummaryMessage,
   buildWhatsAppMeUrl,
   buildWhatsAppSendUrl,
+  formatShareCurrency,
   formatSettleSummaryEdgeLine,
   settleFirstName,
+  settleSharePersonName,
   whatsAppPhoneDigits,
 } from "./settleShareMessage.ts";
 
@@ -17,7 +19,31 @@ Deno.test("settleFirstName uses first token and falls back", () => {
   assertEquals(settleFirstName(null), "there");
 });
 
-Deno.test("buildSettleRemindMessage is second-person with link on its own line", () => {
+Deno.test("settleSharePersonName never returns You and prefers first name", () => {
+  assertEquals(
+    settleSharePersonName({ full_name: "Vaibhav Arora", email: "v@x.com" }),
+    "Vaibhav",
+  );
+  assertEquals(
+    settleSharePersonName({ full_name: "You", email: "alice@test.com" }),
+    "alice",
+  );
+  assertEquals(
+    settleSharePersonName({ full_name: null, email: "charlie@test.com" }),
+    "charlie",
+  );
+  assertEquals(settleSharePersonName({}), "Someone");
+});
+
+Deno.test("formatShareCurrency drops .00 for whole amounts and keeps paise", () => {
+  assertEquals(formatShareCurrency(30000, "INR"), "₹30,000");
+  assertEquals(formatShareCurrency(5625, "INR"), "₹5,625");
+  assertEquals(formatShareCurrency(431.2, "INR"), "₹431.20");
+  assertEquals(formatShareCurrency(80, "USD"), "$80");
+  assertEquals(formatShareCurrency(80.5, "USD"), "$80.50");
+});
+
+Deno.test("buildSettleRemindMessage marks settled in the group with trimmed amount", () => {
   assertEquals(
     buildSettleRemindMessage({
       counterpartyName: "Maya Kapoor",
@@ -26,7 +52,7 @@ Deno.test("buildSettleRemindMessage is second-person with link on its own line",
       groupName: "Apartment 4B",
       settleLink: "https://sharedmoney.app/app/groups/abc",
     }),
-    "Hi Maya, quick one from Apartment 4B: you owe me ₹431.20. No rush. Once you've paid, tap to mark it settled:\nhttps://sharedmoney.app/app/groups/abc",
+    "Hi Maya, quick one from Apartment 4B: you owe me ₹431.20. No rush. Once you've paid, mark it settled in the group:\nhttps://sharedmoney.app/app/groups/abc",
   );
 });
 
@@ -39,45 +65,59 @@ Deno.test("buildSettleRemindMessage omits blank link line", () => {
       groupName: "Dinner",
       settleLink: "  ",
     }),
-    "Hi Raj, quick one from Dinner: you owe me $80.00. No rush. Once you've paid, tap to mark it settled:",
+    "Hi Raj, quick one from Dinner: you owe me $80. No rush. Once you've paid, mark it settled in the group:",
   );
 });
 
-Deno.test("formatSettleSummaryEdgeLine uses You pay when viewer is payer", () => {
+Deno.test("formatSettleSummaryEdgeLine uses real names never You", () => {
   assertEquals(
     formatSettleSummaryEdgeLine({
-      fromName: "You",
+      fromName: "Vaibhav",
       toName: "alice",
       amount: 5625,
       currency: "INR",
     }),
-    "You pay alice ₹5,625.00",
+    "Vaibhav pays alice ₹5,625",
   );
-});
-
-Deno.test("formatSettleSummaryEdgeLine uses pays you when viewer is payee", () => {
   assertEquals(
     formatSettleSummaryEdgeLine({
-      fromName: "Maya",
-      toName: "You",
-      amount: 500,
+      fromName: "diana",
+      toName: "alice",
+      amount: 30000,
       currency: "INR",
     }),
-    "Maya pays you ₹500.00",
+    "diana pays alice ₹30,000",
   );
 });
 
 Deno.test("buildSettleSummaryMessage lists pays lines then group link", () => {
   assertEquals(
     buildSettleSummaryMessage({
-      groupName: "Goa trip",
+      groupName: "Summer Vacation 2024",
       edges: [
-        { fromName: "Maya", toName: "You", amount: 500, currency: "INR" },
-        { fromName: "You", toName: "Raj", amount: 80, currency: "USD" },
+        { fromName: "diana", toName: "alice", amount: 30000, currency: "INR" },
+        { fromName: "Vaibhav", toName: "alice", amount: 5625, currency: "INR" },
+        { fromName: "Vaibhav", toName: "bob", amount: 5625, currency: "INR" },
       ],
       groupLink: "https://sharedmoney.app/app/groups/g1",
     }),
-    "Goa trip, settle-up:\nMaya pays you ₹500.00\nYou pay Raj $80.00\nhttps://sharedmoney.app/app/groups/g1",
+    "Summer Vacation 2024, settle-up:\ndiana pays alice ₹30,000\nVaibhav pays alice ₹5,625\nVaibhav pays bob ₹5,625\nhttps://sharedmoney.app/app/groups/g1",
+  );
+});
+
+Deno.test("buildSettleSummaryMessage for seed Summer Vacation nets", () => {
+  assertEquals(
+    buildSettleSummaryMessage({
+      groupName: "Summer Vacation 2024",
+      edges: [
+        { fromName: "Diana", toName: "Alice", amount: 39375, currency: "INR" },
+        { fromName: "Bob", toName: "Alice", amount: 19375, currency: "INR" },
+        { fromName: "Charlie", toName: "Alice", amount: 1875, currency: "INR" },
+      ],
+      groupLink:
+        "https://sharedmoney.app/app/groups/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+    }),
+    "Summer Vacation 2024, settle-up:\nDiana pays Alice ₹39,375\nBob pays Alice ₹19,375\nCharlie pays Alice ₹1,875\nhttps://sharedmoney.app/app/groups/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
   );
 });
 
@@ -86,8 +126,8 @@ Deno.test("buildSettleSummaryMessage returns empty when all edges are zero", () 
     buildSettleSummaryMessage({
       groupName: "Goa trip",
       edges: [
-        { fromName: "Maya", toName: "You", amount: 0, currency: "INR" },
-        { fromName: "You", toName: "Raj", amount: 0.004, currency: "USD" },
+        { fromName: "Maya", toName: "Alice", amount: 0, currency: "INR" },
+        { fromName: "Raj", toName: "Bob", amount: 0.004, currency: "USD" },
       ],
       groupLink: "https://sharedmoney.app/app/groups/g1",
     }),
@@ -132,7 +172,7 @@ Deno.test("legacy buildSettleShareMessage maps single receive to remind copy", (
       }],
       settleLink: "https://sharedmoney.app/app/groups/g1",
     }),
-    "Hi Maya, quick one from Goa trip: you owe me ₹500.00. No rush. Once you've paid, tap to mark it settled:\nhttps://sharedmoney.app/app/groups/g1",
+    "Hi Maya, quick one from Goa trip: you owe me ₹500. No rush. Once you've paid, mark it settled in the group:\nhttps://sharedmoney.app/app/groups/g1",
   );
 });
 
@@ -147,7 +187,7 @@ Deno.test("legacy buildSettleShareMessage still joins pay lines", () => {
         groupName: "Goa trip",
       }],
     }),
-    "You owe Maya Kapoor ₹500.00 in Goa trip.",
+    "You owe Maya Kapoor ₹500 in Goa trip.",
   );
 });
 
@@ -162,7 +202,7 @@ Deno.test("legacy buildSettleShareMessage appends payment URL after blank line",
       }],
       paymentUrl: "  https://example.com/settle  ",
     }),
-    "You owe Maya Kapoor ₹500.00.\n\nhttps://example.com/settle",
+    "You owe Maya Kapoor ₹500.\n\nhttps://example.com/settle",
   );
 });
 
