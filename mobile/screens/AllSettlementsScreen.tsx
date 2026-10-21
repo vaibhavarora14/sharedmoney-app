@@ -23,6 +23,7 @@ import { openSettleRemind, settleRemindLabel } from "../utils/openSettleRemind";
 import {
   buildSettleRemindMessage,
   settleFirstName,
+  settleModalPersonName,
 } from "../utils/settleShareMessage";
 import {
   clubPersonSettlements,
@@ -141,13 +142,24 @@ export const AllSettlementsScreen: React.FC<AllSettlementsScreenProps> = ({
 
   const buildRemindMessageForLine = (line: GroupSettlementLine) => {
     if (line.direction !== "receive") return "";
+    const hasAccount = Boolean(line.other.user_id?.trim());
+    const counterpartyName = settleModalPersonName(line.other);
+    if (!hasAccount) {
+      // People settlements do not carry invite tokens — soft copy, no group link.
+      return buildSettleRemindMessage({
+        counterpartyName,
+        amount: Math.abs(line.amount),
+        currency: line.currency,
+        groupName: line.groupName,
+        audience: "off_app",
+      });
+    }
     return buildSettleRemindMessage({
-      counterpartyName: line.other.full_name?.trim()
-        || line.other.email?.split("@")[0]?.trim()
-        || "Someone",
+      counterpartyName,
       amount: Math.abs(line.amount),
       currency: line.currency,
       groupName: line.groupName,
+      audience: "app_member",
       settleLink: getGroupLinkUrl(line.groupId),
     });
   };

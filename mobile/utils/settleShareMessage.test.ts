@@ -121,6 +121,45 @@ Deno.test("buildSettleRemindMessage omits blank link line", () => {
   );
 });
 
+Deno.test("off-app remind copy: no mark-settled, no plain group link", () => {
+  assertEquals(
+    buildSettleRemindMessage({
+      counterpartyName: "Sheeba",
+      amount: 3000,
+      currency: "INR",
+      groupName: "Apartment",
+      audience: "off_app",
+      settleLink: "https://sharedmoney.app/app/groups/abc",
+    }),
+    "Hi Sheeba, quick one from Apartment: you owe me ₹3,000. No rush, just let me know once you've paid.",
+  );
+});
+
+Deno.test("off-app remind appends invite link when one exists", () => {
+  assertEquals(
+    buildSettleRemindMessage({
+      counterpartyName: "Sheeba Nair",
+      amount: 3000,
+      currency: "INR",
+      groupName: "Apartment",
+      audience: "off_app",
+      inviteLink: "https://sharedmoney.app/app/join/abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234",
+    }),
+    "Hi Sheeba, quick one from Apartment: you owe me ₹3,000. No rush, just let me know once you've paid.\n\nSee the group on SharedMoney:\nhttps://sharedmoney.app/app/join/abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234",
+  );
+});
+
+Deno.test("settleModalPersonName never returns raw phone", () => {
+  assertEquals(
+    settleModalPersonName({ full_name: null, email: null, phone: "+919876543210" }),
+    "Someone",
+  );
+  assertEquals(
+    settleModalPersonName({ full_name: "Sheeba", phone: "+919876543210" }),
+    "Sheeba",
+  );
+});
+
 Deno.test("formatSettleSummaryEdgeLine uses real names never You", () => {
   assertEquals(
     formatSettleSummaryEdgeLine({

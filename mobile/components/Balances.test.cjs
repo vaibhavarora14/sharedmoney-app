@@ -22,7 +22,7 @@ function components(preferences = {}, theme = { colors: {} }, dimensions = { wid
       compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true },
     }).outputText;
     const localRequire = (id) => {
-      if (id === "react") return { ...React, useMemo: fn => fn(), useState: initial => {
+      if (id === "react") return { ...React, useMemo: fn => fn(), useEffect: () => {}, useState: initial => {
         if (!initialized) { state = typeof initial === "function" ? initial() : initial; initialized = true; }
         return [state, () => {}];
       } };
@@ -264,6 +264,65 @@ test("solo group does not gain settlement chrome", () => {
   assert.equal(nodes(tree).find(n => n.props.testID === "group-settlement-rows"), undefined);
 });
 
+test("one active member + person without account shows settle row with muted suffix", () => {
+  const sheeba = {
+    participant_id: "p_sheeba",
+    user_id: "",
+    full_name: "Sheeba",
+    amount: -3000,
+    currency: "INR",
+  };
+  const tree = dashboard(
+    [balance("me", 3000, "INR"), sheeba],
+    {
+      activeMemberCount: 2,
+      hasNonZeroBalance: true,
+      participants: [
+        { id: "p_me", user_id: "me", type: "member", full_name: "You" },
+        { id: "p_sheeba", user_id: null, type: "member", full_name: "Sheeba" },
+      ],
+      defaultCurrency: "INR",
+      onSettlePress: () => {},
+    },
+  );
+  assert.ok(nodes(tree).find(n => n.props.testID === "group-settlement-rows"));
+  assert.match(text(tree), /Sheeba/);
+  assert.match(text(tree), /not on SharedMoney/);
+  assert.match(text(tree), /owes you/);
+});
+
+test("solo count with non-zero balance still shows settle chrome", () => {
+  const tree = dashboard(
+    [balance("me", 50), balance("Alice", -50)],
+    { activeMemberCount: 1, hasNonZeroBalance: true },
+  );
+  assert.ok(nodes(tree).find(n => n.props.testID === "group-settlement-rows"));
+});
+
+test("former counterparty keeps Former styling on settle row", () => {
+  const former = {
+    participant_id: "p_former",
+    user_id: "u_former",
+    full_name: "Alex",
+    amount: -40,
+    currency: "USD",
+  };
+  const tree = dashboard(
+    [balance("me", 40), former],
+    {
+      activeMemberCount: 1,
+      hasNonZeroBalance: true,
+      participants: [
+        { id: "p_me", user_id: "me", type: "member", full_name: "You" },
+        { id: "p_former", user_id: "u_former", type: "former", full_name: "Alex" },
+      ],
+      onSettlePress: () => {},
+    },
+  );
+  assert.match(text(tree), /Former/);
+  assert.match(text(tree), /Alex/);
+});
+
 test("dashboard reserves settlement and both stat cards while balances load", () => {
   for (const loading of [{ loading: true }, { statsLoading: true }]) {
     const tree = dashboard([balance("me", 50), balance("Alice", -50)], loading);
@@ -417,7 +476,10 @@ test("App preserves unknown membership and GroupDetails resets predictions per g
   assert.match(app, /const groupToDisplay: GroupWithMembers = selectedGroupDetails \|\| selectedGroup;/);
   const screen = readFileSync(path.join(__dirname, "../screens/GroupDetailsScreen.tsx"), "utf8");
   assert.match(screen, /<GroupDashboard\s+key=\{group.id\}/);
-  assert.match(screen, /membersKnown=\{group.members !== undefined\}/);
+  assert.match(screen, /membersKnown=\{/);
+  assert.match(screen, /group\.members !== undefined/);
+  assert.match(screen, /hasNonZeroBalance=\{hasNonZeroBalance\}/);
+  assert.match(screen, /participants=\{participants\}/);
   assert.match(screen, /unifyBalances=\{group.unify_balances\}/);
 });
 
@@ -486,7 +548,7 @@ test("dashboard accessible settlement label includes counterparty, direction, an
   assert.equal(settlementRows(eur)[0].props.accessibilityLabel, "You owe Cara, -€30.00");
 });
 
-test("dashboard settlement row layout reflows without one-line truncation or font caps", () => {
+test("dashboard settlement row layout reflows; name may ellipsize before a presence suffix", () => {
   const tree = dashboard([balance("me", 50), balance("Alice", -50)], { onSettlePress: () => {} });
   const row = settlementRows(tree)[0];
   const rowStyle = flatten(row.props.style);
@@ -496,19 +558,23 @@ test("dashboard settlement row layout reflows without one-line truncation or fon
   const contentStyle = flatten(content.props.style);
   assert.equal(contentStyle.height, undefined);
   assert.ok((contentStyle.minHeight ?? 0) >= 44);
+  assert.match(text(row), /Alice owes you/);
   const texts = nodes(row).filter(node => node.type === "Text");
-  const direction = texts.find(node => /Alice owes you/.test(text(node)));
+  const name = texts.find(node => text(node) === "Alice");
+  const owesYou = texts.find(node => text(node) === " owes you");
   const amount = texts.find(node => /\+\$50\.00/.test(text(node)));
-  assert.ok(direction);
+  assert.ok(name);
+  assert.ok(owesYou);
   assert.ok(amount);
-  assert.equal(direction.props.numberOfLines, undefined);
+  // Name truncates so a presence suffix (when present) stays visible.
+  assert.equal(name.props.numberOfLines, 1);
   assert.equal(amount.props.numberOfLines, undefined);
-  assert.notEqual(direction.props.allowFontScaling, false);
+  assert.notEqual(name.props.allowFontScaling, false);
   assert.notEqual(amount.props.allowFontScaling, false);
-  assert.equal(direction.props.maxFontSizeMultiplier, undefined);
+  assert.equal(name.props.maxFontSizeMultiplier, undefined);
   assert.equal(amount.props.maxFontSizeMultiplier, undefined);
   assert.equal(flatten(amount.props.style).flexShrink, 1);
-  assert.equal(flatten(direction.props.style).flexShrink, 1);
+  assert.equal(flatten(name.props.style).flexShrink, 1);
 });
 
 test("settlement chevron stays outside the reflowing text and initials grow with text", () => {

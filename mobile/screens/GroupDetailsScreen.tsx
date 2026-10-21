@@ -87,7 +87,7 @@ import { useCurrencyPreferences } from "../hooks/useCurrencyPreferences";
 import { getDefaultCurrency } from "../utils/currency";
 import { collectCurrencies } from "../utils/currencyMerge";
 import { showErrorAlert } from "../utils/errorHandling";
-import { getGroupLinkUrl } from "../utils/inviteLinks";
+import { getGroupLinkUrl, getInviteLinkUrl } from "../utils/inviteLinks";
 import {
   openSettleRemind,
   settleRemindLabel,
@@ -95,8 +95,13 @@ import {
 } from "../utils/openSettleRemind";
 import {
   buildSettleRemindMessage,
+  settleModalPersonName,
   settleSharePersonName,
 } from "../utils/settleShareMessage";
+import {
+  resolveSettlementPresence,
+  settleRemindAudienceFromPresence,
+} from "../utils/settlementPresence";
 import { shareSettleDraft } from "../utils/shareSettleDraft";
 import type { GroupShareSummaryPayload } from "../components/GroupDashboard";
 import {
@@ -116,6 +121,7 @@ import {
 import { buildActivityFeedEntries, type ActivityFeedEntry } from "../utils/activityFeedRows";
 import {
   countActiveMembers,
+  countNonFormerParticipants,
   shouldPreferAddPeopleFab,
 } from "../utils/transactionsEmptyCopy";
 import { resolveGroupDetailsLoadingTreatment } from "../utils/groupDetailsLoadingTreatment";
@@ -274,9 +280,14 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     data: invitations = [] as GroupInvitation[],
     isLoading: invitationsLoading,
     refetch: refetchInvites,
-  } = useGroupInvitations(initialGroup.id, { enabled: showMembers });
+  } = useGroupInvitations(initialGroup.id, {
+    // Needed for Remind invite links (pending invite / no-account counterparties),
+    // not only when the People sheet is open.
+    enabled: true,
+  });
   const {
     data: participants = [],
+    isLoading: participantsLoading,
     refetch: refetchParticipants,
   } = useParticipants(initialGroup.id);
   // Single /balances?include_stats=true — avoids duplicate balances+stats fan-out
@@ -1137,30 +1148,67 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     };
   }, []);
 
-  const phoneForBalance = useCallback((balance: Balance): string | null => {
-    const match = participants.find((person) => {
+  const participantForBalance = useCallback((balance: Balance) => {
+    return participants.find((person) => {
       if (balance.participant_id && person.id === balance.participant_id) {
         return true;
       }
       if (balance.user_id && person.user_id === balance.user_id) return true;
       return false;
     });
-    return match?.phone?.trim() || null;
   }, [participants]);
 
+  const phoneForBalance = useCallback((balance: Balance): string | null => {
+    return participantForBalance(balance)?.phone?.trim() || null;
+  }, [participantForBalance]);
+
+  /** Pending email/phone invite token for this person — opens group after joining. */
+  const inviteLinkForBalance = useCallback((balance: Balance): string | null => {
+    const person = participantForBalance(balance);
+    const email = (person?.email || balance.email || "").trim().toLowerCase();
+    const phone = (person?.phone || "").trim();
+    const pending = invitations.filter((invite) => invite.status === "pending");
+    const match = pending.find((invite) => {
+      if (!invite.token) return false;
+      // Shareable group links (no email/phone) are not person-specific.
+      if (email && invite.email?.trim().toLowerCase() === email) return true;
+      if (phone && invite.phone?.trim() === phone) return true;
+      return false;
+    });
+    return match?.token ? getInviteLinkUrl(match.token) : null;
+  }, [invitations, participantForBalance]);
+
   const buildRemindMessageForBalance = useCallback((balance: Balance) => {
-    const counterpartyName = balance.full_name?.trim()
-      || balance.email?.split("@")[0]?.trim()
-      || "Someone";
+    const person = participantForBalance(balance);
+    const presence = resolveSettlementPresence(
+      person ?? { user_id: balance.user_id || null, type: "member" },
+    );
+    const audience = settleRemindAudienceFromPresence(presence);
+    const counterpartyName = settleModalPersonName({
+      full_name: person?.full_name ?? balance.full_name,
+      email: person?.email ?? balance.email,
+      phone: person?.phone,
+    });
+    if (audience === "off_app") {
+      return buildSettleRemindMessage({
+        counterpartyName,
+        amount: Math.abs(balance.amount),
+        currency: balance.currency,
+        groupName: group.name,
+        audience: "off_app",
+        inviteLink: inviteLinkForBalance(balance),
+      });
+    }
     return buildSettleRemindMessage({
       counterpartyName,
       amount: Math.abs(balance.amount),
       currency: balance.currency,
       groupName: group.name,
+      audience: "app_member",
       // No web settle-with-prefill route yet — group link works after sign-in.
       settleLink: getGroupLinkUrl(group.id),
     });
-  }, [group.id, group.name]);
+  }, [group.id, group.name, inviteLinkForBalance, participantForBalance]);
 
   const resolveRemindChannelForBalance = useCallback((balance: Balance): SettleRemindChannel => {
     const phone = phoneForBalance(balance);
@@ -1196,15 +1244,17 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
 
   const getRemindPresentation = useCallback((balance: Balance) => {
     const channel = resolveRemindChannelForBalance(balance);
+    const person = participantForBalance(balance);
     const firstName = settleSharePersonName({
-      full_name: balance.full_name,
-      email: balance.email,
+      full_name: person?.full_name ?? balance.full_name,
+      email: person?.email ?? balance.email,
+      phone: person?.phone,
     });
     return {
       label: settleRemindLabel(channel, firstName),
       shareAnotherWay: channel === "whatsapp",
     };
-  }, [resolveRemindChannelForBalance]);
+  }, [participantForBalance, resolveRemindChannelForBalance]);
 
   const handleShareSummaryChange = useCallback((payload: GroupShareSummaryPayload | null) => {
     setShareSummary(payload);
@@ -1306,6 +1356,17 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const isActiveMember =
     group.members?.some((m) => m.user_id === currentUserId && m.status === 'active') ?? false;
 
+  const settlingCounterpartyPresence = useMemo(() => {
+    if (!settlingBalance) return undefined;
+    const person = participantForBalance(settlingBalance);
+    return resolveSettlementPresence(
+      person ?? {
+        user_id: settlingBalance.user_id || null,
+        type: "member",
+      },
+    );
+  }, [participantForBalance, settlingBalance]);
+
   const settlementRemindProps = useMemo(() => {
     if (
       editingSettlement
@@ -1350,7 +1411,14 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const canManageMembers = isActiveMember;
   const canManageInvites = isActiveMember;
   const showGroupMenu = (isActiveMember || isFormerMember) && !showMembers;
+  // Empty-copy / FAB still use account members; settle chrome counts participants
+  // (people without accounts + pending invites) so Sheeba-style groups show balances.
   const activeMemberCount = countActiveMembers(group.members);
+  const settleAudienceCount = countNonFormerParticipants(participants);
+  const groupBalances = balancesData?.group_balances?.[0]?.balances || [];
+  const hasNonZeroBalance = groupBalances.some(
+    (balance) => Math.abs(balance.amount) >= 0.005,
+  );
   const ledgerIsEmpty =
     !txLoading &&
     !settlementsLoading &&
@@ -1795,15 +1863,20 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                 groupName={group.name}
                 groupLink={getGroupLinkUrl(group.id)}
                 viewerShareName={viewerShareName}
-                balances={balancesData?.group_balances?.[0]?.balances || []}
+                balances={groupBalances}
                 groupStats={groupStats}
                 currentUserId={session?.user?.id}
                 currentUserParticipantId={participants.find((p) => p.user_id === session?.user?.id)?.id}
                 loading={loadingTreatment.showDashboardSkeleton}
                 statsLoading={groupStatsLoading}
                 defaultCurrency={getDefaultCurrency()}
-                activeMemberCount={activeMemberCount}
-                membersKnown={group.members !== undefined}
+                activeMemberCount={settleAudienceCount}
+                membersKnown={
+                  group.members !== undefined
+                  && (!participantsLoading || participants.length > 0)
+                }
+                hasNonZeroBalance={hasNonZeroBalance}
+                participants={participants}
                 unifyBalances={group.unify_balances}
                 balanceError={!!balancesError}
                 onSettlePress={isActiveMember && !balancesError ? handleSettleUp : undefined}
@@ -2177,6 +2250,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
         currentUserId={session?.user?.id || ""}
         groupId={group.id}
         defaultCurrency={getDefaultCurrency()}
+        counterpartyPresence={settlingCounterpartyPresence}
         {...settlementRemindProps}
         onSave={async (data) => {
           if (editingSettlement) {

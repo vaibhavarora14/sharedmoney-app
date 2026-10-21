@@ -9,7 +9,7 @@ import {
 } from "react-native-paper";
 import { Skeleton, SkeletonGroup } from "./Skeleton";
 import { resolveGroupDashboardSlots } from "../utils/groupDashboardReservation";
-import { Balance, GroupStatsResponse } from "../types";
+import { Balance, GroupStatsResponse, Participant } from "../types";
 import { UnifyPromptCard } from "./UnifyPromptCard";
 import { useCurrencyPreferences } from "../hooks/useCurrencyPreferences";
 import { formatCurrency, getDefaultCurrency } from "../utils/currency";
@@ -27,9 +27,15 @@ import {
 } from "../utils/groupDashboardStats";
 import {
   buildSettleSummaryMessage,
+  settleModalPersonName,
   settleSharePersonName,
   type SettleSummaryEdge,
 } from "../utils/settleShareMessage";
+import {
+  resolveSettlementPresence,
+  settlementPresenceSuffix,
+  type SettlementPresence,
+} from "../utils/settlementPresence";
 
 export type GroupShareSummaryPayload = {
   message: string;
@@ -61,30 +67,66 @@ interface GroupDashboardProps {
   onMyCostsPress?: () => void;
   onTotalCostsPress?: () => void;
   onOpenCurrencySettings?: () => void;
-  /** Active members in the group (for calm solo/zero chrome). */
+  /**
+   * Non-former participant count (incl. people without accounts / pending invites).
+   * Used for calm solo chrome vs settle slot visibility.
+   */
   activeMemberCount?: number;
-  /** False for navigation/list data without a complete member list. */
+  /** False for navigation/list data without a complete member/participant list. */
   membersKnown?: boolean;
+  /** Viewer has any non-zero balance (keeps settle visible vs former members). */
+  hasNonZeroBalance?: boolean;
+  /** Participants for presence suffixes (invited / not on SharedMoney / former). */
+  participants?: Participant[];
   /** Synchronous fallback when effective cached currency settings are absent. */
   unifyBalances?: boolean;
 }
 
-function shortName(full?: string | null, email?: string | null): string {
-  const base = full?.trim() || email?.split("@")[0] || email || "Someone";
-  return base.split(/\s+/)[0] || base;
+function shortName(person: {
+  full_name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+}): string {
+  // Typed name first; never raw email/phone (local-part ok via settleModalPersonName).
+  const display = settleModalPersonName(person);
+  return display.split(/\s+/)[0] || display;
 }
 
-function initials(full?: string | null, email?: string | null): string {
-  const name = full?.trim() || email?.split("@")[0] || email || "?";
+function initials(person: {
+  full_name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+}): string {
+  const name = settleModalPersonName(person);
   if (name.includes(" ")) {
     const parts = name.split(/\s+/).filter(Boolean);
     if (parts.length >= 2) {
       return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
     }
   }
-  const base = name.includes("@") ? name.split("@")[0] : name;
-  if (base.length >= 2) return base.substring(0, 2).toUpperCase();
-  return base.length > 0 ? (base[0] + base[0]).toUpperCase() : "??";
+  if (name.length >= 2 && name !== "Someone") {
+    return name.substring(0, 2).toUpperCase();
+  }
+  return name.length > 0 && name !== "Someone"
+    ? (name[0] + name[0]).toUpperCase()
+    : "??";
+}
+
+function presenceForBalance(
+  balance: Balance,
+  participants: Participant[],
+): SettlementPresence {
+  const match = participants.find((person) => {
+    if (balance.participant_id && person.id === balance.participant_id) {
+      return true;
+    }
+    if (balance.user_id && person.user_id === balance.user_id) return true;
+    return false;
+  });
+  if (match) return resolveSettlementPresence(match);
+  // Balance rows for people without accounts often lack user_id.
+  if (!balance.user_id) return "no_account";
+  return "app_member";
 }
 
 export const GroupDashboard: React.FC<GroupDashboardProps> = ({
@@ -107,6 +149,8 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
   onOpenCurrencySettings,
   activeMemberCount = 2,
   membersKnown = true,
+  hasNonZeroBalance = false,
+  participants = [],
   unifyBalances: groupUnifyBalances,
 }) => {
   const theme = useTheme();
@@ -122,6 +166,7 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
   // GroupDetails keys this component by group ID so another group gets a fresh prediction.
   const [reservation] = useState(() => resolveGroupDashboardSlots({
     activeMemberCount: membersKnown ? activeMemberCount : undefined,
+    hasNonZeroBalance: membersKnown ? hasNonZeroBalance : false,
     // Cached effective preferences must agree with the loaded renderer, even
     // when navigation metadata still contains an older unify flag.
     unifyEnabled: groupSettings
@@ -150,7 +195,13 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
   );
   const hasMultipleCurrencies = isMultiCurrency(usedCurrencies);
   const unifyEnabled = groupSettings?.enabled === true && !!groupSettings.settlementCurrency;
-  const contentSlots = resolveGroupDashboardSlots({ activeMemberCount, unifyEnabled, balanceError });
+  const contentSlots = resolveGroupDashboardSlots({
+    activeMemberCount,
+    unifyEnabled,
+    balanceError,
+    hasNonZeroBalance,
+  });
+  const showSettleChrome = contentSlots.settlement;
   const settlementCurrency = groupSettings?.settlementCurrency || preferredCurrency || defaultCurrency;
 
   const debts = useMemo(() => {
@@ -246,8 +297,7 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
     return isOwed ? `+${bare}` : `-${bare}`;
   };
 
-  const personShort = (balance: Balance) =>
-    shortName(balance.full_name, balance.email);
+  const personShort = (balance: Balance) => shortName(balance);
 
   const isSettled = !balanceError && !dashboardLoading && Boolean(currentUserId)
     && settlementRows.length === 0
@@ -348,6 +398,9 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
     return settlementRows.map((balance, index) => {
       const isOwed = balance.amount > 0;
       const name = personShort(balance);
+      const presence = presenceForBalance(balance, participants);
+      const presenceSuffix = settlementPresenceSuffix(presence);
+      const isFormer = presence === "former";
       const rowKey =
         balance.participant_id || balance.user_id || `${name}-${balance.currency}`;
       const currency = balance.currency || defaultCurrency;
@@ -356,8 +409,14 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
         : theme.colors.onSecondaryContainer;
       const isConverted = !unifyEnabled || balance.currency.toUpperCase() === settlementCurrency.toUpperCase();
       const Row = onSettlePress ? TouchableRipple : View;
-      const owesLabel = isOwed ? `${name} owes you` : `You owe ${name}`;
+      const a11yName = presenceSuffix ? `${name} · ${presenceSuffix}` : name;
+      const owesLabel = isOwed ? `${a11yName} owes you` : `You owe ${a11yName}`;
+      const formerA11y = isFormer && !presenceSuffix ? `${name} (Former)` : a11yName;
+      const a11yOwes = isOwed ? `${formerA11y} owes you` : `You owe ${formerA11y}`;
       const signedAmount = formatSignedBalance(balance.amount, currency, isOwed);
+      const nameColor = isFormer
+        ? theme.colors.onSurfaceVariant
+        : theme.colors.onSurface;
       return (
         <View key={`${rowKey}-${currency}-${index}`}>
           <Row
@@ -365,26 +424,85 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
             onPress={onSettlePress ? () => onSettlePress(balance) : undefined}
             accessible
             accessibilityRole={onSettlePress ? "button" : undefined}
-            accessibilityLabel={`${owesLabel}, ${signedAmount}`}
+            accessibilityLabel={`${a11yOwes}, ${signedAmount}`}
             accessibilityHint={onSettlePress ? "Opens the payment record form. No payment is recorded until confirmed." : undefined}
             style={styles.settlementRow}
           >
             <View style={styles.settlementRowContent}>
               <View
                 accessible={false}
-                style={[styles.settlementAvatar, { backgroundColor: theme.colors.primaryContainer }]}
+                style={[
+                  styles.settlementAvatar,
+                  {
+                    backgroundColor: isFormer
+                      ? theme.colors.surfaceVariant
+                      : theme.colors.primaryContainer,
+                  },
+                ]}
               >
-                <Text style={{ color: theme.colors.onPrimaryContainer, fontWeight: "600", fontSize: 13 }}>
-                  {initials(balance.full_name, balance.email)}
+                <Text
+                  style={{
+                    color: isFormer
+                      ? theme.colors.onSurfaceVariant
+                      : theme.colors.onPrimaryContainer,
+                    fontWeight: "600",
+                    fontSize: 13,
+                  }}
+                >
+                  {initials(balance)}
                 </Text>
               </View>
               <View style={styles.settlementDetails}>
-                <Text
-                  variant="bodyMedium"
-                  style={{ flexGrow: 1, flexShrink: 1, flexBasis: 80, color: theme.colors.onSurface }}
-                >
-                  {owesLabel}
-                </Text>
+                <View style={styles.settlementNameRow}>
+                  {!isOwed ? (
+                    <Text
+                      variant="bodyMedium"
+                      style={{ flexShrink: 0, color: nameColor }}
+                    >
+                      {"You owe "}
+                    </Text>
+                  ) : null}
+                  <Text
+                    variant="bodyMedium"
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                    style={{ flexShrink: 1, flexGrow: 0, minWidth: 0, color: nameColor }}
+                  >
+                    {name}
+                  </Text>
+                  {presenceSuffix ? (
+                    <Text
+                      variant="bodyMedium"
+                      numberOfLines={1}
+                      style={{
+                        flexShrink: 0,
+                        color: theme.colors.onSurfaceVariant,
+                      }}
+                    >
+                      {` · ${presenceSuffix}`}
+                    </Text>
+                  ) : null}
+                  {isFormer ? (
+                    <Text
+                      variant="bodyMedium"
+                      numberOfLines={1}
+                      style={{
+                        flexShrink: 0,
+                        color: theme.colors.onSurfaceVariant,
+                      }}
+                    >
+                      {" (Former)"}
+                    </Text>
+                  ) : null}
+                  {isOwed ? (
+                    <Text
+                      variant="bodyMedium"
+                      style={{ flexShrink: 0, color: nameColor }}
+                    >
+                      {" owes you"}
+                    </Text>
+                  ) : null}
+                </View>
                 <Text
                   variant="titleSmall"
                   style={{ flexShrink: 1, color: amountColor, fontWeight: "700" }}
@@ -554,7 +672,7 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
         )}
       </View> : null}
 
-      {unifyEnabled && !balanceError && !dashboardLoading && activeMemberCount > 1 && myUnified && myUnified.missing.length > 0 && settlementRows.length > 0 ? (
+      {unifyEnabled && !balanceError && !dashboardLoading && showSettleChrome && myUnified && myUnified.missing.length > 0 && settlementRows.length > 0 ? (
         <Text
           variant="labelSmall"
           style={{ color: theme.colors.error, marginTop: -8, marginHorizontal: 4 }}
@@ -591,6 +709,14 @@ const styles = StyleSheet.create({
   },
   settlementRow: {
     minHeight: 60,
+  },
+  settlementNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 80,
+    minWidth: 0,
   },
   settlementRowContent: {
     flexDirection: "row",

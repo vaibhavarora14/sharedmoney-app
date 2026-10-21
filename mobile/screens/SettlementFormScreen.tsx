@@ -31,6 +31,11 @@ import {
   settleModalPersonName,
   settleModalYouLabel,
 } from "../utils/settleShareMessage";
+import {
+  settlementPresenceSuffix,
+  shouldShowSettleModalPresenceSuffix,
+  type SettlementPresence,
+} from "../utils/settlementPresence";
 
 interface SettlementFormScreenProps {
   visible: boolean;
@@ -75,6 +80,11 @@ interface SettlementFormScreenProps {
   remindShareAnotherWay?: boolean;
   onRemindPress?: () => void;
   onRemindShareAnotherWay?: () => void;
+  /**
+   * Counterparty presence for muted inline suffix on the paid-header name
+   * (invited / not on SharedMoney). Omitted when it would not fit cleanly.
+   */
+  counterpartyPresence?: SettlementPresence;
 }
 
 function toDateInputValue(value?: string | null): string {
@@ -153,6 +163,7 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
   remindShareAnotherWay = false,
   onRemindPress,
   onRemindShareAnotherWay,
+  counterpartyPresence,
 }) => {
   const isEditing = !!settlement;
   const isAdminMode = !!(fromParticipantId && toParticipantId);
@@ -643,6 +654,20 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
 
                   const fromIsYou = fromName === settleModalYouLabel("from");
                   const toIsYou = toName === settleModalYouLabel("to");
+                  const presenceSuffix = counterpartyPresence
+                    ? settlementPresenceSuffix(counterpartyPresence)
+                    : null;
+                  // Only when the typed name is short enough that the cluster stays clean.
+                  const showFromSuffix = Boolean(
+                    presenceSuffix
+                    && !fromIsYou
+                    && shouldShowSettleModalPresenceSuffix(fromName),
+                  );
+                  const showToSuffix = Boolean(
+                    presenceSuffix
+                    && !toIsYou
+                    && shouldShowSettleModalPresenceSuffix(toName),
+                  );
 
                   // Centred cluster: name may shrink; "paid"/you never grow to edges.
                   return (
@@ -665,6 +690,20 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                       >
                         {fromName}
                       </Text>
+                      {showFromSuffix ? (
+                        <Text
+                          variant="titleMedium"
+                          numberOfLines={1}
+                          style={{
+                            color: theme.colors.onSurfaceVariant,
+                            fontWeight: "400",
+                            flexShrink: 0,
+                          }}
+                          testID="settlement-paid-from-presence"
+                        >
+                          {` · ${presenceSuffix}`}
+                        </Text>
+                      ) : null}
                       <Text
                         variant="titleMedium"
                         style={{
@@ -691,6 +730,20 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                       >
                         {toName}
                       </Text>
+                      {showToSuffix ? (
+                        <Text
+                          variant="titleMedium"
+                          numberOfLines={1}
+                          style={{
+                            color: theme.colors.onSurfaceVariant,
+                            fontWeight: "400",
+                            flexShrink: 0,
+                          }}
+                          testID="settlement-paid-to-presence"
+                        >
+                          {` · ${presenceSuffix}`}
+                        </Text>
+                      ) : null}
                     </View>
                   );
                 })()}
