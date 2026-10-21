@@ -34,7 +34,7 @@ export async function shareSettleDraft(
         message: trimmedMessage,
         ...(hasUrl ? { url: trimmedUrl } : {}),
       },
-      Platform.OS === "android" ? { dialogTitle: "Share in chat" } : undefined,
+      Platform.OS === "android" ? { dialogTitle: "Share" } : undefined,
     );
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : "";

@@ -60,6 +60,15 @@ interface SettlementFormScreenProps {
   initialAmount?: number;
   initialCurrency?: string;
   participants?: Participant[];
+  /**
+   * Owes-you create only: secondary Remind under the primary Record CTA.
+   * Parent omits these when the viewer owes the counterparty or when editing.
+   * Opening share/WhatsApp must not dismiss this modal.
+   */
+  remindLabel?: string;
+  remindShareAnotherWay?: boolean;
+  onRemindPress?: () => void;
+  onRemindShareAnotherWay?: () => void;
 }
 
 function toDateInputValue(value?: string | null): string {
@@ -124,6 +133,10 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
   initialAmount,
   initialCurrency,
   participants = [],
+  remindLabel,
+  remindShareAnotherWay = false,
+  onRemindPress,
+  onRemindShareAnotherWay,
 }) => {
   const isEditing = !!settlement;
   const isAdminMode = !!(fromParticipantId && toParticipantId);
@@ -164,6 +177,9 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
     // For manual entry, we'll assume user is paying (from_user_id = currentUserId)
     return true;
   }, [balance]);
+
+  // Owes-you create only: secondary Remind under primary. You-owe / edit: never.
+  const showRemind = !isEditing && !isPaying && !!onRemindPress;
 
   // Determine fixed payer/receiver display names
   const adminPayer = useMemo(() => {
@@ -804,6 +820,47 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
               >
                 {isEditing ? UPDATE_SETTLEMENT_LABEL : RECORD_SETTLEMENT_LABEL}
               </Button>
+              {showRemind ? (
+                <View style={styles.remindBlock}>
+                  <Button
+                    mode="text"
+                    icon="share-variant"
+                    compact
+                    testID="settlement-remind-button"
+                    accessibilityLabel={remindLabel || "Remind"}
+                    accessibilityHint={
+                      remindShareAnotherWay && onRemindShareAnotherWay
+                        ? "Long press to share another way"
+                        : undefined
+                    }
+                    onPress={onRemindPress}
+                    onLongPress={
+                      remindShareAnotherWay && onRemindShareAnotherWay
+                        ? onRemindShareAnotherWay
+                        : undefined
+                    }
+                    delayLongPress={350}
+                    disabled={loading}
+                    style={styles.remindButton}
+                  >
+                    {remindLabel || "Remind"}
+                  </Button>
+                  {remindShareAnotherWay && onRemindShareAnotherWay ? (
+                    <Button
+                      mode="text"
+                      compact
+                      testID="settlement-remind-share-another-way"
+                      accessibilityLabel="Share another way"
+                      onPress={onRemindShareAnotherWay}
+                      disabled={loading}
+                      style={styles.shareAnotherWayButton}
+                      labelStyle={{ fontSize: 12 }}
+                    >
+                      Share another way
+                    </Button>
+                  ) : null}
+                </View>
+              ) : null}
               <Button
                 mode="outlined"
                 onPress={onDismiss}
@@ -984,10 +1041,21 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   saveButton: {
-    marginBottom: 12,
+    marginBottom: 4,
+  },
+  remindBlock: {
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  remindButton: {
+    alignSelf: "center",
+  },
+  shareAnotherWayButton: {
+    alignSelf: "center",
+    marginTop: -4,
   },
   cancelButton: {
-    marginTop: 8,
+    marginTop: 4,
   },
   dateButton: {
     borderWidth: 1,

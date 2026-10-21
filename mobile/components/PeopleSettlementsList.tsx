@@ -27,7 +27,6 @@ interface PeopleSettlementsListProps {
   onConfirmPerson: () => void;
   onCancelPerson: () => void;
   onSettleLine?: (line: GroupSettlementLine) => void;
-  onSharePerson?: (person: PersonSettlementView) => void;
 }
 
 function initials(name: string): string {
@@ -56,7 +55,6 @@ export const PeopleSettlementsList: React.FC<PeopleSettlementsListProps> = ({
   onConfirmPerson,
   onCancelPerson,
   onSettleLine,
-  onSharePerson,
 }) => {
   const theme = useTheme();
 
@@ -227,18 +225,6 @@ export const PeopleSettlementsList: React.FC<PeopleSettlementsListProps> = ({
                 </Text>
               </Pressable>
             )}
-
-            <Button
-              mode="outlined"
-              icon="share-variant"
-              testID={`share-in-chat-${person.key}`}
-              accessibilityLabel={`Share in chat with ${person.displayName}`}
-              onPress={onSharePerson ? () => onSharePerson(person) : undefined}
-              disabled={person.lines.length === 0 || !onSharePerson}
-              style={styles.shareInChat}
-            >
-              Share in chat
-            </Button>
           </Surface>
         );
       })}
@@ -302,8 +288,5 @@ const styles = StyleSheet.create({
   confirm: {
     marginTop: 12,
     gap: 8,
-  },
-  shareInChat: {
-    marginTop: 12,
   },
 });

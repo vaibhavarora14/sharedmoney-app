@@ -295,6 +295,115 @@ test("obligation mode fixes parties and does not expose participant selectors", 
   assert.match(text(tree), /Bob\s*paid\s*You/);
 });
 
+test("owes-you modal shows secondary Remind under primary Record payment", () => {
+  const groupMembers = [
+    { user_id: "me", participant_id: "p_me", full_name: "Alice", email: "alice@example.com" },
+    { user_id: "u_bob", participant_id: "p_bob", full_name: "Bob Martinez", email: "bob@example.com" },
+  ];
+
+  const remindCalls = [];
+  const shareCalls = [];
+  const tree = SettlementForm({
+    visible: true,
+    balance: {
+      user_id: "u_bob",
+      participant_id: "p_bob",
+      full_name: "Bob Martinez",
+      amount: 50,
+      currency: "USD",
+    },
+    settlement: null,
+    groupMembers,
+    currentUserId: "me",
+    groupId: "g1",
+    onSave: async () => {},
+    onDismiss: () => {},
+    remindLabel: "Remind Bob",
+    remindShareAnotherWay: true,
+    onRemindPress: () => remindCalls.push("remind"),
+    onRemindShareAnotherWay: () => shareCalls.push("share"),
+  });
+
+  const save = byId(tree, "settlement-save-button");
+  const remind = byId(tree, "settlement-remind-button");
+  const shareAnother = byId(tree, "settlement-remind-share-another-way");
+  assert.equal(save.props.mode, "contained");
+  assert.equal(remind.props.mode, "text");
+  assert.equal(remind.props.icon, "share-variant");
+  assert.match(text(remind), /Remind Bob/);
+  assert.equal(shareAnother.props.mode, "text");
+
+  remind.props.onPress();
+  assert.equal(remindCalls.length, 1);
+  shareAnother.props.onPress();
+  assert.equal(shareCalls.length, 1);
+});
+
+test("you-owe modal never shows Remind even when remind props are passed", () => {
+  const groupMembers = [
+    { user_id: "me", participant_id: "p_me", full_name: "Alice", email: "alice@example.com" },
+    { user_id: "u_bob", participant_id: "p_bob", full_name: "Bob", email: "bob@example.com" },
+  ];
+
+  const tree = SettlementForm({
+    visible: true,
+    balance: {
+      user_id: "u_bob",
+      participant_id: "p_bob",
+      full_name: "Bob",
+      amount: -40,
+      currency: "USD",
+    },
+    settlement: null,
+    groupMembers,
+    currentUserId: "me",
+    groupId: "g1",
+    onSave: async () => {},
+    onDismiss: () => {},
+    remindLabel: "Remind Bob",
+    onRemindPress: () => {},
+  });
+
+  assert.equal(
+    nodes(tree).some((n) => n.props?.testID === "settlement-remind-button"),
+    false,
+  );
+});
+
+test("edit mode never shows Remind", () => {
+  const groupMembers = [
+    { user_id: "me", participant_id: "p_me", full_name: "Alice", email: "alice@example.com" },
+    { user_id: "u_bob", participant_id: "p_bob", full_name: "Bob", email: "bob@example.com" },
+  ];
+
+  const tree = SettlementForm({
+    visible: true,
+    balance: null,
+    settlement: {
+      id: "s1",
+      group_id: "g1",
+      from_participant_id: "p_bob",
+      to_participant_id: "p_me",
+      amount: 50,
+      currency: "USD",
+      created_at: "2026-09-18T10:00:00Z",
+    },
+    groupMembers,
+    currentUserId: "me",
+    groupId: "g1",
+    onSave: async () => {},
+    onUpdate: async () => {},
+    onDismiss: () => {},
+    remindLabel: "Remind Bob",
+    onRemindPress: () => {},
+  });
+
+  assert.equal(
+    nodes(tree).some((n) => n.props?.testID === "settlement-remind-button"),
+    false,
+  );
+});
+
 test("two-person settlement reversal interaction and invalid same-person save prevention", async () => {
   const groupMembers = [
     { user_id: "me", participant_id: "p_me", full_name: "Alice", email: "alice@example.com" },

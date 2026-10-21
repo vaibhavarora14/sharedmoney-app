@@ -1,8 +1,7 @@
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { StyleSheet, useWindowDimensions, View } from "react-native";
 import {
-  Button,
   Surface,
   Text,
   TouchableRipple,
@@ -26,9 +25,26 @@ import {
   currenciesFromGroupStats,
   spendingTotalsFromGroupStats,
 } from "../utils/groupDashboardStats";
+import {
+  buildSettleSummaryMessage,
+  settleSharePersonName,
+  type SettleSummaryEdge,
+} from "../utils/settleShareMessage";
+
+export type GroupShareSummaryPayload = {
+  message: string;
+};
 
 interface GroupDashboardProps {
   groupId?: string;
+  groupName?: string;
+  /** Canonical web group URL appended to the share-summary message. */
+  groupLink?: string;
+  /**
+   * Chat-safe label for the current user in share-summary text (never "You").
+   * Prefer profile first name; email local-part is fine as fallback.
+   */
+  viewerShareName?: string;
   balances: Balance[];
   /** Full-set backend stats — never derive spending totals from paginated transactions. */
   groupStats?: GroupStatsResponse | null;
@@ -40,7 +56,8 @@ interface GroupDashboardProps {
   defaultCurrency?: string;
   /** Opens SettlementFormScreen for a viewer-involved settlement edge. Does not mutate data. */
   onSettlePress?: (balance: Balance) => void;
-  onSharePress?: (balance: Balance) => void;
+  /** Reports whether a non-empty group settle-up summary can be shared. */
+  onShareSummaryChange?: (payload: GroupShareSummaryPayload | null) => void;
   onMyCostsPress?: () => void;
   onTotalCostsPress?: () => void;
   onOpenCurrencySettings?: () => void;
@@ -72,6 +89,9 @@ function initials(full?: string | null, email?: string | null): string {
 
 export const GroupDashboard: React.FC<GroupDashboardProps> = ({
   groupId,
+  groupName,
+  groupLink,
+  viewerShareName,
   balances,
   groupStats,
   currentUserId,
@@ -81,13 +101,13 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
   balanceError = false,
   defaultCurrency = getDefaultCurrency(),
   onSettlePress,
+  onShareSummaryChange,
   onMyCostsPress,
   onTotalCostsPress,
   onOpenCurrencySettings,
   activeMemberCount = 2,
   membersKnown = true,
   unifyBalances: groupUnifyBalances,
-  onSharePress,
 }) => {
   const theme = useTheme();
   const { width, fontScale } = useWindowDimensions();
@@ -233,6 +253,67 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
     && settlementRows.length === 0
     && !(unifyEnabled && myUnified && myUnified.missing.length > 0);
 
+  const summaryEdges = useMemo((): SettleSummaryEdge[] => {
+    if (!currentUserId || dashboardLoading || balanceError) return [];
+    // Mixed-currency without unification cannot form one coherent settle-up list.
+    if (hasMultipleCurrencies && !unifyEnabled) return [];
+
+    const isViewer = (person: Balance) =>
+      person.user_id === currentUserId
+      || (!!currentUserParticipantId && person.participant_id === currentUserParticipantId)
+      || person.full_name === "You";
+
+    const viewerLabel = settleSharePersonName({
+      full_name: viewerShareName || null,
+      email: null,
+    });
+
+    const labelFor = (person: Balance) => {
+      if (isViewer(person)) {
+        // Synthetic debt "You" nodes have no profile — use the viewer label.
+        if (person.full_name === "You" || !person.full_name?.trim()) {
+          return viewerLabel;
+        }
+      }
+      return settleSharePersonName(person);
+    };
+
+    return debts
+      .filter((edge) => Math.abs(edge.amount) >= 0.005)
+      .map((edge) => ({
+        fromName: labelFor(edge.fromUser),
+        toName: labelFor(edge.toUser),
+        amount: edge.amount,
+        currency: edge.currency,
+      }));
+  }, [
+    balanceError,
+    currentUserId,
+    currentUserParticipantId,
+    dashboardLoading,
+    debts,
+    hasMultipleCurrencies,
+    unifyEnabled,
+    viewerShareName,
+  ]);
+
+  const shareSummaryMessage = useMemo(() => {
+    if (isSettled || summaryEdges.length === 0) return null;
+    const message = buildSettleSummaryMessage({
+      groupName: groupName?.trim() || "Group",
+      edges: summaryEdges,
+      groupLink: groupLink?.trim() || "",
+    });
+    return message.trim() ? message : null;
+  }, [groupLink, groupName, isSettled, summaryEdges]);
+
+  useEffect(() => {
+    if (!onShareSummaryChange) return;
+    onShareSummaryChange(
+      shareSummaryMessage ? { message: shareSummaryMessage } : null,
+    );
+  }, [onShareSummaryChange, shareSummaryMessage]);
+
   const renderSettlementRows = () => {
     if (balanceError) {
       return (
@@ -326,17 +407,6 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
               /> : null}
             </View>
           </Row>
-          {onSharePress ? (
-            <Button
-              mode="text"
-              testID={`share-in-chat-${rowKey}-${currency}`}
-              accessibilityLabel={`Share in chat, ${owesLabel}`}
-              onPress={() => onSharePress(balance)}
-              style={styles.shareInChatButton}
-            >
-              Share in chat
-            </Button>
-          ) : null}
         </View>
       );
     });
@@ -408,10 +478,6 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
                   <Skeleton width={72} height={16} />
                 </View>
               </View>
-            </View>
-            {/* Share is gated on membership, which is often unknown here; reserve it. */}
-            <View style={[styles.shareInChatButton, { height: 40, justifyContent: "center", paddingLeft: 12 }]}>
-              <Skeleton width={88} height={12} />
             </View>
           </Surface>
         </View> : null}
@@ -563,11 +629,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     alignItems: "center",
   },
-  shareInChatButton: {
-    alignSelf: "flex-start",
-    marginLeft: 52,
-    marginBottom: 8,
-  },
+
   compactStatsRow: {
       flexDirection: 'row',
       gap: 12,
