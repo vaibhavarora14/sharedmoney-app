@@ -1206,33 +1206,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     };
   }, [resolveRemindChannelForBalance]);
 
-  const settlementRemindProps = useMemo(() => {
-    if (
-      editingSettlement
-      || !settlingBalance
-      || !(settlingBalance.amount > 0)
-      || !isActiveMember
-      || balancesError
-    ) {
-      return {};
-    }
-    const presentation = getRemindPresentation(settlingBalance);
-    return {
-      remindLabel: presentation.label,
-      remindShareAnotherWay: presentation.shareAnotherWay,
-      onRemindPress: () => handleRemindBalance(settlingBalance),
-      onRemindShareAnotherWay: presentation.shareAnotherWay
-        ? () => handleRemindShareAnotherWay(settlingBalance)
-        : undefined,
-    };
-  }, [
-    editingSettlement,
-    settlingBalance,
-    isActiveMember,
-    balancesError,
-    getRemindPresentation,
-  ]);
-
   const handleShareSummaryChange = useCallback((payload: GroupShareSummaryPayload | null) => {
     setShareSummary(payload);
   }, []);
@@ -1332,6 +1305,33 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   // isActiveMember checks if the user is currently active
   const isActiveMember =
     group.members?.some((m) => m.user_id === currentUserId && m.status === 'active') ?? false;
+
+  const settlementRemindProps = useMemo(() => {
+    if (
+      editingSettlement
+      || !settlingBalance
+      || !(settlingBalance.amount > 0)
+      || !isActiveMember
+      || balancesError
+    ) {
+      return {};
+    }
+    const presentation = getRemindPresentation(settlingBalance);
+    return {
+      remindLabel: presentation.label,
+      remindShareAnotherWay: presentation.shareAnotherWay,
+      onRemindPress: () => handleRemindBalance(settlingBalance),
+      onRemindShareAnotherWay: presentation.shareAnotherWay
+        ? () => handleRemindShareAnotherWay(settlingBalance)
+        : undefined,
+    };
+  }, [
+    editingSettlement,
+    settlingBalance,
+    isActiveMember,
+    balancesError,
+    getRemindPresentation,
+  ]);
 
   const myMembership = group.members?.find((m) => m.user_id === currentUserId);
   const isArchivedForMe = Boolean(
