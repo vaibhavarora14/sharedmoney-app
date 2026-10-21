@@ -98,13 +98,18 @@ test('balance initials and small polarity text meet normal-text contrast in both
 });
 
 function settlementRows(tree) {
-  // Row pressables use `settlement-row-<id>-<currency>`; ignore nested
-  // `settlement-row-name` / `settlement-row-amount` / `settlement-row-presence`.
+  // Row pressables use `settlement-row-<id>-<currency>`; ignore nested label ids.
+  const nested = new Set([
+    "settlement-row-name",
+    "settlement-row-amount",
+    "settlement-row-presence",
+    "settlement-row-line1",
+  ]);
   return nodes(tree).filter((node) => {
     const id = node.props?.testID;
     return typeof id === "string"
       && id.startsWith("settlement-row-")
-      && !["settlement-row-name", "settlement-row-amount", "settlement-row-presence"].includes(id);
+      && !nested.has(id);
   });
 }
 
@@ -271,7 +276,7 @@ test("solo group does not gain settlement chrome", () => {
   assert.equal(nodes(tree).find(n => n.props.testID === "group-settlement-rows"), undefined);
 });
 
-test("one active member + person without account shows settle row with muted suffix", () => {
+test("one active member + person without account shows two-line settle row", () => {
   const sheeba = {
     participant_id: "p_sheeba",
     user_id: "",
@@ -293,14 +298,21 @@ test("one active member + person without account shows settle row with muted suf
     },
   );
   assert.ok(nodes(tree).find(n => n.props.testID === "group-settlement-rows"));
-  assert.match(text(tree), /Sheeba/);
-  assert.match(text(tree), /not on SharedMoney/);
-  assert.match(text(tree), /owes you/);
   const nameNode = nodes(tree).find(n => n.props?.testID === "settlement-row-name");
   assert.equal(text(nameNode), "Sheeba");
+  assert.equal(flatten(nameNode.props.style).flexShrink, 1);
+  const line1 = nodes(tree).find(n => n.props?.testID === "settlement-row-line1");
+  assert.match(text(line1), /Sheeba owes you/);
+  assert.doesNotMatch(text(line1), /Not on SharedMoney|·/);
+  const caption = nodes(tree).find(n => n.props?.testID === "settlement-row-presence");
+  assert.equal(text(caption), "Not on SharedMoney");
+  assert.equal(caption.props.style.fontSize, 13);
   const amountNode = nodes(tree).find(n => n.props?.testID === "settlement-row-amount");
   assert.ok(amountNode);
   assert.equal(flatten(amountNode.props.style).flexShrink, 0);
+  const details = nodes(tree).find(n => flatten(n.props?.style)?.alignItems === "flex-start"
+    && nodes(n).some(c => c.props?.testID === "settlement-row-amount"));
+  assert.ok(details, "amount column top-aligns with line 1");
   const labelColumn = nodes(tree).find(n => n.props?.testID === "settlement-label-column");
   assert.equal(flatten(labelColumn.props.style).flex, 1);
   assert.equal(flatten(labelColumn.props.style).minWidth, 0);
@@ -338,7 +350,31 @@ test("no-account settle row resolves typed name from participants when balance f
   const nameNode = nodes(tree).find(n => n.props?.testID === "settlement-row-name");
   assert.equal(text(nameNode), "Sheeba");
   assert.doesNotMatch(text(tree), /sheeba@example\.com|\+919876543210/);
-  assert.match(text(tree), /not on SharedMoney/);
+  assert.equal(text(nodes(tree).find(n => n.props?.testID === "settlement-row-presence")), "Not on SharedMoney");
+});
+
+test("pending-invite settle row shows Invited caption on line 2", () => {
+  const invited = {
+    participant_id: "p_inv",
+    user_id: "",
+    full_name: "Riya",
+    amount: -20,
+    currency: "USD",
+  };
+  const tree = dashboard(
+    [balance("me", 20), invited],
+    {
+      activeMemberCount: 2,
+      hasNonZeroBalance: true,
+      participants: [
+        { id: "p_me", user_id: "me", type: "member", full_name: "You" },
+        { id: "p_inv", user_id: null, type: "invited", full_name: "Riya" },
+      ],
+      onSettlePress: () => {},
+    },
+  );
+  assert.match(text(nodes(tree).find(n => n.props?.testID === "settlement-row-line1")), /Riya owes you/);
+  assert.equal(text(nodes(tree).find(n => n.props?.testID === "settlement-row-presence")), "Invited");
 });
 
 test("solo count with non-zero balance still shows settle chrome", () => {
@@ -608,16 +644,21 @@ test("dashboard settlement row layout keeps amount out of the label column", () 
   const contentStyle = flatten(content.props.style);
   assert.equal(contentStyle.height, undefined);
   assert.ok((contentStyle.minHeight ?? 0) >= 44);
-  // App members keep a single "Alice owes you" label (pre-PR structure).
+  // App members: one line — name shrinks, "owes you" + amount do not; no caption.
   assert.match(text(row), /Alice owes you/);
+  assert.equal(nodes(row).find(n => n.props?.testID === "settlement-row-presence"), undefined);
   const name = nodes(row).find(n => n.props?.testID === "settlement-row-name");
   const amount = nodes(row).find(n => n.props?.testID === "settlement-row-amount");
   const labelColumn = nodes(row).find(n => n.props?.testID === "settlement-label-column");
+  const line1 = nodes(row).find(n => n.props?.testID === "settlement-row-line1");
   assert.ok(name);
   assert.ok(amount);
   assert.ok(labelColumn);
-  assert.equal(text(name), "Alice owes you");
+  assert.ok(line1);
+  assert.equal(text(name), "Alice");
+  assert.match(text(line1), /Alice owes you/);
   assert.equal(name.props.numberOfLines, 1);
+  assert.equal(flatten(name.props.style).flexShrink, 1);
   assert.equal(flatten(amount.props.style).flexShrink, 0);
   assert.equal(flatten(labelColumn.props.style).flex, 1);
   assert.equal(flatten(labelColumn.props.style).minWidth, 0);

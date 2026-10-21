@@ -46,15 +46,18 @@ export function resolveSettlementPresence(
   return "app_member";
 }
 
-/** Muted inline suffix after the typed name. Null = no suffix. */
-export function settlementPresenceSuffix(
+/**
+ * Secondary caption under the settle owe line (no-account / pending invite only).
+ * Null for app members and former — those stay one line.
+ */
+export function settlementPresenceCaption(
   presence: SettlementPresence,
 ): string | null {
   switch (presence) {
     case "invited":
-      return "invited";
+      return "Invited";
     case "no_account":
-      return "not on SharedMoney";
+      return "Not on SharedMoney";
     case "app_member":
     case "former":
       return null;
@@ -66,29 +69,12 @@ export function settlementPresenceSuffix(
 }
 
 /**
- * Modal header is tight ("X paid you"). Only append the presence suffix when
- * the typed name is short enough that the cluster still reads cleanly.
+ * @deprecated Inline `·` suffixes were removed; use {@link settlementPresenceCaption}.
  */
-export function shouldShowSettleModalPresenceSuffix(displayName: string): boolean {
-  return displayName.trim().length > 0 && displayName.trim().length <= 14;
-}
-
-/**
- * Format `Name · suffix` for tests / a11y. UI prefers separate Text nodes so the
- * name can ellipsize while the suffix stays visible.
- */
-export function formatSettlementNameWithSuffix(
-  displayName: string,
-  suffix: string | null,
-  maxNameChars = 18,
-): string {
-  const name = displayName.trim() || "Someone";
-  if (!suffix) return name;
-  const truncated =
-    name.length > maxNameChars
-      ? `${name.slice(0, Math.max(1, maxNameChars - 1)).trimEnd()}…`
-      : name;
-  return `${truncated} · ${suffix}`;
+export function settlementPresenceSuffix(
+  presence: SettlementPresence,
+): string | null {
+  return settlementPresenceCaption(presence);
 }
 
 /** Remind / share audience: app members keep group-link copy; others do not. */

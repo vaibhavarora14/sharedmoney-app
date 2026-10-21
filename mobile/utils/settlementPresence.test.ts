@@ -1,13 +1,12 @@
 import { assertEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
 import {
   findParticipantForBalance,
-  formatSettlementNameWithSuffix,
   resolveSettlementPresence,
   settleRemindAudienceFromPresence,
   settlementCounterpartyDisplayName,
   settlementCounterpartyShortName,
+  settlementPresenceCaption,
   settlementPresenceSuffix,
-  shouldShowSettleModalPresenceSuffix,
 } from "./settlementPresence.ts";
 
 Deno.test("resolveSettlementPresence: former wins", () => {
@@ -43,29 +42,13 @@ Deno.test("resolveSettlementPresence: no account vs app member", () => {
   );
 });
 
-Deno.test("settlementPresenceSuffix only for invited / no_account", () => {
-  assertEquals(settlementPresenceSuffix("invited"), "invited");
-  assertEquals(settlementPresenceSuffix("no_account"), "not on SharedMoney");
-  assertEquals(settlementPresenceSuffix("app_member"), null);
-  assertEquals(settlementPresenceSuffix("former"), null);
-});
-
-Deno.test("formatSettlementNameWithSuffix truncates name before suffix", () => {
-  assertEquals(
-    formatSettlementNameWithSuffix("Sheeba", "not on SharedMoney"),
-    "Sheeba · not on SharedMoney",
-  );
-  assertEquals(
-    formatSettlementNameWithSuffix("Christopher Fernandes", "invited", 12),
-    "Christopher… · invited",
-  );
-  assertEquals(formatSettlementNameWithSuffix("Sheeba", null), "Sheeba");
-});
-
-Deno.test("modal presence suffix only when name fits cleanly", () => {
-  assertEquals(shouldShowSettleModalPresenceSuffix("Sheeba"), true);
-  assertEquals(shouldShowSettleModalPresenceSuffix("Christopher Fernandes"), false);
-  assertEquals(shouldShowSettleModalPresenceSuffix(""), false);
+Deno.test("settlementPresenceCaption is secondary line for invited / no_account only", () => {
+  assertEquals(settlementPresenceCaption("invited"), "Invited");
+  assertEquals(settlementPresenceCaption("no_account"), "Not on SharedMoney");
+  assertEquals(settlementPresenceCaption("app_member"), null);
+  assertEquals(settlementPresenceCaption("former"), null);
+  // Deprecated alias still returns the caption (not an inline · suffix).
+  assertEquals(settlementPresenceSuffix("no_account"), "Not on SharedMoney");
 });
 
 Deno.test("remind audience: off-app for non-members", () => {
@@ -86,7 +69,6 @@ Deno.test("settlementCounterpartyDisplayName prefers participant typed name over
       phone: "+919876543210",
     },
   ];
-  // Balance enrichment missing / wrong — participants are the source of truth.
   assertEquals(
     settlementCounterpartyDisplayName(
       {
@@ -107,7 +89,6 @@ Deno.test("settlementCounterpartyDisplayName prefers participant typed name over
     ),
     "Sheeba",
   );
-  // Never raw email or phone when typed name is absent on both.
   assertEquals(
     settlementCounterpartyDisplayName(
       { participant_id: "p_x", full_name: null, email: null, phone: "+91111" },

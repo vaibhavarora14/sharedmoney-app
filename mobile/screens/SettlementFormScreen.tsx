@@ -33,8 +33,6 @@ import {
 } from "../utils/settleShareMessage";
 import {
   settlementCounterpartyDisplayName,
-  settlementPresenceSuffix,
-  shouldShowSettleModalPresenceSuffix,
   type SettlementPresence,
 } from "../utils/settlementPresence";
 
@@ -82,8 +80,8 @@ interface SettlementFormScreenProps {
   onRemindPress?: () => void;
   onRemindShareAnotherWay?: () => void;
   /**
-   * Counterparty presence for muted inline suffix on the paid-header name
-   * (invited / not on SharedMoney). Omitted when it would not fit cleanly.
+   * @deprecated Presence chrome lives on the group settle row only — the modal
+   * header is a single sentence with no suffix. Kept optional for call-site compat.
    */
   counterpartyPresence?: SettlementPresence;
 }
@@ -164,7 +162,6 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
   remindShareAnotherWay = false,
   onRemindPress,
   onRemindShareAnotherWay,
-  counterpartyPresence,
 }) => {
   const isEditing = !!settlement;
   const isAdminMode = !!(fromParticipantId && toParticipantId);
@@ -659,22 +656,8 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
 
                   const fromIsYou = fromName === settleModalYouLabel("from");
                   const toIsYou = toName === settleModalYouLabel("to");
-                  const presenceSuffix = counterpartyPresence
-                    ? settlementPresenceSuffix(counterpartyPresence)
-                    : null;
-                  // Only when the typed name is short enough that the cluster stays clean.
-                  const showFromSuffix = Boolean(
-                    presenceSuffix
-                    && !fromIsYou
-                    && shouldShowSettleModalPresenceSuffix(fromName),
-                  );
-                  const showToSuffix = Boolean(
-                    presenceSuffix
-                    && !toIsYou
-                    && shouldShowSettleModalPresenceSuffix(toName),
-                  );
 
-                  // Centred cluster: name may shrink; "paid"/you never grow to edges.
+                  // Single sentence — no presence suffix (that lives on the group row).
                   return (
                     <View
                       style={styles.paidHeaderRow}
@@ -695,20 +678,6 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                       >
                         {fromName}
                       </Text>
-                      {showFromSuffix ? (
-                        <Text
-                          variant="titleMedium"
-                          numberOfLines={1}
-                          style={{
-                            color: theme.colors.onSurfaceVariant,
-                            fontWeight: "400",
-                            flexShrink: 0,
-                          }}
-                          testID="settlement-paid-from-presence"
-                        >
-                          {` · ${presenceSuffix}`}
-                        </Text>
-                      ) : null}
                       <Text
                         variant="titleMedium"
                         style={{
@@ -735,20 +704,6 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                       >
                         {toName}
                       </Text>
-                      {showToSuffix ? (
-                        <Text
-                          variant="titleMedium"
-                          numberOfLines={1}
-                          style={{
-                            color: theme.colors.onSurfaceVariant,
-                            fontWeight: "400",
-                            flexShrink: 0,
-                          }}
-                          testID="settlement-paid-to-presence"
-                        >
-                          {` · ${presenceSuffix}`}
-                        </Text>
-                      ) : null}
                     </View>
                   );
                 })()}
