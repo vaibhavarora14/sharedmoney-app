@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator as RNActivityIndicator,
   Alert,
   BackHandler,
   FlatList,
+  Linking,
   NativeScrollEvent,
   NativeSyntheticEvent,
   Platform,
@@ -85,8 +86,15 @@ import { useCurrencyPreferences } from "../hooks/useCurrencyPreferences";
 import { getDefaultCurrency } from "../utils/currency";
 import { collectCurrencies } from "../utils/currencyMerge";
 import { showErrorAlert } from "../utils/errorHandling";
-import { buildSettleShareMessage } from "../utils/settleShareMessage";
+import { getGroupLinkUrl } from "../utils/inviteLinks";
+import {
+  openSettleRemind,
+  settleRemindLabel,
+  type SettleRemindChannel,
+} from "../utils/openSettleRemind";
+import { buildSettleRemindMessage } from "../utils/settleShareMessage";
 import { shareSettleDraft } from "../utils/shareSettleDraft";
+import type { GroupShareSummaryPayload } from "../components/GroupDashboard";
 import {
   getUserFriendlyErrorMessage,
   isSessionExpiredError,
@@ -173,6 +181,8 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
   const [workingParticipantId, setWorkingParticipantId] = useState<string | null>(null);
   const [menuVisible, setMenuVisible] = useState<boolean>(false);
+  const [shareSummary, setShareSummary] = useState<GroupShareSummaryPayload | null>(null);
+  const [whatsAppInstalled, setWhatsAppInstalled] = useState(false);
   const [showSettlementForm, setShowSettlementForm] = useState<boolean>(false);
   const [settlingBalance, setSettlingBalance] = useState<Balance | null>(null);
   const [editingSettlement, setEditingSettlement] = useState<Settlement | null>(
@@ -1100,23 +1110,97 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     setShowSettlementForm(true);
   };
 
-  const handleShareBalance = (balance: Balance) => {
-    if (!isActiveMember || balancesError) return;
+  useEffect(() => {
+    if (Platform.OS === "web") {
+      setWhatsAppInstalled(false);
+      return;
+    }
+    let cancelled = false;
+    Linking.canOpenURL("whatsapp://send")
+      .then((ok) => {
+        if (!cancelled) setWhatsAppInstalled(ok);
+      })
+      .catch(() => {
+        if (!cancelled) setWhatsAppInstalled(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const phoneForBalance = useCallback((balance: Balance): string | null => {
+    const match = participants.find((person) => {
+      if (balance.participant_id && person.id === balance.participant_id) {
+        return true;
+      }
+      if (balance.user_id && person.user_id === balance.user_id) return true;
+      return false;
+    });
+    return match?.phone?.trim() || null;
+  }, [participants]);
+
+  const buildRemindMessageForBalance = useCallback((balance: Balance) => {
     const counterpartyName = balance.full_name?.trim()
       || balance.email?.split("@")[0]?.trim()
       || "Someone";
-    const message = buildSettleShareMessage({
-      lines: [{
-        counterpartyName,
-        direction: balance.amount < 0 ? "pay" : "receive",
-        amount: Math.abs(balance.amount),
-        currency: balance.currency,
-        groupName: group.name,
-      }],
+    return buildSettleRemindMessage({
+      counterpartyName,
+      amount: Math.abs(balance.amount),
+      currency: balance.currency,
+      groupName: group.name,
+      // No web settle-with-prefill route yet — group link works after sign-in.
+      settleLink: getGroupLinkUrl(group.id),
     });
+  }, [group.id, group.name]);
 
-    void shareSettleDraft(message).catch((error) => {
+  const resolveRemindChannelForBalance = useCallback((balance: Balance): SettleRemindChannel => {
+    const phone = phoneForBalance(balance);
+    if (!phone) return "share";
+    if (Platform.OS === "web") return "whatsapp";
+    return whatsAppInstalled ? "whatsapp" : "share";
+  }, [phoneForBalance, whatsAppInstalled]);
+
+  const handleRemindBalance = (balance: Balance) => {
+    if (!isActiveMember || balancesError) return;
+    if (!(balance.amount > 0)) return;
+    const message = buildRemindMessageForBalance(balance);
+    void openSettleRemind({
+      message,
+      phone: phoneForBalance(balance),
+    }).catch((error) => {
       showErrorAlert(error, signOut, "Could not share settle message");
+    });
+  };
+
+  const handleRemindShareAnotherWay = (balance: Balance) => {
+    if (!isActiveMember || balancesError) return;
+    if (!(balance.amount > 0)) return;
+    const message = buildRemindMessageForBalance(balance);
+    void openSettleRemind({
+      message,
+      phone: phoneForBalance(balance),
+      forceShare: true,
+    }).catch((error) => {
+      showErrorAlert(error, signOut, "Could not share settle message");
+    });
+  };
+
+  const getRemindPresentation = useCallback((balance: Balance) => {
+    const channel = resolveRemindChannelForBalance(balance);
+    return {
+      label: settleRemindLabel(channel),
+      shareAnotherWay: channel === "whatsapp",
+    };
+  }, [resolveRemindChannelForBalance]);
+
+  const handleShareSummaryChange = useCallback((payload: GroupShareSummaryPayload | null) => {
+    setShareSummary(payload);
+  }, []);
+
+  const handleShareSummary = () => {
+    if (!shareSummary?.message || !isActiveMember || balancesError) return;
+    void shareSettleDraft(shareSummary.message).catch((error) => {
+      showErrorAlert(error, signOut, "Could not share settle summary");
     });
   };
 
@@ -1454,6 +1538,15 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           title={showMembers ? "People" : group.name}
           titleStyle={{ fontWeight: "bold" }}
         />
+        {!showMembers && isActiveMember && !balancesError && (shareSummary || loadingTreatment.showDashboardSkeleton) ? (
+          <Appbar.Action
+            icon="share-variant"
+            accessibilityLabel="Share summary"
+            testID="share-settle-summary"
+            disabled={loadingTreatment.showDashboardSkeleton || !shareSummary}
+            onPress={handleShareSummary}
+          />
+        ) : null}
         {/* Group options — active: Archive/Leave; archived: Unarchive/Leave/Remove; former: Remove */}
         {showGroupMenu && (
           <Menu
@@ -1659,6 +1752,8 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
               <GroupDashboard
                 key={group.id}
                 groupId={group.id}
+                groupName={group.name}
+                groupLink={getGroupLinkUrl(group.id)}
                 balances={balancesData?.group_balances?.[0]?.balances || []}
                 groupStats={groupStats}
                 currentUserId={session?.user?.id}
@@ -1671,7 +1766,10 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                 unifyBalances={group.unify_balances}
                 balanceError={!!balancesError}
                 onSettlePress={isActiveMember && !balancesError ? handleSettleUp : undefined}
-                onSharePress={isActiveMember && !balancesError ? handleShareBalance : undefined}
+                onRemindPress={isActiveMember && !balancesError ? handleRemindBalance : undefined}
+                onRemindShareAnotherWay={isActiveMember && !balancesError ? handleRemindShareAnotherWay : undefined}
+                getRemindPresentation={isActiveMember && !balancesError ? getRemindPresentation : undefined}
+                onShareSummaryChange={isActiveMember && !balancesError ? handleShareSummaryChange : undefined}
                 onMyCostsPress={() => handleStatNavigation("my-costs")}
                 onTotalCostsPress={() => handleStatNavigation("total-costs")}
                 onOpenCurrencySettings={() => setShowCurrencySettings(true)}
