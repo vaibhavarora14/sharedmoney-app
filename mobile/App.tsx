@@ -32,6 +32,10 @@ import {
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { BottomNavBar } from "./components/BottomNavBar";
 import { CrashErrorFallback } from "./components/CrashErrorFallback";
+import {
+  resolveDevPreview,
+  type DevPreviewKind,
+} from "./utils/devPreview";
 import { ExpenseFormOverlay } from "./components/ExpenseFormOverlay";
 import { ForceUpdateModal } from "./components/ForceUpdateModal";
 import { BannerNotice, InAppBanner } from "./components/InAppBanner";
@@ -209,39 +213,6 @@ const queryClient = new QueryClient({
   },
 });
 
-type DevPreviewKind =
-  | "crash"
-  | "crash-first"
-  | "crash-repeat"
-  | "crash-copied"
-  | "bill-dead"
-  | "bill-offline"
-  | null;
-
-function resolveDevPreview(url: string | null): DevPreviewKind {
-  if (!__DEV__ || !url) return null;
-  const haystack = url.toLowerCase();
-  if (haystack.includes("dev/crash-copied") || haystack.includes("dev-crash-copied")) {
-    return "crash-copied";
-  }
-  if (haystack.includes("dev/crash-repeat") || haystack.includes("dev-crash-repeat")) {
-    return "crash-repeat";
-  }
-  if (haystack.includes("dev/crash-first") || haystack.includes("dev-crash-first")) {
-    return "crash-first";
-  }
-  if (haystack.includes("dev/crash") || haystack.includes("dev-crash")) {
-    return "crash";
-  }
-  if (haystack.includes("dev/bill-offline") || haystack.includes("dev-bill-offline")) {
-    return "bill-offline";
-  }
-  if (haystack.includes("dev/bill-dead") || haystack.includes("dev-bill-dead")) {
-    return "bill-dead";
-  }
-  return null;
-}
-
 const DEV_CRASH_PREVIEW_ID = "SM-7K3Q-92";
 
 /** Module-level so remounts during auth bootstrap don't drop the QA deep link. */
@@ -249,8 +220,9 @@ let pendingDevBillPreview: "dead" | "offline" | null = null;
 let pendingDevCrashPreview: "first" | "repeat" | "copied" | null = null;
 let pendingDevForceCrash = false;
 
+/** __DEV__ only — no-ops in production so preview query params cannot hijack deep links. */
 function applyDevPreview(kind: DevPreviewKind): boolean {
-  if (!kind) return false;
+  if (!__DEV__ || !kind) return false;
   if (kind === "crash") {
     pendingDevForceCrash = true;
     return true;
@@ -725,28 +697,9 @@ function AppContent() {
       if (__DEV__ && url) {
         log("dev deep link received", { url }, "debug");
       }
-      let devPreview = resolveDevPreview(url);
-      // Also accept ?preview=bill-dead|bill-offline|crash-* (Expo Go query).
-      if (!devPreview && url) {
-        let fromQuery: string | null = null;
-        try {
-          const parsed = Linking.parse(url);
-          const raw = parsed.queryParams?.preview;
-          if (typeof raw === "string") fromQuery = raw;
-          else if (Array.isArray(raw) && typeof raw[0] === "string") fromQuery = raw[0];
-        } catch {
-          // ignore
-        }
-        if (!fromQuery) {
-          fromQuery = /[?&#]preview=([a-z0-9-]+)/i.exec(url)?.[1] ?? null;
-        }
-        if (fromQuery === "bill-dead") devPreview = "bill-dead";
-        else if (fromQuery === "bill-offline") devPreview = "bill-offline";
-        else if (fromQuery === "crash-first") devPreview = "crash-first";
-        else if (fromQuery === "crash-repeat") devPreview = "crash-repeat";
-        else if (fromQuery === "crash-copied") devPreview = "crash-copied";
-        else if (fromQuery === "crash") devPreview = "crash";
-      }
+      // resolveDevPreview / applyDevPreview are __DEV__-gated: production web and
+      // release builds ignore ?preview=crash-first (and siblings) entirely.
+      const devPreview = resolveDevPreview(url, __DEV__);
       if (applyDevPreview(devPreview)) {
         log("dev preview applied", { devPreview }, "debug");
         if (devPreview === "crash") setDevForceCrash(true);
