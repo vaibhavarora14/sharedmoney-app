@@ -27,12 +27,14 @@ import {
 } from "../utils/groupDashboardStats";
 import {
   buildSettleSummaryMessage,
-  settleModalPersonName,
   settleSharePersonName,
   type SettleSummaryEdge,
 } from "../utils/settleShareMessage";
 import {
+  findParticipantForBalance,
   resolveSettlementPresence,
+  settlementCounterpartyDisplayName,
+  settlementCounterpartyShortName,
   settlementPresenceSuffix,
   type SettlementPresence,
 } from "../utils/settlementPresence";
@@ -82,22 +84,8 @@ interface GroupDashboardProps {
   unifyBalances?: boolean;
 }
 
-function shortName(person: {
-  full_name?: string | null;
-  email?: string | null;
-  phone?: string | null;
-}): string {
-  // Typed name first; never raw email/phone (local-part ok via settleModalPersonName).
-  const display = settleModalPersonName(person);
-  return display.split(/\s+/)[0] || display;
-}
-
-function initials(person: {
-  full_name?: string | null;
-  email?: string | null;
-  phone?: string | null;
-}): string {
-  const name = settleModalPersonName(person);
+function initialsFromDisplayName(displayName: string): string {
+  const name = displayName.trim();
   if (name.includes(" ")) {
     const parts = name.split(/\s+/).filter(Boolean);
     if (parts.length >= 2) {
@@ -116,13 +104,7 @@ function presenceForBalance(
   balance: Balance,
   participants: Participant[],
 ): SettlementPresence {
-  const match = participants.find((person) => {
-    if (balance.participant_id && person.id === balance.participant_id) {
-      return true;
-    }
-    if (balance.user_id && person.user_id === balance.user_id) return true;
-    return false;
-  });
+  const match = findParticipantForBalance(balance, participants);
   if (match) return resolveSettlementPresence(match);
   // Balance rows for people without accounts often lack user_id.
   if (!balance.user_id) return "no_account";
@@ -297,8 +279,6 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
     return isOwed ? `+${bare}` : `-${bare}`;
   };
 
-  const personShort = (balance: Balance) => shortName(balance);
-
   const isSettled = !balanceError && !dashboardLoading && Boolean(currentUserId)
     && settlementRows.length === 0
     && !(unifyEnabled && myUnified && myUnified.missing.length > 0);
@@ -397,10 +377,12 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
 
     return settlementRows.map((balance, index) => {
       const isOwed = balance.amount > 0;
-      const name = personShort(balance);
+      const displayName = settlementCounterpartyDisplayName(balance, participants);
+      const name = settlementCounterpartyShortName(balance, participants);
       const presence = presenceForBalance(balance, participants);
       const presenceSuffix = settlementPresenceSuffix(presence);
       const isFormer = presence === "former";
+      const showPresenceChrome = Boolean(presenceSuffix) || isFormer;
       const rowKey =
         balance.participant_id || balance.user_id || `${name}-${balance.currency}`;
       const currency = balance.currency || defaultCurrency;
@@ -410,9 +392,9 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
       const isConverted = !unifyEnabled || balance.currency.toUpperCase() === settlementCurrency.toUpperCase();
       const Row = onSettlePress ? TouchableRipple : View;
       const a11yName = presenceSuffix ? `${name} · ${presenceSuffix}` : name;
-      const owesLabel = isOwed ? `${a11yName} owes you` : `You owe ${a11yName}`;
       const formerA11y = isFormer && !presenceSuffix ? `${name} (Former)` : a11yName;
       const a11yOwes = isOwed ? `${formerA11y} owes you` : `You owe ${formerA11y}`;
+      const plainOwesLabel = isOwed ? `${name} owes you` : `You owe ${name}`;
       const signedAmount = formatSignedBalance(balance.amount, currency, isOwed);
       const nameColor = isFormer
         ? theme.colors.onSurfaceVariant
@@ -449,74 +431,104 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
                     fontSize: 13,
                   }}
                 >
-                  {initials(balance)}
+                  {initialsFromDisplayName(displayName)}
                 </Text>
               </View>
+              {/*
+                Label column flex:1 minWidth:0; amount flexShrink:0 — never overlap.
+                App members keep a single "X owes you" Text (pre-PR). Presence chrome
+                splits name/suffix/owes so the name ellipsizes before the suffix.
+              */}
               <View style={styles.settlementDetails}>
-                <View style={styles.settlementNameRow}>
-                  {!isOwed ? (
-                    <Text
-                      variant="bodyMedium"
-                      style={{ flexShrink: 0, color: nameColor }}
-                    >
-                      {"You owe "}
-                    </Text>
-                  ) : null}
-                  <Text
-                    variant="bodyMedium"
-                    numberOfLines={1}
-                    ellipsizeMode="tail"
-                    style={{ flexShrink: 1, flexGrow: 0, minWidth: 0, color: nameColor }}
-                  >
-                    {name}
-                  </Text>
-                  {presenceSuffix ? (
+                <View style={styles.settlementLabelColumn} testID="settlement-label-column">
+                  {showPresenceChrome ? (
+                    <View style={styles.settlementNameRow}>
+                      {!isOwed ? (
+                        <Text
+                          variant="bodyMedium"
+                          style={{ flexShrink: 0, color: nameColor }}
+                        >
+                          {"You owe "}
+                        </Text>
+                      ) : null}
+                      <Text
+                        variant="bodyMedium"
+                        numberOfLines={1}
+                        ellipsizeMode="tail"
+                        testID="settlement-row-name"
+                        style={{
+                          flexShrink: 1,
+                          flexGrow: 0,
+                          // Keep the typed name visible even when the suffix is long.
+                          minWidth: 48,
+                          color: nameColor,
+                        }}
+                      >
+                        {name}
+                      </Text>
+                      {presenceSuffix ? (
+                        <Text
+                          variant="bodyMedium"
+                          numberOfLines={1}
+                          ellipsizeMode="tail"
+                          testID="settlement-row-presence"
+                          style={{
+                            flexShrink: 1,
+                            flexGrow: 0,
+                            color: theme.colors.onSurfaceVariant,
+                          }}
+                        >
+                          {` · ${presenceSuffix}`}
+                        </Text>
+                      ) : null}
+                      {isFormer ? (
+                        <Text
+                          variant="bodyMedium"
+                          numberOfLines={1}
+                          style={{
+                            flexShrink: 0,
+                            color: theme.colors.onSurfaceVariant,
+                          }}
+                        >
+                          {" (Former)"}
+                        </Text>
+                      ) : null}
+                      {isOwed ? (
+                        <Text
+                          variant="bodyMedium"
+                          style={{ flexShrink: 0, color: nameColor }}
+                        >
+                          {" owes you"}
+                        </Text>
+                      ) : null}
+                    </View>
+                  ) : (
                     <Text
                       variant="bodyMedium"
                       numberOfLines={1}
-                      style={{
-                        flexShrink: 0,
-                        color: theme.colors.onSurfaceVariant,
-                      }}
+                      ellipsizeMode="tail"
+                      testID="settlement-row-name"
+                      style={{ color: nameColor }}
                     >
-                      {` · ${presenceSuffix}`}
+                      {plainOwesLabel}
                     </Text>
-                  ) : null}
-                  {isFormer ? (
+                  )}
+                  {!isConverted ? (
                     <Text
-                      variant="bodyMedium"
-                      numberOfLines={1}
-                      style={{
-                        flexShrink: 0,
-                        color: theme.colors.onSurfaceVariant,
-                      }}
+                      variant="labelSmall"
+                      style={{ color: theme.colors.onSurfaceVariant }}
                     >
-                      {" (Former)"}
-                    </Text>
-                  ) : null}
-                  {isOwed ? (
-                    <Text
-                      variant="bodyMedium"
-                      style={{ flexShrink: 0, color: nameColor }}
-                    >
-                      {" owes you"}
+                      Not converted · {balance.currency}
                     </Text>
                   ) : null}
                 </View>
                 <Text
                   variant="titleSmall"
-                  style={{ flexShrink: 1, color: amountColor, fontWeight: "700" }}
+                  testID="settlement-row-amount"
+                  style={{ flexShrink: 0, color: amountColor, fontWeight: "700" }}
                 >
                   {signedAmount}
                 </Text>
-                {!isConverted ? (
-                  <Text
-                    variant="labelSmall"
-                    style={{ width: "100%", color: theme.colors.onSurfaceVariant }}
-                  >
-                    Not converted · {balance.currency}
-                  </Text>
-                ) : null}
               </View>
               {onSettlePress ? <MaterialCommunityIcons
                 name="chevron-right"
@@ -713,10 +725,13 @@ const styles = StyleSheet.create({
   settlementNameRow: {
     flexDirection: "row",
     alignItems: "center",
-    flexGrow: 1,
-    flexShrink: 1,
-    flexBasis: 80,
     minWidth: 0,
+    width: "100%",
+  },
+  settlementLabelColumn: {
+    flex: 1,
+    minWidth: 0,
+    marginRight: 8,
   },
   settlementRowContent: {
     flexDirection: "row",
@@ -729,9 +744,6 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     flexDirection: "row",
-    flexWrap: "wrap",
-    columnGap: 8,
-    rowGap: 4,
     alignItems: "center",
     marginRight: 4,
   },

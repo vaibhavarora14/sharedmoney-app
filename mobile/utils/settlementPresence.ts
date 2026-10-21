@@ -1,3 +1,5 @@
+import { settleModalPersonName } from "./settleShareMessage";
+
 /**
  * Presence of a settle counterparty relative to SharedMoney accounts / invites.
  * Drives row suffixes and remind-copy branches — not payment confirmation state.
@@ -9,8 +11,20 @@ export type SettlementPresence =
   | "former";
 
 export type SettlementPresencePerson = {
+  id?: string;
   user_id?: string | null;
   type?: string | null;
+  full_name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+};
+
+export type SettlementBalancePerson = {
+  participant_id?: string | null;
+  user_id?: string | null;
+  full_name?: string | null;
+  email?: string | null;
+  phone?: string | null;
 };
 
 function hasUserId(userId?: string | null): boolean {
@@ -82,4 +96,46 @@ export function settleRemindAudienceFromPresence(
   presence: SettlementPresence,
 ): "app_member" | "off_app" {
   return presence === "app_member" ? "app_member" : "off_app";
+}
+
+/** Match a balance row to its participant (participant_id first, then user_id). */
+export function findParticipantForBalance<T extends SettlementPresencePerson>(
+  balance: SettlementBalancePerson,
+  participants: T[] | null | undefined,
+): T | undefined {
+  if (!participants?.length) return undefined;
+  if (balance.participant_id) {
+    const byId = participants.find((person) => person.id === balance.participant_id);
+    if (byId) return byId;
+  }
+  if (balance.user_id) {
+    return participants.find((person) => person.user_id === balance.user_id);
+  }
+  return undefined;
+}
+
+/**
+ * Creator-typed display name for a settle counterparty.
+ * Prefers the participants list (source of truth for people without accounts),
+ * then the balance enrichment. Never returns a raw email or phone.
+ */
+export function settlementCounterpartyDisplayName(
+  balance: SettlementBalancePerson,
+  participants?: SettlementPresencePerson[] | null,
+): string {
+  const match = findParticipantForBalance(balance, participants);
+  return settleModalPersonName({
+    full_name: match?.full_name || balance.full_name,
+    email: match?.email || balance.email,
+    phone: match?.phone || balance.phone,
+  });
+}
+
+/** First-token label for settle rows (typed name → local-part → Someone). */
+export function settlementCounterpartyShortName(
+  balance: SettlementBalancePerson,
+  participants?: SettlementPresencePerson[] | null,
+): string {
+  const display = settlementCounterpartyDisplayName(balance, participants);
+  return display.split(/\s+/)[0] || display;
 }

@@ -32,6 +32,7 @@ import {
   settleModalYouLabel,
 } from "../utils/settleShareMessage";
 import {
+  settlementCounterpartyDisplayName,
   settlementPresenceSuffix,
   shouldShowSettleModalPresenceSuffix,
   type SettlementPresence,
@@ -631,7 +632,11 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                       toName = settleModalYouLabel("to");
                     }
                   } else if (balance) {
-                    const counterparty = settleModalPersonName(balance);
+                    // Prefer participants list (typed name for people without accounts).
+                    const counterparty = settlementCounterpartyDisplayName(
+                      balance,
+                      participants,
+                    );
                     if (isPaying) {
                       fromName = settleModalYouLabel("from");
                       toName = counterparty;
