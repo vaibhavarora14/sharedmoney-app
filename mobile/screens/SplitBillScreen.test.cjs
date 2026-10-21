@@ -117,11 +117,28 @@ function loadScreen(overrides = {}) {
       if (id === "../contexts/AuthContext") return { useAuth: () => ({ user: { id: "me" } }) };
       if (id === "../hooks/useProfile") return { useProfile: () => ({ data: { full_name: "Alex", preferred_currency: "USD" } }) };
       if (id === "../hooks/useBillSplit") {
+        class BillSplitNetworkError extends Error {
+          constructor(message = "You're offline") {
+            super(message);
+            this.name = "BillSplitNetworkError";
+          }
+        }
         return {
+          BillSplitNetworkError,
           useBillSplitPeople: () => directory,
           createBillSplit: async () => "a".repeat(64),
           readBillSplit: async () => null,
           confirmBillSplit: async () => null,
+        };
+      }
+      if (id === "../utils/networkErrors") {
+        return {
+          isBenignConnectivityError: (error) =>
+            Boolean(
+              error &&
+                (error.name === "BillSplitNetworkError" ||
+                  /network|offline|Failed to fetch/i.test(String(error.message ?? ""))),
+            ),
         };
       }
       if (id === "../components/Skeleton") {
@@ -195,11 +212,18 @@ function loadScreen(overrides = {}) {
     return module.exports;
   }
 
-  const { SplitBillScreen } = load(path.join(__dirname, "SplitBillScreen.tsx"));
+  const screenModule = load(path.join(__dirname, "SplitBillScreen.tsx"));
+  const { SplitBillScreen, billLinkGoHomeLabel } = screenModule;
   return {
+    billLinkGoHomeLabel,
     render(token) {
       cursor = 0;
-      return SplitBillScreen({ token, onDismiss: () => {} });
+      return SplitBillScreen({
+        token,
+        onDismiss: () => {},
+        forceStatus: overrides.forceStatus,
+        presentation: overrides.presentation,
+      });
     },
     openModeMenu(tree) {
       const editor = nodes(tree).find((node) => node.type === "SplitAmongEditor");
@@ -293,6 +317,64 @@ test("bill details loading uses a same-size skeleton instead of a spinner", () =
   }).render("a".repeat(64)));
   assert.equal(tree.some((node) => node.type === "ActivityIndicator"), false);
   assert.ok(tree.find((node) => node.props?.testID === "split-bill-details-skeleton"));
+});
+
+test("dead bill link shows locked copy and Go to Home on native, not Retry", () => {
+  const tree = expandScreen(loadScreen({
+    token: "a".repeat(64),
+    sessionQuery: { isPending: false, isError: false, data: null },
+  }).render("a".repeat(64)));
+  const panel = tree.find((node) => node.props?.testID === "bill-link-unavailable");
+  assert.ok(panel, "expected bill-link-unavailable");
+  const text = tree
+    .map((node) => (typeof node.props?.children === "string" ? node.props.children : ""))
+    .join(" ");
+  assert.match(text, /This bill link isn’t working/);
+  assert.match(text, /expired or been removed/);
+  const goHome = tree.find((node) => node.props?.testID === "bill-link-go-home");
+  assert.ok(goHome);
+  // Harness defaults Platform.OS to web → “Go to SharedMoney”; native uses “Go to Home”.
+  assert.match(String(goHome.props.children), /Go to (Home|SharedMoney)/);
+  assert.equal(tree.some((node) => node.props?.testID === "bill-link-retry"), false);
+  assert.doesNotMatch(text, /invalid/);
+  assert.doesNotMatch(text, /stack/i);
+});
+
+test("billLinkGoHomeLabel is Go to Home on native and Go to SharedMoney on web", () => {
+  const { billLinkGoHomeLabel } = loadScreen({ directory: { isLoading: false } });
+  assert.equal(billLinkGoHomeLabel("ios"), "Go to Home");
+  assert.equal(billLinkGoHomeLabel("android"), "Go to Home");
+  assert.equal(billLinkGoHomeLabel("web"), "Go to SharedMoney");
+});
+
+test("dead/offline forceStatus uses One-time bill header", () => {
+  const tree = expandScreen(loadScreen({
+    token: "a".repeat(64),
+    forceStatus: "dead",
+    presentation: "root",
+  }).render("a".repeat(64)));
+  const header = tree.find((node) => node.props?.testID === "split-bill-header-title");
+  assert.ok(header, "expected split-bill-header-title");
+  assert.equal(header.props.title, "One-time bill");
+});
+
+test("offline bill link shows You’re offline with Retry", () => {
+  const tree = expandScreen(loadScreen({
+    token: "a".repeat(64),
+    sessionQuery: {
+      isPending: false,
+      isError: true,
+      error: { name: "BillSplitNetworkError", message: "You're offline" },
+      data: null,
+      refetch: () => {},
+    },
+  }).render("a".repeat(64)));
+  assert.ok(tree.find((node) => node.props?.testID === "bill-link-offline"));
+  assert.ok(tree.find((node) => node.props?.testID === "bill-link-retry"));
+  const text = tree
+    .map((node) => (typeof node.props?.children === "string" ? node.props.children : ""))
+    .join(" ");
+  assert.match(text, /You’re offline|You're offline/);
 });
 
 test("create form wires the mode menu and switches Equal → Shares → Amounts", () => {

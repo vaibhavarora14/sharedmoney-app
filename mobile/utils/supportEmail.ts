@@ -53,3 +53,33 @@ export function buildSupportEmailUrl(
 
   return `mailto:${SUPPORT_EMAIL}?subject=${subject}&body=${body}`;
 }
+
+export type CrashSupportEmailInput = {
+  supportReferenceId: string;
+  appVersion: string;
+  platform: string;
+};
+
+/**
+ * Prefill a crash report to the same support inbox the /support page uses.
+ * Subject includes the on-screen reference ID; body always carries version + platform.
+ */
+export function buildCrashSupportEmailUrl(input: CrashSupportEmailInput): string {
+  const subject = encodeURIComponent(`Crash report ${input.supportReferenceId}`);
+  const body = encodeURIComponent(
+    [
+      "Hi SharedMoney Support,",
+      "",
+      "I hit a crash in the app.",
+      "",
+      `Support reference: ${input.supportReferenceId}`,
+      `App version: ${input.appVersion}`,
+      `Platform: ${input.platform}`,
+      "",
+      "What I was doing:",
+      "",
+    ].join("\n"),
+  );
+
+  return `mailto:${SUPPORT_EMAIL}?subject=${subject}&body=${body}`;
+}
