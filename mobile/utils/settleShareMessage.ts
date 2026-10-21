@@ -29,11 +29,13 @@ export function settleFirstName(name: string | null | undefined): string {
 
 /**
  * Chat-safe person label for settle share text. Never returns "You".
- * Prefers the first name from `full_name`, else email local-part.
+ * Prefers the first name from the typed `full_name`, else email local-part.
+ * Never returns a raw email or phone number.
  */
 export function settleSharePersonName(person: {
   full_name?: string | null;
   email?: string | null;
+  phone?: string | null;
 }): string {
   const full = (person.full_name ?? "").trim();
   if (full && full.toLowerCase() !== "you") {
@@ -44,16 +46,18 @@ export function settleSharePersonName(person: {
     const local = email.split("@")[0]?.trim();
     if (local) return local;
   }
+  // phone is intentionally ignored — never surface raw phone in settle chrome
   return "Someone";
 }
 
 /**
  * Settlement modal person label: full display name exactly as entered,
- * else email local-part. Never returns "You" or a raw email address.
+ * else email local-part. Never returns "You", a raw email, or a phone number.
  */
 export function settleModalPersonName(person: {
   full_name?: string | null;
   email?: string | null;
+  phone?: string | null;
 }): string {
   const full = (person.full_name ?? "").trim();
   if (full && full.toLowerCase() !== "you") return full;
@@ -62,6 +66,7 @@ export function settleModalPersonName(person: {
     const local = email.split("@")[0]?.trim();
     if (local) return local;
   }
+  // phone is intentionally ignored — never surface raw phone in settle chrome
   return "Someone";
 }
 
@@ -156,20 +161,44 @@ export function parseShareAmountInput(text: string): number | null {
 }
 
 /**
- * Per-person remind copy (second person). Link as its own paragraph after a blank line.
- * Honest about the group link destination — no payment / "Pay to" wording.
+ * Per-person remind copy (second person).
+ *
+ * - Active app members: keep “mark it settled” + plain group link (opens after sign-in).
+ * - Pending invite / no account: no “mark it settled”, no plain group link (sign-up wall).
+ *   Only when a real invite link exists that opens the group after joining, append it.
  */
 export function buildSettleRemindMessage(input: {
   counterpartyName: string;
   amount: number;
   currency: string;
   groupName: string;
-  settleLink: string;
+  /** Group deep link for active app members only. */
+  settleLink?: string | null;
+  /**
+   * Invite link that opens the group after joining. Used only for off-app
+   * counterparties (pending invite / no account). Never a plain group URL.
+   */
+  inviteLink?: string | null;
+  /**
+   * `app_member` (default): current copy + group link.
+   * `off_app`: soft copy; invite link only when provided.
+   */
+  audience?: "app_member" | "off_app";
 }): string {
   const first = settleFirstName(input.counterpartyName);
   const group = input.groupName.trim() || "the group";
   const amount = formatShareCurrency(input.amount, input.currency);
-  const link = input.settleLink.trim();
+  const audience = input.audience ?? "app_member";
+
+  if (audience === "off_app") {
+    const body =
+      `Hi ${first}, quick one from ${group}: you owe me ${amount}. No rush, just let me know once you've paid.`;
+    const invite = (input.inviteLink ?? "").trim();
+    if (!invite) return body;
+    return `${body}\n\nSee the group on SharedMoney:\n${invite}`;
+  }
+
+  const link = (input.settleLink ?? "").trim();
   const body =
     `Hi ${first}, quick one from ${group}: you owe me ${amount}. No rush. Once you've paid, mark it settled in the group:`;
   return link ? `${body}\n\n${link}` : body;
@@ -228,6 +257,7 @@ export function buildSettleShareMessage(input: {
       currency: line.currency,
       groupName: line.groupName?.trim() || "the group",
       settleLink: settleLink || paymentUrl,
+      audience: "app_member",
     });
   }
 

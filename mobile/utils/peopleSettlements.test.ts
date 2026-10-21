@@ -10,6 +10,7 @@ import {
   personSettleNotes,
   personSettlePlan,
   personSettlementHeadline,
+  canRecordSettlementLine,
   settlementCreateFromLine,
   settlementSummary,
   type GroupSettlementContext,
@@ -277,6 +278,30 @@ Deno.test("settlementCreateFromLine skips a row without participant ids", () => 
   ], YOU);
   assertEquals(settlementCreateFromLine(person.lines[0]), null);
   assertEquals(personSettlePlan(person).canSettleAll, false);
+});
+
+Deno.test("canRecordSettlementLine works for person without an account (participant ids only)", () => {
+  const [person] = clubPersonSettlements([
+    group("apt", "Apartment", [
+      balance(YOU, 3000, {
+        participant_id: "p-you",
+        full_name: "You",
+      }),
+      balance("", -3000, {
+        participant_id: "p-sheeba",
+        user_id: "",
+        full_name: "Sheeba",
+      }),
+    ]),
+  ], YOU);
+  const line = person.lines[0];
+  assertEquals(canRecordSettlementLine(line), true);
+  const created = settlementCreateFromLine(line);
+  assertEquals(created?.from_participant_id, "p-sheeba");
+  assertEquals(created?.to_participant_id, "p-you");
+  // One-sided: create input is ready immediately — no pending confirmation field.
+  assertEquals("status" in (created ?? {}), false);
+  assertEquals("pending" in (created ?? {}), false);
 });
 
 Deno.test("groupContextsFromBalances uses each group's own unify setting", () => {

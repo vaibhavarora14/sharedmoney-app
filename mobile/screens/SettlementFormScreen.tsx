@@ -31,6 +31,10 @@ import {
   settleModalPersonName,
   settleModalYouLabel,
 } from "../utils/settleShareMessage";
+import {
+  settlementCounterpartyDisplayName,
+  type SettlementPresence,
+} from "../utils/settlementPresence";
 
 interface SettlementFormScreenProps {
   visible: boolean;
@@ -75,6 +79,11 @@ interface SettlementFormScreenProps {
   remindShareAnotherWay?: boolean;
   onRemindPress?: () => void;
   onRemindShareAnotherWay?: () => void;
+  /**
+   * @deprecated Presence chrome lives on the group settle row only — the modal
+   * header is a single sentence with no suffix. Kept optional for call-site compat.
+   */
+  counterpartyPresence?: SettlementPresence;
 }
 
 function toDateInputValue(value?: string | null): string {
@@ -620,7 +629,11 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                       toName = settleModalYouLabel("to");
                     }
                   } else if (balance) {
-                    const counterparty = settleModalPersonName(balance);
+                    // Prefer participants list (typed name for people without accounts).
+                    const counterparty = settlementCounterpartyDisplayName(
+                      balance,
+                      participants,
+                    );
                     if (isPaying) {
                       fromName = settleModalYouLabel("from");
                       toName = counterparty;
@@ -644,7 +657,7 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                   const fromIsYou = fromName === settleModalYouLabel("from");
                   const toIsYou = toName === settleModalYouLabel("to");
 
-                  // Centred cluster: name may shrink; "paid"/you never grow to edges.
+                  // Single sentence — no presence suffix (that lives on the group row).
                   return (
                     <View
                       style={styles.paidHeaderRow}

@@ -22,7 +22,7 @@ function components(preferences = {}, theme = { colors: {} }, dimensions = { wid
       compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true },
     }).outputText;
     const localRequire = (id) => {
-      if (id === "react") return { ...React, useMemo: fn => fn(), useState: initial => {
+      if (id === "react") return { ...React, useMemo: fn => fn(), useEffect: () => {}, useState: initial => {
         if (!initialized) { state = typeof initial === "function" ? initial() : initial; initialized = true; }
         return [state, () => {}];
       } };
@@ -98,7 +98,19 @@ test('balance initials and small polarity text meet normal-text contrast in both
 });
 
 function settlementRows(tree) {
-  return nodes(tree).filter(node => typeof node.props?.testID === "string" && node.props.testID.startsWith("settlement-row-"));
+  // Row pressables use `settlement-row-<id>-<currency>`; ignore nested label ids.
+  const nested = new Set([
+    "settlement-row-name",
+    "settlement-row-amount",
+    "settlement-row-presence",
+    "settlement-row-line1",
+  ]);
+  return nodes(tree).filter((node) => {
+    const id = node.props?.testID;
+    return typeof id === "string"
+      && id.startsWith("settlement-row-")
+      && !nested.has(id);
+  });
 }
 
 test("dashboard creditor sees Alice owes you, not the viewer's own net row", () => {
@@ -264,6 +276,139 @@ test("solo group does not gain settlement chrome", () => {
   assert.equal(nodes(tree).find(n => n.props.testID === "group-settlement-rows"), undefined);
 });
 
+test("one active member + person without account shows two-line settle row", () => {
+  const sheeba = {
+    participant_id: "p_sheeba",
+    user_id: "",
+    full_name: "Sheeba",
+    amount: -3000,
+    currency: "INR",
+  };
+  const tree = dashboard(
+    [balance("me", 3000, "INR"), sheeba],
+    {
+      activeMemberCount: 2,
+      hasNonZeroBalance: true,
+      participants: [
+        { id: "p_me", user_id: "me", type: "member", full_name: "You" },
+        { id: "p_sheeba", user_id: null, type: "member", full_name: "Sheeba" },
+      ],
+      defaultCurrency: "INR",
+      onSettlePress: () => {},
+    },
+  );
+  assert.ok(nodes(tree).find(n => n.props.testID === "group-settlement-rows"));
+  const nameNode = nodes(tree).find(n => n.props?.testID === "settlement-row-name");
+  assert.equal(text(nameNode), "Sheeba");
+  assert.equal(flatten(nameNode.props.style).flexShrink, 1);
+  const line1 = nodes(tree).find(n => n.props?.testID === "settlement-row-line1");
+  assert.match(text(line1), /Sheeba owes you/);
+  assert.doesNotMatch(text(line1), /Not on SharedMoney|·/);
+  const caption = nodes(tree).find(n => n.props?.testID === "settlement-row-presence");
+  assert.equal(text(caption), "Not on SharedMoney");
+  assert.equal(caption.props.style.fontSize, 13);
+  const amountNode = nodes(tree).find(n => n.props?.testID === "settlement-row-amount");
+  assert.ok(amountNode);
+  assert.equal(flatten(amountNode.props.style).flexShrink, 0);
+  const details = nodes(tree).find(n => flatten(n.props?.style)?.alignItems === "flex-start"
+    && nodes(n).some(c => c.props?.testID === "settlement-row-amount"));
+  assert.ok(details, "amount column top-aligns with line 1");
+  const labelColumn = nodes(tree).find(n => n.props?.testID === "settlement-label-column");
+  assert.equal(flatten(labelColumn.props.style).flex, 1);
+  assert.equal(flatten(labelColumn.props.style).minWidth, 0);
+});
+
+test("no-account settle row resolves typed name from participants when balance full_name is empty", () => {
+  const sheeba = {
+    participant_id: "p_sheeba",
+    user_id: "",
+    full_name: null,
+    email: "sheeba@example.com",
+    amount: -3000,
+    currency: "INR",
+  };
+  const tree = dashboard(
+    [balance("me", 3000, "INR"), sheeba],
+    {
+      activeMemberCount: 2,
+      hasNonZeroBalance: true,
+      participants: [
+        { id: "p_me", user_id: "me", type: "member", full_name: "You" },
+        {
+          id: "p_sheeba",
+          user_id: null,
+          type: "member",
+          full_name: "Sheeba",
+          email: "sheeba@example.com",
+          phone: "+919876543210",
+        },
+      ],
+      defaultCurrency: "INR",
+      onSettlePress: () => {},
+    },
+  );
+  const nameNode = nodes(tree).find(n => n.props?.testID === "settlement-row-name");
+  assert.equal(text(nameNode), "Sheeba");
+  assert.doesNotMatch(text(tree), /sheeba@example\.com|\+919876543210/);
+  assert.equal(text(nodes(tree).find(n => n.props?.testID === "settlement-row-presence")), "Not on SharedMoney");
+});
+
+test("pending-invite settle row shows Invited caption on line 2", () => {
+  const invited = {
+    participant_id: "p_inv",
+    user_id: "",
+    full_name: "Riya",
+    amount: -20,
+    currency: "USD",
+  };
+  const tree = dashboard(
+    [balance("me", 20), invited],
+    {
+      activeMemberCount: 2,
+      hasNonZeroBalance: true,
+      participants: [
+        { id: "p_me", user_id: "me", type: "member", full_name: "You" },
+        { id: "p_inv", user_id: null, type: "invited", full_name: "Riya" },
+      ],
+      onSettlePress: () => {},
+    },
+  );
+  assert.match(text(nodes(tree).find(n => n.props?.testID === "settlement-row-line1")), /Riya owes you/);
+  assert.equal(text(nodes(tree).find(n => n.props?.testID === "settlement-row-presence")), "Invited");
+});
+
+test("solo count with non-zero balance still shows settle chrome", () => {
+  const tree = dashboard(
+    [balance("me", 50), balance("Alice", -50)],
+    { activeMemberCount: 1, hasNonZeroBalance: true },
+  );
+  assert.ok(nodes(tree).find(n => n.props.testID === "group-settlement-rows"));
+});
+
+test("former counterparty keeps Former styling on settle row", () => {
+  const former = {
+    participant_id: "p_former",
+    user_id: "u_former",
+    full_name: "Alex",
+    amount: -40,
+    currency: "USD",
+  };
+  const tree = dashboard(
+    [balance("me", 40), former],
+    {
+      activeMemberCount: 1,
+      hasNonZeroBalance: true,
+      participants: [
+        { id: "p_me", user_id: "me", type: "member", full_name: "You" },
+        { id: "p_former", user_id: "u_former", type: "former", full_name: "Alex" },
+      ],
+      onSettlePress: () => {},
+    },
+  );
+  assert.match(text(tree), /Former/);
+  assert.match(text(tree), /Alex/);
+});
+
 test("dashboard reserves settlement and both stat cards while balances load", () => {
   for (const loading of [{ loading: true }, { statsLoading: true }]) {
     const tree = dashboard([balance("me", 50), balance("Alice", -50)], loading);
@@ -417,7 +562,10 @@ test("App preserves unknown membership and GroupDetails resets predictions per g
   assert.match(app, /const groupToDisplay: GroupWithMembers = selectedGroupDetails \|\| selectedGroup;/);
   const screen = readFileSync(path.join(__dirname, "../screens/GroupDetailsScreen.tsx"), "utf8");
   assert.match(screen, /<GroupDashboard\s+key=\{group.id\}/);
-  assert.match(screen, /membersKnown=\{group.members !== undefined\}/);
+  assert.match(screen, /membersKnown=\{/);
+  assert.match(screen, /group\.members !== undefined/);
+  assert.match(screen, /hasNonZeroBalance=\{hasNonZeroBalance\}/);
+  assert.match(screen, /participants=\{participants\}/);
   assert.match(screen, /unifyBalances=\{group.unify_balances\}/);
 });
 
@@ -486,7 +634,7 @@ test("dashboard accessible settlement label includes counterparty, direction, an
   assert.equal(settlementRows(eur)[0].props.accessibilityLabel, "You owe Cara, -€30.00");
 });
 
-test("dashboard settlement row layout reflows without one-line truncation or font caps", () => {
+test("dashboard settlement row layout keeps amount out of the label column", () => {
   const tree = dashboard([balance("me", 50), balance("Alice", -50)], { onSettlePress: () => {} });
   const row = settlementRows(tree)[0];
   const rowStyle = flatten(row.props.style);
@@ -496,19 +644,26 @@ test("dashboard settlement row layout reflows without one-line truncation or fon
   const contentStyle = flatten(content.props.style);
   assert.equal(contentStyle.height, undefined);
   assert.ok((contentStyle.minHeight ?? 0) >= 44);
-  const texts = nodes(row).filter(node => node.type === "Text");
-  const direction = texts.find(node => /Alice owes you/.test(text(node)));
-  const amount = texts.find(node => /\+\$50\.00/.test(text(node)));
-  assert.ok(direction);
+  // App members: one line — name shrinks, "owes you" + amount do not; no caption.
+  assert.match(text(row), /Alice owes you/);
+  assert.equal(nodes(row).find(n => n.props?.testID === "settlement-row-presence"), undefined);
+  const name = nodes(row).find(n => n.props?.testID === "settlement-row-name");
+  const amount = nodes(row).find(n => n.props?.testID === "settlement-row-amount");
+  const labelColumn = nodes(row).find(n => n.props?.testID === "settlement-label-column");
+  const line1 = nodes(row).find(n => n.props?.testID === "settlement-row-line1");
+  assert.ok(name);
   assert.ok(amount);
-  assert.equal(direction.props.numberOfLines, undefined);
-  assert.equal(amount.props.numberOfLines, undefined);
-  assert.notEqual(direction.props.allowFontScaling, false);
+  assert.ok(labelColumn);
+  assert.ok(line1);
+  assert.equal(text(name), "Alice");
+  assert.match(text(line1), /Alice owes you/);
+  assert.equal(name.props.numberOfLines, 1);
+  assert.equal(flatten(name.props.style).flexShrink, 1);
+  assert.equal(flatten(amount.props.style).flexShrink, 0);
+  assert.equal(flatten(labelColumn.props.style).flex, 1);
+  assert.equal(flatten(labelColumn.props.style).minWidth, 0);
+  assert.notEqual(name.props.allowFontScaling, false);
   assert.notEqual(amount.props.allowFontScaling, false);
-  assert.equal(direction.props.maxFontSizeMultiplier, undefined);
-  assert.equal(amount.props.maxFontSizeMultiplier, undefined);
-  assert.equal(flatten(amount.props.style).flexShrink, 1);
-  assert.equal(flatten(direction.props.style).flexShrink, 1);
 });
 
 test("settlement chevron stays outside the reflowing text and initials grow with text", () => {

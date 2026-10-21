@@ -1,6 +1,7 @@
 import { assertEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
 import {
   countActiveMembers,
+  countNonFormerParticipants,
   getTransactionsEmptyCopy,
   shouldPreferAddPeopleFab,
 } from "./transactionsEmptyCopy.ts";
@@ -14,6 +15,19 @@ Deno.test("countActiveMembers counts only active (and missing status)", () => {
       { status: "left" },
       { status: "invited" },
       { status: undefined },
+      null,
+    ]),
+    2,
+  );
+});
+
+Deno.test("countNonFormerParticipants includes no-account and pending invites", () => {
+  assertEquals(countNonFormerParticipants(undefined), 0);
+  assertEquals(
+    countNonFormerParticipants([
+      { type: "member" },
+      { type: "invited" },
+      { type: "former" },
       null,
     ]),
     2,

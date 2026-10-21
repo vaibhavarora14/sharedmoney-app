@@ -24,6 +24,22 @@ export function countActiveMembers(
 }
 
 /**
+ * Count non-former participants: members with accounts, people without accounts,
+ * and pending invites. Excludes former / left people.
+ * Prefer this over {@link countActiveMembers} for settle-slot visibility —
+ * `group.members` only mirrors `group_members` and omits account-less people.
+ */
+export function countNonFormerParticipants(
+  participants:
+    | Array<{ type?: string | null } | null | undefined>
+    | null
+    | undefined,
+): number {
+  if (!participants?.length) return 0;
+  return participants.filter((p) => p != null && p.type !== "former").length;
+}
+
+/**
  * Empty-state copy + CTAs for the Transactions ledger.
  * Solo groups (1 active member) prioritize inviting people before expenses.
  */
