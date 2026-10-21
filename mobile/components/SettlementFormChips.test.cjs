@@ -330,6 +330,16 @@ test("obligation header uses email local-part and grouped whole-amount prefill",
 
   const amountInput = byId(session.tree, "settlement-amount-input");
   assert.equal(amountInput.props.value, "30,000");
+  // Header amount line uses share formatter (no trailing .00)
+  assert.equal(text(byId(session.tree, "settlement-header-amount")), "₹30,000");
+
+  const from = byId(session.tree, "settlement-paid-from");
+  const to = byId(session.tree, "settlement-paid-to");
+  assert.equal(from.props.style.flexGrow, 0);
+  assert.equal(from.props.style.flexShrink, 1);
+  assert.equal(to.props.style.flexGrow, 0);
+  assert.equal(to.props.style.flexShrink, 0);
+  assert.equal(byId(session.tree, "settlement-paid-header").props.style.justifyContent, "center");
 
   await byId(session.tree, "settlement-save-button").props.onPress();
   assert.equal(saveCalls.length, 1);
@@ -364,7 +374,12 @@ test("you-owe header capitalizes You at sentence start and keeps full name + dec
 
   assert.equal(byId(tree, "settlement-paid-from").props.children, "You");
   assert.equal(byId(tree, "settlement-paid-to").props.children, "Bob Smith");
+  assert.equal(byId(tree, "settlement-paid-from").props.style.flexGrow, 0);
+  assert.equal(byId(tree, "settlement-paid-from").props.style.flexShrink, 0);
+  assert.equal(byId(tree, "settlement-paid-to").props.style.flexGrow, 0);
+  assert.equal(byId(tree, "settlement-paid-to").props.style.flexShrink, 1);
   assert.equal(byId(tree, "settlement-amount-input").props.value, "431.20");
+  assert.equal(text(byId(tree, "settlement-header-amount")), "₹431.20");
 });
 
 test("amount blur reformats en-IN grouping; save strips commas", async () => {
@@ -446,9 +461,14 @@ test("long counterparty name ellipsizes; paid you stays visible", () => {
   assert.equal(from.props.children, "Christopher Fernandes");
   assert.equal(from.props.numberOfLines, 1);
   assert.equal(from.props.ellipsizeMode, "tail");
+  assert.equal(from.props.style.flexGrow, 0);
+  assert.equal(from.props.style.flexShrink, 1);
   assert.equal(to.props.children, "you");
   assert.equal(to.props.style.flexShrink, 0);
+  assert.equal(to.props.style.flexGrow, 0);
+  assert.equal(byId(tree, "settlement-paid-header").props.style.justifyContent, "center");
   assert.doesNotMatch(text(tree), /chris@test\.com/);
+  assert.equal(text(byId(tree, "settlement-header-amount")), "₹500");
 });
 
 test("owes-you modal shows secondary Remind under primary Record payment", () => {

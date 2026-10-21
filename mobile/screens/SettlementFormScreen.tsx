@@ -15,7 +15,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WEB_MAX_WIDTH } from "../constants/layout";
 import { Balance, GroupMember, Participant, Settlement } from "../types";
 import {
-    formatCurrency,
     getCurrencySymbol,
     getDefaultCurrency,
 } from "../utils/currency";
@@ -27,6 +26,7 @@ import {
 } from "../utils/settleCopy";
 import {
   formatShareAmountInput,
+  formatShareCurrency,
   parseShareAmountInput,
   settleModalPersonName,
   settleModalYouLabel,
@@ -644,6 +644,7 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                   const fromIsYou = fromName === settleModalYouLabel("from");
                   const toIsYou = toName === settleModalYouLabel("to");
 
+                  // Centred cluster: name may shrink; "paid"/you never grow to edges.
                   return (
                     <View
                       style={styles.paidHeaderRow}
@@ -657,9 +658,8 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                           color: theme.colors.onSurface,
                           fontWeight: "bold",
                           flexShrink: fromIsYou ? 0 : 1,
+                          flexGrow: 0,
                           minWidth: fromIsYou ? undefined : 0,
-                          flexGrow: fromIsYou ? 0 : 1,
-                          flexBasis: fromIsYou ? undefined : 0,
                         }}
                         testID="settlement-paid-from"
                       >
@@ -671,6 +671,7 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                           color: theme.colors.onSurfaceVariant,
                           marginHorizontal: 8,
                           flexShrink: 0,
+                          flexGrow: 0,
                         }}
                       >
                         paid
@@ -683,9 +684,8 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                           color: theme.colors.onSurface,
                           fontWeight: "bold",
                           flexShrink: toIsYou ? 0 : 1,
+                          flexGrow: 0,
                           minWidth: toIsYou ? undefined : 0,
-                          flexGrow: toIsYou ? 0 : 1,
-                          flexBasis: toIsYou ? undefined : 0,
                         }}
                         testID="settlement-paid-to"
                       >
@@ -703,8 +703,9 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                     styles.balanceAmount,
                     { color: theme.colors.onSurfaceVariant, marginTop: 8 },
                   ]}
+                  testID="settlement-header-amount"
                 >
-                  {formatCurrency(
+                  {formatShareCurrency(
                     parseShareAmountInput(amount) ||
                       initialAmount ||
                       settlement?.amount ||
