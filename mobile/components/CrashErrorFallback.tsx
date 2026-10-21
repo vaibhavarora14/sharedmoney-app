@@ -178,18 +178,20 @@ export function CrashErrorFallback({
           </Pressable>
         ) : null}
 
-        <Button
-          mode="contained"
-          onPress={handleReload}
-          disabled={reloading}
-          loading={reloading}
-          style={styles.reload}
-          contentStyle={styles.reloadContent}
-          testID="crash-reload"
-          accessibilityLabel={reloading ? "Reloading" : "Reload"}
-        >
-          Reload
-        </Button>
+        <View style={styles.reloadWrap}>
+          <Button
+            mode="contained"
+            onPress={handleReload}
+            disabled={reloading}
+            loading={reloading}
+            style={styles.reload}
+            contentStyle={styles.reloadContent}
+            testID="crash-reload"
+            accessibilityLabel={reloading ? "Reloading" : "Reload"}
+          >
+            Reload
+          </Button>
+        </View>
 
         {supportReferenceId ? (
           <Pressable
@@ -275,10 +277,13 @@ const styles = StyleSheet.create({
     fontSize: 15,
     letterSpacing: 0.5,
   },
-  reload: {
-    marginTop: 12,
+  reloadWrap: {
     alignSelf: "stretch",
-    marginHorizontal: 0,
+    width: "100%",
+    marginTop: 12,
+  },
+  reload: {
+    width: "100%",
     borderRadius: 24,
   },
   reloadContent: {
