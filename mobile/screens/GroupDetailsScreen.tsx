@@ -1196,11 +1196,42 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
 
   const getRemindPresentation = useCallback((balance: Balance) => {
     const channel = resolveRemindChannelForBalance(balance);
+    const firstName = settleSharePersonName({
+      full_name: balance.full_name,
+      email: balance.email,
+    });
     return {
-      label: settleRemindLabel(channel),
+      label: settleRemindLabel(channel, firstName),
       shareAnotherWay: channel === "whatsapp",
     };
   }, [resolveRemindChannelForBalance]);
+
+  const settlementRemindProps = useMemo(() => {
+    if (
+      editingSettlement
+      || !settlingBalance
+      || !(settlingBalance.amount > 0)
+      || !isActiveMember
+      || balancesError
+    ) {
+      return {};
+    }
+    const presentation = getRemindPresentation(settlingBalance);
+    return {
+      remindLabel: presentation.label,
+      remindShareAnotherWay: presentation.shareAnotherWay,
+      onRemindPress: () => handleRemindBalance(settlingBalance),
+      onRemindShareAnotherWay: presentation.shareAnotherWay
+        ? () => handleRemindShareAnotherWay(settlingBalance)
+        : undefined,
+    };
+  }, [
+    editingSettlement,
+    settlingBalance,
+    isActiveMember,
+    balancesError,
+    getRemindPresentation,
+  ]);
 
   const handleShareSummaryChange = useCallback((payload: GroupShareSummaryPayload | null) => {
     setShareSummary(payload);
@@ -1776,9 +1807,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                 unifyBalances={group.unify_balances}
                 balanceError={!!balancesError}
                 onSettlePress={isActiveMember && !balancesError ? handleSettleUp : undefined}
-                onRemindPress={isActiveMember && !balancesError ? handleRemindBalance : undefined}
-                onRemindShareAnotherWay={isActiveMember && !balancesError ? handleRemindShareAnotherWay : undefined}
-                getRemindPresentation={isActiveMember && !balancesError ? getRemindPresentation : undefined}
                 onShareSummaryChange={isActiveMember && !balancesError ? handleShareSummaryChange : undefined}
                 onMyCostsPress={() => handleStatNavigation("my-costs")}
                 onTotalCostsPress={() => handleStatNavigation("total-costs")}
@@ -2139,7 +2167,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
         onBlock={handleBlockUser}
       />
 
-      {/* Settlement form modal */}
+      {/* Settlement form modal — Remind lives here for owes-you creates only */}
       <SettlementFormScreen
         visible={showSettlementForm}
         balance={settlingBalance}
@@ -2149,6 +2177,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
         currentUserId={session?.user?.id || ""}
         groupId={group.id}
         defaultCurrency={getDefaultCurrency()}
+        {...settlementRemindProps}
         onSave={async (data) => {
           if (editingSettlement) {
             await handleSettlementUpdate({

@@ -94,6 +94,18 @@ export async function resolveSettleRemindChannel(
   }
 }
 
-export function settleRemindLabel(channel: SettleRemindChannel): string {
-  return channel === "whatsapp" ? "Remind on WhatsApp" : "Remind";
+/**
+ * Secondary modal CTA label. WhatsApp when direct; otherwise "Remind {firstName}".
+ */
+export function settleRemindLabel(
+  channel: SettleRemindChannel,
+  firstName?: string | null,
+): string {
+  if (channel === "whatsapp") return "Remind on WhatsApp";
+  const trimmed = (firstName ?? "").trim();
+  if (trimmed) {
+    const first = trimmed.split(/\s+/)[0] || trimmed;
+    return `Remind ${first}`;
+  }
+  return "Remind";
 }

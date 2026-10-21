@@ -20,7 +20,10 @@ import { showErrorAlert } from "../utils/errorHandling";
 import { createPreviewRateBook } from "../utils/previewRates";
 import { getGroupLinkUrl } from "../utils/inviteLinks";
 import { openSettleRemind, settleRemindLabel } from "../utils/openSettleRemind";
-import { buildSettleRemindMessage } from "../utils/settleShareMessage";
+import {
+  buildSettleRemindMessage,
+  settleFirstName,
+} from "../utils/settleShareMessage";
 import {
   clubPersonSettlements,
   membersFromSettlementLine,
@@ -136,30 +139,24 @@ export const AllSettlementsScreen: React.FC<AllSettlementsScreenProps> = ({
     if (group) onOpenGroup?.(group);
   };
 
-  const buildRemindMessageForPerson = (person: PersonSettlementView) => {
-    const receiveLines = person.lines.filter((line) => line.direction === "receive");
-    const primary = receiveLines[0] || person.lines[0];
-    if (!primary) return "";
-    const amount = person.headline.unified && Math.abs(person.headline.unified.amount) >= 0.005
-      ? Math.abs(person.headline.unified.amount)
-      : primary.amount;
-    const currency = person.headline.unified?.currency || primary.currency;
-    const groupName = receiveLines.length === 1
-      ? primary.groupName
-      : "SharedMoney";
+  const buildRemindMessageForLine = (line: GroupSettlementLine) => {
+    if (line.direction !== "receive") return "";
     return buildSettleRemindMessage({
-      counterpartyName: person.displayName,
-      amount,
-      currency,
-      groupName,
-      settleLink: getGroupLinkUrl(primary.groupId),
+      counterpartyName: line.other.full_name?.trim()
+        || line.other.email?.split("@")[0]?.trim()
+        || "Someone",
+      amount: Math.abs(line.amount),
+      currency: line.currency,
+      groupName: line.groupName,
+      settleLink: getGroupLinkUrl(line.groupId),
     });
   };
 
-  const handleRemindPerson = (person: PersonSettlementView) => {
-    if (person.headline.verb !== "receive") return;
-    const message = buildRemindMessageForPerson(person);
+  const handleRemindLine = (line: GroupSettlementLine) => {
+    if (line.direction !== "receive") return;
+    const message = buildRemindMessageForLine(line);
     // People settlements do not carry phone numbers today — share sheet only.
+    // Stay in SettlementFormScreen after the share sheet closes.
     void openSettleRemind({ message, forceShare: true }).catch((error) => {
       showErrorAlert(error, signOut, "Could not share settle message");
     });
@@ -261,11 +258,6 @@ export const AllSettlementsScreen: React.FC<AllSettlementsScreenProps> = ({
                   }
                   setSelectedLine(line);
                 }}
-                onRemindPerson={handleRemindPerson}
-                getRemindPresentation={() => ({
-                  label: settleRemindLabel("share"),
-                  shareAnotherWay: false,
-                })}
               />
             </>
           )}
@@ -300,6 +292,20 @@ export const AllSettlementsScreen: React.FC<AllSettlementsScreenProps> = ({
           }
           initialAmount={selectedLine.amount}
           initialCurrency={selectedLine.currency}
+          {...(selectedLine.direction === "receive"
+            ? {
+              remindLabel: settleRemindLabel(
+                "share",
+                settleFirstName(
+                  selectedLine.other.full_name
+                    || selectedLine.other.email?.split("@")[0]
+                    || "Someone",
+                ),
+              ),
+              remindShareAnotherWay: false,
+              onRemindPress: () => handleRemindLine(selectedLine),
+            }
+            : {})}
           onSave={async (data) => {
             await createSettlement.mutate(data);
             setSelectedLine(null);

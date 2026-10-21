@@ -27,13 +27,6 @@ interface PeopleSettlementsListProps {
   onConfirmPerson: () => void;
   onCancelPerson: () => void;
   onSettleLine?: (line: GroupSettlementLine) => void;
-  /** Remind only when this person owes the viewer (`headline.verb === "receive"`). */
-  onRemindPerson?: (person: PersonSettlementView) => void;
-  onRemindShareAnotherWay?: (person: PersonSettlementView) => void;
-  getRemindPresentation?: (person: PersonSettlementView) => {
-    label: string;
-    shareAnotherWay: boolean;
-  };
 }
 
 function initials(name: string): string {
@@ -62,9 +55,6 @@ export const PeopleSettlementsList: React.FC<PeopleSettlementsListProps> = ({
   onConfirmPerson,
   onCancelPerson,
   onSettleLine,
-  onRemindPerson,
-  onRemindShareAnotherWay,
-  getRemindPresentation,
 }) => {
   const theme = useTheme();
 
@@ -235,52 +225,6 @@ export const PeopleSettlementsList: React.FC<PeopleSettlementsListProps> = ({
                 </Text>
               </Pressable>
             )}
-
-            {person.headline.verb === "receive" && onRemindPerson ? (() => {
-              const presentation = getRemindPresentation?.(person) || {
-                label: "Remind",
-                shareAnotherWay: false,
-              };
-              const showAnotherWay = presentation.shareAnotherWay
-                && !!onRemindShareAnotherWay;
-              return (
-                <>
-                  <Button
-                    mode="outlined"
-                    icon="share-variant"
-                    testID={`remind-settle-${person.key}`}
-                    accessibilityLabel={presentation.label}
-                    accessibilityHint={
-                      showAnotherWay
-                        ? "Long press to share another way"
-                        : undefined
-                    }
-                    onPress={() => onRemindPerson(person)}
-                    onLongPress={
-                      showAnotherWay
-                        ? () => onRemindShareAnotherWay?.(person)
-                        : undefined
-                    }
-                    delayLongPress={350}
-                    disabled={person.lines.length === 0}
-                    style={styles.shareInChat}
-                  >
-                    {presentation.label}
-                  </Button>
-                  {showAnotherWay ? (
-                    <Button
-                      mode="text"
-                      testID={`remind-share-another-way-${person.key}`}
-                      accessibilityLabel="Share another way"
-                      onPress={() => onRemindShareAnotherWay?.(person)}
-                      compact
-                    >
-                      Share another way
-                    </Button>
-                  ) : null}
-                </>
-              );
-            })() : null}
           </Surface>
         );
       })}
@@ -344,8 +288,5 @@ const styles = StyleSheet.create({
   confirm: {
     marginTop: 12,
     gap: 8,
-  },
-  shareInChat: {
-    marginTop: 12,
   },
 });

@@ -45,7 +45,9 @@ Deno.test("resolveSettleRemindChannel uses whatsapp when canOpenURL is true", as
   });
 });
 
-Deno.test("settleRemindLabel matches channel", () => {
+Deno.test("settleRemindLabel matches channel and first name", () => {
   assertEquals(settleRemindLabel("whatsapp"), "Remind on WhatsApp");
+  assertEquals(settleRemindLabel("whatsapp", "Maya"), "Remind on WhatsApp");
+  assertEquals(settleRemindLabel("share", "Maya Kapoor"), "Remind Maya");
   assertEquals(settleRemindLabel("share"), "Remind");
 });

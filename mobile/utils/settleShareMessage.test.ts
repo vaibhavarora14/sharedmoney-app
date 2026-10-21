@@ -52,7 +52,7 @@ Deno.test("buildSettleRemindMessage marks settled in the group with trimmed amou
       groupName: "Apartment 4B",
       settleLink: "https://sharedmoney.app/app/groups/abc",
     }),
-    "Hi Maya, quick one from Apartment 4B: you owe me ₹431.20. No rush. Once you've paid, mark it settled in the group:\nhttps://sharedmoney.app/app/groups/abc",
+    "Hi Maya, quick one from Apartment 4B: you owe me ₹431.20. No rush. Once you've paid, mark it settled in the group:\n\nhttps://sharedmoney.app/app/groups/abc",
   );
 });
 
@@ -101,7 +101,7 @@ Deno.test("buildSettleSummaryMessage lists pays lines then group link", () => {
       ],
       groupLink: "https://sharedmoney.app/app/groups/g1",
     }),
-    "Summer Vacation 2024, settle-up:\ndiana pays alice ₹30,000\nVaibhav pays alice ₹5,625\nVaibhav pays bob ₹5,625\nhttps://sharedmoney.app/app/groups/g1",
+    "Summer Vacation 2024, settle-up:\ndiana pays alice ₹30,000\nVaibhav pays alice ₹5,625\nVaibhav pays bob ₹5,625\n\nhttps://sharedmoney.app/app/groups/g1",
   );
 });
 
@@ -117,7 +117,7 @@ Deno.test("buildSettleSummaryMessage for seed Summer Vacation nets", () => {
       groupLink:
         "https://sharedmoney.app/app/groups/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
     }),
-    "Summer Vacation 2024, settle-up:\nDiana pays Alice ₹39,375\nBob pays Alice ₹19,375\nCharlie pays Alice ₹1,875\nhttps://sharedmoney.app/app/groups/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+    "Summer Vacation 2024, settle-up:\nDiana pays Alice ₹39,375\nBob pays Alice ₹19,375\nCharlie pays Alice ₹1,875\n\nhttps://sharedmoney.app/app/groups/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
   );
 });
 
@@ -172,7 +172,7 @@ Deno.test("legacy buildSettleShareMessage maps single receive to remind copy", (
       }],
       settleLink: "https://sharedmoney.app/app/groups/g1",
     }),
-    "Hi Maya, quick one from Goa trip: you owe me ₹500. No rush. Once you've paid, mark it settled in the group:\nhttps://sharedmoney.app/app/groups/g1",
+    "Hi Maya, quick one from Goa trip: you owe me ₹500. No rush. Once you've paid, mark it settled in the group:\n\nhttps://sharedmoney.app/app/groups/g1",
   );
 });
 

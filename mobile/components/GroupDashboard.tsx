@@ -1,6 +1,6 @@
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import React, { useEffect, useMemo, useState } from "react";
-import { Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
+import { StyleSheet, useWindowDimensions, View } from "react-native";
 import {
   Surface,
   Text,
@@ -56,18 +56,6 @@ interface GroupDashboardProps {
   defaultCurrency?: string;
   /** Opens SettlementFormScreen for a viewer-involved settlement edge. Does not mutate data. */
   onSettlePress?: (balance: Balance) => void;
-  /**
-   * Remind only when the counterparty owes the viewer (amount > 0).
-   * Primary tap — WhatsApp when available, else share sheet.
-   */
-  onRemindPress?: (balance: Balance) => void;
-  /** Long-press / overflow: open the OS share sheet (only when WhatsApp is direct). */
-  onRemindShareAnotherWay?: (balance: Balance) => void;
-  /** Label + whether to show the "Share another way" overflow. */
-  getRemindPresentation?: (balance: Balance) => {
-    label: string;
-    shareAnotherWay: boolean;
-  };
   /** Reports whether a non-empty group settle-up summary can be shared. */
   onShareSummaryChange?: (payload: GroupShareSummaryPayload | null) => void;
   onMyCostsPress?: () => void;
@@ -113,9 +101,6 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
   balanceError = false,
   defaultCurrency = getDefaultCurrency(),
   onSettlePress,
-  onRemindPress,
-  onRemindShareAnotherWay,
-  getRemindPresentation,
   onShareSummaryChange,
   onMyCostsPress,
   onTotalCostsPress,
@@ -422,65 +407,6 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
               /> : null}
             </View>
           </Row>
-          {isOwed && onRemindPress ? (() => {
-            const presentation = getRemindPresentation?.(balance) || {
-              label: "Remind",
-              shareAnotherWay: false,
-            };
-            const showAnotherWay = presentation.shareAnotherWay
-              && !!onRemindShareAnotherWay;
-            return (
-              <View style={styles.remindRow}>
-                <Pressable
-                  testID={`remind-settle-${rowKey}-${currency}`}
-                  accessibilityRole="button"
-                  accessibilityLabel={presentation.label}
-                  accessibilityHint={
-                    showAnotherWay
-                      ? "Long press to share another way"
-                      : undefined
-                  }
-                  onPress={() => onRemindPress(balance)}
-                  onLongPress={
-                    showAnotherWay
-                      ? () => onRemindShareAnotherWay?.(balance)
-                      : undefined
-                  }
-                  delayLongPress={350}
-                  style={styles.remindPressable}
-                >
-                  <MaterialCommunityIcons
-                    name="share-variant"
-                    size={18}
-                    color={theme.colors.primary}
-                    accessible={false}
-                  />
-                  <Text
-                    variant="labelLarge"
-                    style={{ color: theme.colors.primary, fontWeight: "600" }}
-                  >
-                    {presentation.label}
-                  </Text>
-                </Pressable>
-                {showAnotherWay ? (
-                  <Pressable
-                    testID={`remind-share-another-way-${rowKey}-${currency}`}
-                    accessibilityRole="button"
-                    accessibilityLabel="Share another way"
-                    onPress={() => onRemindShareAnotherWay?.(balance)}
-                    style={styles.shareAnotherWay}
-                  >
-                    <Text
-                      variant="labelMedium"
-                      style={{ color: theme.colors.onSurfaceVariant }}
-                    >
-                      Share another way
-                    </Text>
-                  </Pressable>
-                ) : null}
-              </View>
-            );
-          })() : null}
         </View>
       );
     });
@@ -552,10 +478,6 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
                   <Skeleton width={72} height={16} />
                 </View>
               </View>
-            </View>
-            {/* Remind is gated on membership + owes-you; reserve the same row height. */}
-            <View style={[styles.remindRow, { minHeight: 40, justifyContent: "center" }]}>
-              <Skeleton width={120} height={14} />
             </View>
           </Surface>
         </View> : null}
@@ -706,23 +628,6 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 14,
     alignItems: "center",
-  },
-  remindRow: {
-    paddingLeft: 52,
-    paddingRight: 14,
-    paddingBottom: 10,
-    gap: 4,
-  },
-  remindPressable: {
-    alignSelf: "flex-start",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingVertical: 4,
-  },
-  shareAnotherWay: {
-    alignSelf: "flex-start",
-    paddingVertical: 2,
   },
 
   compactStatsRow: {

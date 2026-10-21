@@ -101,7 +101,7 @@ export function formatShareCurrency(
 }
 
 /**
- * Per-person remind copy (second person). Link on its own final line.
+ * Per-person remind copy (second person). Link as its own paragraph after a blank line.
  * Honest about the group link destination — no payment / "Pay to" wording.
  */
 export function buildSettleRemindMessage(input: {
@@ -117,7 +117,7 @@ export function buildSettleRemindMessage(input: {
   const link = input.settleLink.trim();
   const body =
     `Hi ${first}, quick one from ${group}: you owe me ${amount}. No rush. Once you've paid, mark it settled in the group:`;
-  return link ? `${body}\n${link}` : body;
+  return link ? `${body}\n\n${link}` : body;
 }
 
 /** One settle-up line. Names must already be chat-safe (never "You"). */
@@ -129,7 +129,7 @@ export function formatSettleSummaryEdgeLine(edge: SettleSummaryEdge): string {
 }
 
 /**
- * Whole-group settle-up summary. Words, no arrows. Link on its own final line.
+ * Whole-group settle-up summary. Words, no arrows. Link as its own paragraph after a blank line.
  * Callers must pass real display names — never the pronoun "You".
  */
 export function buildSettleSummaryMessage(input: {
@@ -146,7 +146,7 @@ export function buildSettleSummaryMessage(input: {
 
   const link = input.groupLink.trim();
   const body = `${group}, settle-up:\n${lines.join("\n")}`;
-  return link ? `${body}\n${link}` : body;
+  return link ? `${body}\n\n${link}` : body;
 }
 
 /**
