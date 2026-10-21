@@ -10,7 +10,6 @@ import {
 } from "react-native";
 import {
   Button,
-  Snackbar,
   Text,
   useTheme,
 } from "react-native-paper";
@@ -28,22 +27,33 @@ import { buildCrashSupportEmailUrl } from "../utils/supportEmail";
  *
  * Never render raw error messages or stack traces here.
  */
+export type CrashErrorFallbackPreview = {
+  supportReferenceId: string | null;
+  copiedVisible?: boolean;
+};
+
 export function CrashErrorFallback({
   error,
   resetErrorBoundary,
+  /** __DEV__ screenshot helper — skips Sentry/session recording. */
+  preview,
 }: {
   error: unknown;
   resetErrorBoundary: () => void;
+  preview?: CrashErrorFallbackPreview;
 }) {
   const theme = useTheme();
   const reportedRef = useRef(false);
   const [supportReferenceId, setSupportReferenceId] = useState<string | null>(
-    null,
+    preview?.supportReferenceId ?? null,
   );
   const [reloading, setReloading] = useState(false);
-  const [copiedVisible, setCopiedVisible] = useState(false);
+  const [copiedVisible, setCopiedVisible] = useState(
+    preview?.copiedVisible ?? false,
+  );
 
   useEffect(() => {
+    if (preview) return;
     if (reportedRef.current) return;
     reportedRef.current = true;
 
@@ -59,7 +69,7 @@ export function CrashErrorFallback({
         ? { support_reference_id: record.supportReferenceId }
         : undefined,
     });
-  }, [error]);
+  }, [error, preview]);
 
   const appVersion = Constants.expoConfig?.version ?? "unknown";
   const platform = Platform.OS;
@@ -86,6 +96,7 @@ export function CrashErrorFallback({
         Clipboard.setString(supportReferenceId);
       }
       setCopiedVisible(true);
+      setTimeout(() => setCopiedVisible(false), 2000);
     } catch {
       // Soft-fail: still show the ID on screen for manual copy.
     }
@@ -188,14 +199,19 @@ export function CrashErrorFallback({
         ) : null}
       </View>
 
-      <Snackbar
-        visible={copiedVisible}
-        onDismiss={() => setCopiedVisible(false)}
-        duration={2000}
-        testID="crash-copied-toast"
-      >
-        Copied
-      </Snackbar>
+      {copiedVisible ? (
+        <View
+          pointerEvents="none"
+          style={[
+            styles.copiedToast,
+            { backgroundColor: theme.colors.inverseSurface },
+          ]}
+          testID="crash-copied-toast"
+          accessibilityLiveRegion="polite"
+        >
+          <Text style={{ color: theme.colors.inverseOnSurface }}>Copied</Text>
+        </View>
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -255,5 +271,13 @@ const styles = StyleSheet.create({
     marginTop: 8,
     paddingVertical: 8,
     paddingHorizontal: 12,
+  },
+  copiedToast: {
+    position: "absolute",
+    alignSelf: "center",
+    bottom: 40,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 20,
   },
 });

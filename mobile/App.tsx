@@ -209,18 +209,73 @@ const queryClient = new QueryClient({
   },
 });
 
-function isDevCrashUrl(url: string | null): boolean {
-  if (!__DEV__ || !url) return false;
-  try {
-    const parsed = Linking.parse(url);
-    const path = `${parsed.path ?? ""}${parsed.hostname ?? ""}`.toLowerCase();
-    return (
-      path.includes("dev/crash") ||
-      /(?:^|[/?#])dev-crash(?:$|[/?#])/i.test(url)
-    );
-  } catch {
-    return /dev\/crash|dev-crash/i.test(url);
+type DevPreviewKind =
+  | "crash"
+  | "crash-first"
+  | "crash-repeat"
+  | "crash-copied"
+  | "bill-dead"
+  | "bill-offline"
+  | null;
+
+function resolveDevPreview(url: string | null): DevPreviewKind {
+  if (!__DEV__ || !url) return null;
+  const haystack = url.toLowerCase();
+  if (haystack.includes("dev/crash-copied") || haystack.includes("dev-crash-copied")) {
+    return "crash-copied";
   }
+  if (haystack.includes("dev/crash-repeat") || haystack.includes("dev-crash-repeat")) {
+    return "crash-repeat";
+  }
+  if (haystack.includes("dev/crash-first") || haystack.includes("dev-crash-first")) {
+    return "crash-first";
+  }
+  if (haystack.includes("dev/crash") || haystack.includes("dev-crash")) {
+    return "crash";
+  }
+  if (haystack.includes("dev/bill-offline") || haystack.includes("dev-bill-offline")) {
+    return "bill-offline";
+  }
+  if (haystack.includes("dev/bill-dead") || haystack.includes("dev-bill-dead")) {
+    return "bill-dead";
+  }
+  return null;
+}
+
+const DEV_CRASH_PREVIEW_ID = "SM-7K3Q-92";
+
+/** Module-level so remounts during auth bootstrap don't drop the QA deep link. */
+let pendingDevBillPreview: "dead" | "offline" | null = null;
+let pendingDevCrashPreview: "first" | "repeat" | "copied" | null = null;
+let pendingDevForceCrash = false;
+
+function applyDevPreview(kind: DevPreviewKind): boolean {
+  if (!kind) return false;
+  if (kind === "crash") {
+    pendingDevForceCrash = true;
+    return true;
+  }
+  if (kind === "crash-first") {
+    pendingDevCrashPreview = "first";
+    return true;
+  }
+  if (kind === "crash-repeat") {
+    pendingDevCrashPreview = "repeat";
+    return true;
+  }
+  if (kind === "crash-copied") {
+    pendingDevCrashPreview = "copied";
+    return true;
+  }
+  if (kind === "bill-dead") {
+    pendingDevBillPreview = "dead";
+    return true;
+  }
+  if (kind === "bill-offline") {
+    pendingDevBillPreview = "offline";
+    return true;
+  }
+  return false;
 }
 
 function AppContent() {
@@ -228,8 +283,14 @@ function AppContent() {
     Platform.OS === "web" && typeof window !== "undefined"
       ? extractBillSplitToken(window.location.href) : null
   );
-  // __DEV__ only: set true via sharedmoney://dev/crash to verify the crash screen.
-  const [devForceCrash, setDevForceCrash] = useState(false);
+  // __DEV__ only: flipped by sharedmoney://dev/* / ?preview=* deep links.
+  const [devForceCrash, setDevForceCrash] = useState(pendingDevForceCrash);
+  const [devBillPreview, setDevBillPreview] = useState<"dead" | "offline" | null>(
+    pendingDevBillPreview,
+  );
+  const [devCrashPreview, setDevCrashPreview] = useState<
+    null | "first" | "repeat" | "copied"
+  >(pendingDevCrashPreview);
   const { session, loading, signOut, user } = useAuth();
   const theme = useTheme();
   const dimensions = useWindowDimensions();
@@ -661,8 +722,39 @@ function AppContent() {
   // Handle deep links: initial URL (cold start / web navigation) + url events.
   useEffect(() => {
     const handleUrl = async (url: string | null) => {
-      if (isDevCrashUrl(url)) {
-        setDevForceCrash(true);
+      if (__DEV__ && url) {
+        log("dev deep link received", { url }, "debug");
+      }
+      let devPreview = resolveDevPreview(url);
+      // Also accept ?preview=bill-dead|bill-offline|crash-* (Expo Go query).
+      if (!devPreview && url) {
+        let fromQuery: string | null = null;
+        try {
+          const parsed = Linking.parse(url);
+          const raw = parsed.queryParams?.preview;
+          if (typeof raw === "string") fromQuery = raw;
+          else if (Array.isArray(raw) && typeof raw[0] === "string") fromQuery = raw[0];
+        } catch {
+          // ignore
+        }
+        if (!fromQuery) {
+          fromQuery = /[?&#]preview=([a-z0-9-]+)/i.exec(url)?.[1] ?? null;
+        }
+        if (fromQuery === "bill-dead") devPreview = "bill-dead";
+        else if (fromQuery === "bill-offline") devPreview = "bill-offline";
+        else if (fromQuery === "crash-first") devPreview = "crash-first";
+        else if (fromQuery === "crash-repeat") devPreview = "crash-repeat";
+        else if (fromQuery === "crash-copied") devPreview = "crash-copied";
+        else if (fromQuery === "crash") devPreview = "crash";
+      }
+      if (applyDevPreview(devPreview)) {
+        log("dev preview applied", { devPreview }, "debug");
+        if (devPreview === "crash") setDevForceCrash(true);
+        if (devPreview === "crash-first") setDevCrashPreview("first");
+        if (devPreview === "crash-repeat") setDevCrashPreview("repeat");
+        if (devPreview === "crash-copied") setDevCrashPreview("copied");
+        if (devPreview === "bill-dead") setDevBillPreview("dead");
+        if (devPreview === "bill-offline") setDevBillPreview("offline");
         return;
       }
       const billToken = extractBillSplitToken(url);
@@ -1193,6 +1285,36 @@ function AppContent() {
   // Stripped from production builds via the __DEV__ gate (never ships).
   if (__DEV__ && devForceCrash) {
     throw new Error("SharedMoney __DEV__ crash trigger");
+  }
+
+  // __DEV__ crash-screen previews for simulator screenshots (no throw needed).
+  if (__DEV__ && devCrashPreview) {
+    const preview =
+      devCrashPreview === "first"
+        ? { supportReferenceId: null as string | null }
+        : {
+            supportReferenceId: DEV_CRASH_PREVIEW_ID,
+            copiedVisible: devCrashPreview === "copied",
+          };
+    return (
+      <CrashErrorFallback
+        error={new Error("SharedMoney __DEV__ crash preview")}
+        resetErrorBoundary={() => setDevCrashPreview(null)}
+        preview={preview}
+      />
+    );
+  }
+
+  // __DEV__ bill-link empty states for simulator screenshots (no network needed).
+  if (__DEV__ && devBillPreview) {
+    return (
+      <SplitBillScreen
+        key={`dev-bill-${devBillPreview}`}
+        token={"f".repeat(64)}
+        forceStatus={devBillPreview}
+        onDismiss={() => setDevBillPreview(null)}
+      />
+    );
   }
 
   // Bill links are session acknowledgements, independent of group/auth gates.

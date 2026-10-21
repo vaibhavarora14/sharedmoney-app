@@ -673,10 +673,13 @@ export function SplitBillScreen({
   token: initialToken,
   draft,
   onDismiss,
+  /** __DEV__ screenshot helper — skips the network and paints locked empty states. */
+  forceStatus,
 }: {
   token?: string;
   draft?: SplitBillDraft;
   onDismiss: () => void;
+  forceStatus?: "dead" | "offline";
 }) {
   const theme = useTheme();
   const [token, setToken] = useState(initialToken);
@@ -689,15 +692,19 @@ export function SplitBillScreen({
         </Appbar.Header>
         <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === "ios" ? "padding" : "height"}>
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
-            {token
-              ? <BillSplitDetails key={token} token={token} onGoHome={onDismiss} />
-              : (
-                <BillSplitForm
-                  draft={draft}
-                  onCreated={setToken}
-                  onOpenRecent={setToken}
-                />
-              )}
+            {forceStatus === "dead" ? (
+              <BillLinkUnavailable onGoHome={onDismiss} />
+            ) : forceStatus === "offline" ? (
+              <BillLinkOffline onRetry={onDismiss} offline />
+            ) : token ? (
+              <BillSplitDetails key={token} token={token} onGoHome={onDismiss} />
+            ) : (
+              <BillSplitForm
+                draft={draft}
+                onCreated={setToken}
+                onOpenRecent={setToken}
+              />
+            )}
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
