@@ -40,6 +40,7 @@ import {
   type SocialAuthStage,
 } from "../utils/socialAuth";
 import { recordSocialAuthFailure } from "../utils/socialAuthTelemetry";
+import { verifyWhatsAppOtp } from "../utils/whatsappOtpApi";
 // Complete the auth session when browser closes
 WebBrowser.maybeCompleteAuthSession();
 
@@ -253,6 +254,14 @@ interface AuthContextType {
   signInWithGoogle: () => Promise<{ error: Error | null }>;
   /** Signs in a user with native Sign in with Apple */
   signInWithApple: () => Promise<{ error: Error | null }>;
+  /**
+   * Feature-flagged WhatsApp OTP login. Sends a code to `phoneE164`.
+   * Prefer requesting the code via sendWhatsAppOtp; this verifies and sets the session.
+   */
+  signInWithWhatsAppOtp: (
+    phoneE164: string,
+    code: string,
+  ) => Promise<{ error: Error | null }>;
   /** Signs out the current user */
   signOut: () => void | Promise<void>;
 }
@@ -834,6 +843,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   }, []);
 
   /**
+   * Verifies a WhatsApp OTP and establishes a Supabase session.
+   * Gated by EXPO_PUBLIC_ENABLE_WHATSAPP_OTP_LOGIN + server ENABLE_WHATSAPP_OTP_LOGIN.
+   */
+  const signInWithWhatsAppOtp = useCallback(
+    async (phoneE164: string, code: string) => {
+      try {
+        const result = await verifyWhatsAppOtp(phoneE164, code);
+        const { error: sessionError } = await supabase.auth.setSession({
+          access_token: result.session.access_token,
+          refresh_token: result.session.refresh_token,
+        });
+        if (sessionError) {
+          return { error: sessionError };
+        }
+        const {
+          data: { session: verifySession },
+          error: verifyError,
+        } = await supabase.auth.getSession();
+        if (verifyError || !verifySession) {
+          return {
+            error:
+              verifyError ||
+              new Error("Session was not created after WhatsApp OTP sign-in"),
+          };
+        }
+        return { error: null };
+      } catch (err) {
+        logError(err, { context: "signInWithWhatsAppOtp" });
+        return {
+          error:
+            err instanceof Error
+              ? err
+              : new Error("WhatsApp sign-in failed. Please try again."),
+        };
+      }
+    },
+    [],
+  );
+
+  /**
    * Signs out the current user
    * Clears the session state and signs out from Supabase
    */
@@ -868,6 +917,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       signUp,
       signInWithGoogle,
       signInWithApple,
+      signInWithWhatsAppOtp,
       signOut,
     }),
     [
@@ -878,6 +928,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       signUp,
       signInWithGoogle,
       signInWithApple,
+      signInWithWhatsAppOtp,
       signOut,
     ]
   );

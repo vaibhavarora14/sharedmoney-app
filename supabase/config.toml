@@ -271,6 +271,9 @@ verify_jwt = false
 [functions.whatsapp-dry-run]
 verify_jwt = false
 
+[functions.whatsapp-otp]
+verify_jwt = false
+
 # Configure MFA via WebAuthn
 # [auth.mfa.web_authn]
 # enroll_enabled = true
