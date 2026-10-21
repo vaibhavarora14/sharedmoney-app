@@ -5,6 +5,7 @@ import {
   buildSettleSummaryMessage,
   buildWhatsAppMeUrl,
   buildWhatsAppSendUrl,
+  formatSettleSummaryEdgeLine,
   settleFirstName,
   whatsAppPhoneDigits,
 } from "./settleShareMessage.ts";
@@ -42,6 +43,30 @@ Deno.test("buildSettleRemindMessage omits blank link line", () => {
   );
 });
 
+Deno.test("formatSettleSummaryEdgeLine uses You pay when viewer is payer", () => {
+  assertEquals(
+    formatSettleSummaryEdgeLine({
+      fromName: "You",
+      toName: "alice",
+      amount: 5625,
+      currency: "INR",
+    }),
+    "You pay alice ₹5,625.00",
+  );
+});
+
+Deno.test("formatSettleSummaryEdgeLine uses pays you when viewer is payee", () => {
+  assertEquals(
+    formatSettleSummaryEdgeLine({
+      fromName: "Maya",
+      toName: "You",
+      amount: 500,
+      currency: "INR",
+    }),
+    "Maya pays you ₹500.00",
+  );
+});
+
 Deno.test("buildSettleSummaryMessage lists pays lines then group link", () => {
   assertEquals(
     buildSettleSummaryMessage({
@@ -52,7 +77,7 @@ Deno.test("buildSettleSummaryMessage lists pays lines then group link", () => {
       ],
       groupLink: "https://sharedmoney.app/app/groups/g1",
     }),
-    "Goa trip, settle-up:\nMaya pays You ₹500.00\nYou pays Raj $80.00\nhttps://sharedmoney.app/app/groups/g1",
+    "Goa trip, settle-up:\nMaya pays you ₹500.00\nYou pay Raj $80.00\nhttps://sharedmoney.app/app/groups/g1",
   );
 });
 

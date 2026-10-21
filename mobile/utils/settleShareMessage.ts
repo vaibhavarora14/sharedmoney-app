@@ -84,8 +84,30 @@ export function buildSettleRemindMessage(input: {
   return link ? `${body}\n${link}` : body;
 }
 
+function isViewerLabel(name: string): boolean {
+  return name.trim().toLowerCase() === "you";
+}
+
+/** One settle-up line; conjugates pay/pays and lowercases "you" as payee. */
+export function formatSettleSummaryEdgeLine(edge: SettleSummaryEdge): string {
+  const from = edge.fromName.trim() || "Someone";
+  const to = edge.toName.trim() || "Someone";
+  const amount = formatCurrency(Math.abs(edge.amount), edge.currency);
+  const fromIsYou = isViewerLabel(from);
+  const toIsYou = isViewerLabel(to);
+
+  if (fromIsYou) {
+    return `You pay ${toIsYou ? "you" : to} ${amount}`;
+  }
+  if (toIsYou) {
+    return `${from} pays you ${amount}`;
+  }
+  return `${from} pays ${to} ${amount}`;
+}
+
 /**
  * Whole-group settle-up summary. Words, no arrows. Link on its own final line.
+ * Current user reads as "You pay …" / "… pays you" (not "You pays" / "pays You").
  */
 export function buildSettleSummaryMessage(input: {
   groupName: string;
@@ -95,12 +117,7 @@ export function buildSettleSummaryMessage(input: {
   const group = input.groupName.trim() || "Group";
   const lines = input.edges
     .filter((edge) => Math.abs(edge.amount) >= 0.005)
-    .map((edge) => {
-      const from = edge.fromName.trim() || "Someone";
-      const to = edge.toName.trim() || "Someone";
-      const amount = formatCurrency(Math.abs(edge.amount), edge.currency);
-      return `${from} pays ${to} ${amount}`;
-    });
+    .map((edge) => formatSettleSummaryEdgeLine(edge));
 
   if (lines.length === 0) return "";
 
