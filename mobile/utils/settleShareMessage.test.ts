@@ -5,9 +5,13 @@ import {
   buildSettleSummaryMessage,
   buildWhatsAppMeUrl,
   buildWhatsAppSendUrl,
+  formatShareAmountInput,
   formatShareCurrency,
   formatSettleSummaryEdgeLine,
+  parseShareAmountInput,
   settleFirstName,
+  settleModalPersonName,
+  settleModalYouLabel,
   settleSharePersonName,
   whatsAppPhoneDigits,
 } from "./settleShareMessage.ts";
@@ -35,12 +39,60 @@ Deno.test("settleSharePersonName never returns You and prefers first name", () =
   assertEquals(settleSharePersonName({}), "Someone");
 });
 
+Deno.test("settleModalPersonName keeps full name as entered and never raw email", () => {
+  assertEquals(
+    settleModalPersonName({
+      full_name: "Christopher Fernandes",
+      email: "chris@test.com",
+    }),
+    "Christopher Fernandes",
+  );
+  assertEquals(
+    settleModalPersonName({ full_name: "diana", email: "diana@test.com" }),
+    "diana",
+  );
+  assertEquals(
+    settleModalPersonName({ full_name: null, email: "diana@test.com" }),
+    "diana",
+  );
+  assertEquals(settleModalPersonName({ full_name: "You", email: "a@b.com" }), "a");
+  assertEquals(settleModalPersonName({}), "Someone");
+});
+
+Deno.test("settleModalYouLabel capitalizes only sentence-start You", () => {
+  assertEquals(settleModalYouLabel("from"), "You");
+  assertEquals(settleModalYouLabel("to"), "you");
+});
+
 Deno.test("formatShareCurrency drops .00 for whole amounts and keeps paise", () => {
   assertEquals(formatShareCurrency(30000, "INR"), "₹30,000");
   assertEquals(formatShareCurrency(5625, "INR"), "₹5,625");
   assertEquals(formatShareCurrency(431.2, "INR"), "₹431.20");
   assertEquals(formatShareCurrency(80, "USD"), "$80");
   assertEquals(formatShareCurrency(80.5, "USD"), "$80.50");
+  assertEquals(formatShareCurrency(100000, "INR"), "₹1,00,000");
+});
+
+Deno.test("formatShareAmountInput uses en-IN grouping without currency symbol", () => {
+  assertEquals(formatShareAmountInput(30000, "INR"), "30,000");
+  assertEquals(formatShareAmountInput(100000, "INR"), "1,00,000");
+  assertEquals(formatShareAmountInput(5625, "INR"), "5,625");
+  assertEquals(formatShareAmountInput(5625.5, "INR"), "5,625.50");
+  assertEquals(formatShareAmountInput(431.2, "INR"), "431.20");
+  assertEquals(formatShareAmountInput(80, "USD"), "80");
+  assertEquals(formatShareAmountInput(80.5, "USD"), "80.50");
+});
+
+Deno.test("parseShareAmountInput accepts grouped prefills and rejects junk", () => {
+  assertEquals(parseShareAmountInput("30,000"), 30000);
+  assertEquals(parseShareAmountInput("1,00,000"), 100000);
+  assertEquals(parseShareAmountInput("3,000"), 3000);
+  assertEquals(parseShareAmountInput("5,625.50"), 5625.5);
+  assertEquals(parseShareAmountInput("80"), 80);
+  assertEquals(parseShareAmountInput("80.50"), 80.5);
+  assertEquals(parseShareAmountInput(""), null);
+  assertEquals(parseShareAmountInput("30,000.123"), null);
+  assertEquals(parseShareAmountInput("abc"), null);
 });
 
 Deno.test("buildSettleRemindMessage marks settled in the group with trimmed amount", () => {

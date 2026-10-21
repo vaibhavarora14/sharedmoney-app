@@ -15,7 +15,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WEB_MAX_WIDTH } from "../constants/layout";
 import { Balance, GroupMember, Participant, Settlement } from "../types";
 import {
-    formatCurrency,
     getCurrencySymbol,
     getDefaultCurrency,
 } from "../utils/currency";
@@ -25,6 +24,13 @@ import {
   SETTLE_OUTSIDE_APP_HELP,
   UPDATE_SETTLEMENT_LABEL,
 } from "../utils/settleCopy";
+import {
+  formatShareAmountInput,
+  formatShareCurrency,
+  parseShareAmountInput,
+  settleModalPersonName,
+  settleModalYouLabel,
+} from "../utils/settleShareMessage";
 
 interface SettlementFormScreenProps {
   visible: boolean;
@@ -95,23 +101,33 @@ function formatDateForDisplay(dateStr: string): string {
   }
 }
 
+function participantLabelBase(
+  item: { id: string; full_name?: string | null; email?: string | null },
+): string {
+  const name = item.full_name?.trim();
+  if (name) return name;
+  const local = item.email?.includes("@")
+    ? item.email.split("@")[0]?.trim()
+    : null;
+  if (local) return local;
+  return `Member ${item.id.substring(0, 8)}`;
+}
+
 function formatParticipantLabel(
   item: { id: string; user_id?: string | null; full_name?: string | null; email?: string | null },
   all: Array<{ id: string; user_id?: string | null; full_name?: string | null; email?: string | null }>,
   currentUserId?: string
 ): string {
-  const raw = item.full_name?.trim()
-    || item.email?.split("@")[0]?.trim()
-    || item.email?.trim()
-    || `Member ${item.id.substring(0, 8)}`;
-  const duplicates = all.filter((other) => {
-    const otherRaw = other.full_name?.trim()
-      || other.email?.split("@")[0]?.trim()
-      || other.email?.trim()
-      || `Member ${other.id.substring(0, 8)}`;
-    return otherRaw.toLowerCase() === raw.toLowerCase();
-  });
-  const base = duplicates.length > 1 ? `${raw} · ${item.email || item.id}` : raw;
+  // Never surface a raw email in this modal — name as entered, else local-part.
+  const labelBase = participantLabelBase(item);
+  const duplicates = all.filter(
+    (other) =>
+      participantLabelBase(other).toLowerCase() === labelBase.toLowerCase(),
+  );
+  // Disambiguate with id fragment — never append the full email.
+  const base = duplicates.length > 1
+    ? `${labelBase} · ${item.id.substring(0, 8)}`
+    : labelBase;
   const isCurrent = !!(currentUserId && item.user_id === currentUserId);
   return isCurrent ? `${base} (You)` : base;
 }
@@ -269,7 +285,12 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
 
     // If editing, pre-fill from settlement
     if (settlement) {
-      setAmount(settlement.amount.toString());
+      setAmount(
+        formatShareAmountInput(
+          settlement.amount,
+          settlement.currency || effectiveDefaultCurrency,
+        ),
+      );
       setNotes(settlement.notes || "");
       setDate(toDateInputValue(settlement.created_at));
       setSelectedFromParticipantId(settlement.from_participant_id || "");
@@ -280,11 +301,20 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
       const member = groupMembers.find(m => m.user_id === balance.user_id);
       // For invited users, balance.user_id IS the participant_id
       setSelectedToParticipantId(balance.participant_id || member?.participant_id || balance.user_id);
-      // Pre-fill with absolute balance amount as suggestion
-      setAmount(Math.abs(balance.amount).toFixed(2));
+      // Prefill whole amounts without .00, with grouping (matches share/remind copy)
+      setAmount(
+        formatShareAmountInput(
+          Math.abs(balance.amount),
+          balance.currency || effectiveDefaultCurrency,
+        ),
+      );
       setDate(toDateInputValue(null));
     } else if (isAdminMode) {
-      if (initialAmount) setAmount(initialAmount.toFixed(2));
+      if (initialAmount) {
+        setAmount(
+          formatShareAmountInput(initialAmount, effectiveDefaultCurrency),
+        );
+      }
       setSelectedFromParticipantId(fromParticipantId || "");
       setSelectedToParticipantId(toParticipantId || "");
       setDate(toDateInputValue(null));
@@ -306,14 +336,15 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
     fromParticipantId,
     toParticipantId,
     groupMembers,
+    effectiveDefaultCurrency,
   ]);
 
   const validateForm = (): boolean => {
     let isValid = true;
 
-    // Validate amount
-    const amountNum = parseFloat(amount);
-    if (!amount || isNaN(amountNum) || amountNum <= 0) {
+    // Validate amount (commas from share-style prefill are allowed)
+    const amountNum = parseShareAmountInput(amount);
+    if (amountNum == null || amountNum <= 0) {
       setAmountError("Please enter a valid amount greater than 0");
       isValid = false;
     } else {
@@ -342,7 +373,10 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
       return;
     }
 
-    const amountNum = parseFloat(amount);
+    const amountNum = parseShareAmountInput(amount);
+    if (amountNum == null || amountNum <= 0) {
+      return;
+    }
 
     try {
       setLoading(true);
@@ -472,17 +506,22 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
   };
 
   const getParticipantDisplayName = (participantId: string): string => {
-    // 1. Try participants list (source of truth including names/emails)
+    // Prefer participants list, else groupMembers — full name as entered / email local-part
     const participant = participants.find((p: Participant) => p.id === participantId);
-    if (participant?.full_name) return participant.full_name;
-    if (participant?.email) return participant.email;
-
-    // 2. Fallback to groupMembers
+    if (participant) {
+      return settleModalPersonName(participant);
+    }
     const member = groupMembers.find((m) => m.participant_id === participantId);
-    if (member?.full_name) return member.full_name;
-    if (member?.email) return member.email;
-
+    if (member) {
+      return settleModalPersonName(member);
+    }
     return `Member ${participantId.substring(0, 8)}`;
+  };
+
+  const reformatAmountOnBlur = () => {
+    const parsed = parseShareAmountInput(amount);
+    if (parsed == null) return;
+    setAmount(formatShareAmountInput(parsed, effectiveDefaultCurrency));
   };
 
   const headerFromId = isEditing
@@ -550,7 +589,7 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                 { backgroundColor: theme.colors.surfaceVariant },
               ]}
             >
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
+              <View style={{ width: "100%" }}>
                 {(() => {
                   let fromName = "";
                   let toName = "";
@@ -561,30 +600,39 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                     
                     fromName =
                       headerFromId === currentParticipantId
-                        ? "You"
+                        ? settleModalYouLabel("from")
                         : getParticipantDisplayName(headerFromId);
                     toName =
                       headerToId === currentParticipantId
-                        ? "You"
+                        ? settleModalYouLabel("to")
                         : getParticipantDisplayName(headerToId);
                   } else if (isAdminMode) {
-                    fromName = adminPayer?.full_name || adminPayer?.email || "Payer";
-                    toName = adminReceiver?.full_name || adminReceiver?.email || "Receiver";
-                    if (adminPayer?.user_id === currentUserId) fromName = "You";
-                    if (adminReceiver?.user_id === currentUserId) toName = "You";
+                    fromName = adminPayer
+                      ? settleModalPersonName(adminPayer)
+                      : "Payer";
+                    toName = adminReceiver
+                      ? settleModalPersonName(adminReceiver)
+                      : "Receiver";
+                    if (adminPayer?.user_id === currentUserId) {
+                      fromName = settleModalYouLabel("from");
+                    }
+                    if (adminReceiver?.user_id === currentUserId) {
+                      toName = settleModalYouLabel("to");
+                    }
                   } else if (balance) {
+                    const counterparty = settleModalPersonName(balance);
                     if (isPaying) {
-                      fromName = "You";
-                      toName = balance.full_name || balance.email || "Member";
+                      fromName = settleModalYouLabel("from");
+                      toName = counterparty;
                     } else {
-                      fromName = balance.full_name || balance.email || "Member";
-                      toName = "You";
+                      fromName = counterparty;
+                      toName = settleModalYouLabel("to");
                     }
                   } else if (selectedToParticipantId) {
                      // Manual entry
-                     fromName = "You";
+                     fromName = settleModalYouLabel("from");
                      const member = availableUsers.find(u => u.participant_id === selectedToParticipantId);
-                     toName = member?.full_name || member?.email || "Member";
+                     toName = member ? settleModalPersonName(member) : "Member";
                   } else {
                     return (
                       <Text variant="titleMedium" style={{ color: theme.colors.onSurfaceVariant }}>
@@ -593,18 +641,57 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                     );
                   }
 
+                  const fromIsYou = fromName === settleModalYouLabel("from");
+                  const toIsYou = toName === settleModalYouLabel("to");
+
+                  // Centred cluster: name may shrink; "paid"/you never grow to edges.
                   return (
-                    <>
-                      <Text variant="titleMedium" style={{ color: theme.colors.onSurface, fontWeight: 'bold' }}>
+                    <View
+                      style={styles.paidHeaderRow}
+                      testID="settlement-paid-header"
+                    >
+                      <Text
+                        variant="titleMedium"
+                        numberOfLines={1}
+                        ellipsizeMode="tail"
+                        style={{
+                          color: theme.colors.onSurface,
+                          fontWeight: "bold",
+                          flexShrink: fromIsYou ? 0 : 1,
+                          flexGrow: 0,
+                          minWidth: fromIsYou ? undefined : 0,
+                        }}
+                        testID="settlement-paid-from"
+                      >
                         {fromName}
                       </Text>
-                      <Text variant="titleMedium" style={{ color: theme.colors.onSurfaceVariant, marginHorizontal: 8 }}>
+                      <Text
+                        variant="titleMedium"
+                        style={{
+                          color: theme.colors.onSurfaceVariant,
+                          marginHorizontal: 8,
+                          flexShrink: 0,
+                          flexGrow: 0,
+                        }}
+                      >
                         paid
                       </Text>
-                      <Text variant="titleMedium" style={{ color: theme.colors.onSurface, fontWeight: 'bold' }}>
+                      <Text
+                        variant="titleMedium"
+                        numberOfLines={1}
+                        ellipsizeMode="tail"
+                        style={{
+                          color: theme.colors.onSurface,
+                          fontWeight: "bold",
+                          flexShrink: toIsYou ? 0 : 1,
+                          flexGrow: 0,
+                          minWidth: toIsYou ? undefined : 0,
+                        }}
+                        testID="settlement-paid-to"
+                      >
                         {toName}
                       </Text>
-                    </>
+                    </View>
                   );
                 })()}
               </View>
@@ -616,9 +703,13 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                     styles.balanceAmount,
                     { color: theme.colors.onSurfaceVariant, marginTop: 8 },
                   ]}
+                  testID="settlement-header-amount"
                 >
-                  {formatCurrency(
-                    parseFloat(amount) || initialAmount || settlement?.amount || 0,
+                  {formatShareCurrency(
+                    parseShareAmountInput(amount) ||
+                      initialAmount ||
+                      settlement?.amount ||
+                      0,
                     effectiveDefaultCurrency
                   )}
                 </Text>
@@ -738,9 +829,11 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                 label="Amount"
                 value={amount}
                 onChangeText={(text) => {
+                  // Do not reformat per keystroke (cursor jump); commas stripped on parse/blur.
                   setAmount(text);
                   if (amountError) setAmountError("");
                 }}
+                onBlur={reformatAmountOnBlur}
                 keyboardType="decimal-pad"
                 error={!!amountError}
                 mode="outlined"
@@ -1004,6 +1097,13 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 24,
     alignItems: "center",
+  },
+  paidHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    flexWrap: "nowrap",
+    width: "100%",
   },
   balanceText: {
     fontWeight: "600",

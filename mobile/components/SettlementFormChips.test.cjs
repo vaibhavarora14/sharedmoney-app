@@ -195,7 +195,7 @@ test("manual creation mode renders fixed You payer and wrapping To participant c
   assert.equal(parent.props.style?.flexDirection, "row");
 });
 
-test("duplicate participant names are disambiguated with email/id", () => {
+test("duplicate participant names are disambiguated with id, never raw email", () => {
   const groupMembers = [
     { user_id: "me", participant_id: "p_me", full_name: "Alex", email: "alex1@example.com" },
     { user_id: "u_alex2", participant_id: "p_alex2", full_name: "Alex", email: "alex2@example.com" },
@@ -213,8 +213,8 @@ test("duplicate participant names are disambiguated with email/id", () => {
   });
 
   const chip = byId(tree, "settlement-to-p_alex2");
-  // Alex should be disambiguated with alex2@example.com
-  assert.match(text(chip), /Alex · alex2@example\.com/);
+  assert.match(text(chip), /Alex · p_alex2/);
+  assert.doesNotMatch(text(tree), /alex2@example\.com/);
 });
 
 test("edit mode provides selectable From and To single-select chips preserving reversibility", () => {
@@ -291,8 +291,184 @@ test("obligation mode fixes parties and does not expose participant selectors", 
   assert.equal(nodes(tree).some(n => typeof n.props?.testID === "string" && n.props.testID.startsWith("settlement-from-")), false);
   assert.equal(nodes(tree).some(n => typeof n.props?.testID === "string" && n.props.testID.startsWith("settlement-to-")), false);
 
-  // Header displays Bob paid You
-  assert.match(text(tree), /Bob\s*paid\s*You/);
+  // Header displays Bob paid you (lowercase you mid-sentence)
+  assert.match(text(tree), /Bob\s*paid\s*you/);
+});
+
+test("obligation header uses email local-part and grouped whole-amount prefill", async () => {
+  const groupMembers = [
+    { user_id: "me", participant_id: "p_me", full_name: "Alice", email: "alice@example.com" },
+    { user_id: "u_diana", participant_id: "p_diana", full_name: null, email: "diana@test.com" },
+  ];
+
+  const balance = {
+    user_id: "u_diana",
+    participant_id: "p_diana",
+    full_name: null,
+    email: "diana@test.com",
+    amount: 30000, // Diana owes you
+    currency: "INR",
+  };
+
+  const saveCalls = [];
+  const session = SettlementForm.createSession({
+    visible: true,
+    balance,
+    settlement: null,
+    groupMembers,
+    currentUserId: "me",
+    groupId: "g1",
+    onSave: async (data) => {
+      saveCalls.push(data);
+    },
+    onDismiss: () => {},
+  });
+
+  assert.match(text(session.tree), /diana\s*paid\s*you/);
+  assert.doesNotMatch(text(session.tree), /diana@test\.com/);
+  assert.doesNotMatch(text(session.tree), /paid\s*You/);
+
+  const amountInput = byId(session.tree, "settlement-amount-input");
+  assert.equal(amountInput.props.value, "30,000");
+  // Header amount line uses share formatter (no trailing .00)
+  assert.equal(text(byId(session.tree, "settlement-header-amount")), "₹30,000");
+
+  const from = byId(session.tree, "settlement-paid-from");
+  const to = byId(session.tree, "settlement-paid-to");
+  assert.equal(from.props.style.flexGrow, 0);
+  assert.equal(from.props.style.flexShrink, 1);
+  assert.equal(to.props.style.flexGrow, 0);
+  assert.equal(to.props.style.flexShrink, 0);
+  assert.equal(byId(session.tree, "settlement-paid-header").props.style.justifyContent, "center");
+
+  await byId(session.tree, "settlement-save-button").props.onPress();
+  assert.equal(saveCalls.length, 1);
+  assert.equal(saveCalls[0].amount, 30000);
+});
+
+test("you-owe header capitalizes You at sentence start and keeps full name + decimals", () => {
+  const groupMembers = [
+    { user_id: "me", participant_id: "p_me", full_name: "Alice", email: "alice@example.com" },
+    { user_id: "u_bob", participant_id: "p_bob", full_name: "Bob Smith", email: "bob@example.com" },
+  ];
+
+  const balance = {
+    user_id: "u_bob",
+    participant_id: "p_bob",
+    full_name: "Bob Smith",
+    email: "bob@example.com",
+    amount: -431.2, // You owe Bob
+    currency: "INR",
+  };
+
+  const tree = SettlementForm({
+    visible: true,
+    balance,
+    settlement: null,
+    groupMembers,
+    currentUserId: "me",
+    groupId: "g1",
+    onSave: async () => {},
+    onDismiss: () => {},
+  });
+
+  assert.equal(byId(tree, "settlement-paid-from").props.children, "You");
+  assert.equal(byId(tree, "settlement-paid-to").props.children, "Bob Smith");
+  assert.equal(byId(tree, "settlement-paid-from").props.style.flexGrow, 0);
+  assert.equal(byId(tree, "settlement-paid-from").props.style.flexShrink, 0);
+  assert.equal(byId(tree, "settlement-paid-to").props.style.flexGrow, 0);
+  assert.equal(byId(tree, "settlement-paid-to").props.style.flexShrink, 1);
+  assert.equal(byId(tree, "settlement-amount-input").props.value, "431.20");
+  assert.equal(text(byId(tree, "settlement-header-amount")), "₹431.20");
+});
+
+test("amount blur reformats en-IN grouping; save strips commas", async () => {
+  const groupMembers = [
+    { user_id: "me", participant_id: "p_me", full_name: "Alice", email: "alice@example.com" },
+    { user_id: "u_diana", participant_id: "p_diana", full_name: null, email: "diana@test.com" },
+  ];
+
+  const balance = {
+    user_id: "u_diana",
+    participant_id: "p_diana",
+    full_name: null,
+    email: "diana@test.com",
+    amount: 100000,
+    currency: "INR",
+  };
+
+  const saveCalls = [];
+  const session = SettlementForm.createSession({
+    visible: true,
+    balance,
+    settlement: null,
+    groupMembers,
+    currentUserId: "me",
+    groupId: "g1",
+    onSave: async (data) => {
+      saveCalls.push(data);
+    },
+    onDismiss: () => {},
+  });
+
+  const amountInput = byId(session.tree, "settlement-amount-input");
+  assert.equal(amountInput.props.value, "1,00,000");
+
+  // User edits without commas (decimal-pad); blur reformats; save parses.
+  amountInput.props.onChangeText("3000");
+  session.render();
+  assert.equal(byId(session.tree, "settlement-amount-input").props.value, "3000");
+  byId(session.tree, "settlement-amount-input").props.onBlur();
+  session.render();
+  assert.equal(byId(session.tree, "settlement-amount-input").props.value, "3,000");
+
+  await byId(session.tree, "settlement-save-button").props.onPress();
+  assert.equal(saveCalls.length, 1);
+  assert.equal(saveCalls[0].amount, 3000);
+});
+
+test("long counterparty name ellipsizes; paid you stays visible", () => {
+  const groupMembers = [
+    { user_id: "me", participant_id: "p_me", full_name: "Alice", email: "alice@example.com" },
+    {
+      user_id: "u_chris",
+      participant_id: "p_chris",
+      full_name: "Christopher Fernandes",
+      email: "chris@test.com",
+    },
+  ];
+
+  const tree = SettlementForm({
+    visible: true,
+    balance: {
+      user_id: "u_chris",
+      participant_id: "p_chris",
+      full_name: "Christopher Fernandes",
+      email: "chris@test.com",
+      amount: 500,
+      currency: "INR",
+    },
+    settlement: null,
+    groupMembers,
+    currentUserId: "me",
+    groupId: "g1",
+    onSave: async () => {},
+    onDismiss: () => {},
+  });
+
+  const from = byId(tree, "settlement-paid-from");
+  const to = byId(tree, "settlement-paid-to");
+  assert.equal(from.props.children, "Christopher Fernandes");
+  assert.equal(from.props.numberOfLines, 1);
+  assert.equal(from.props.ellipsizeMode, "tail");
+  assert.equal(from.props.style.flexGrow, 0);
+  assert.equal(from.props.style.flexShrink, 1);
+  assert.equal(to.props.children, "you");
+  assert.equal(to.props.style.flexShrink, 0);
+  assert.equal(to.props.style.flexGrow, 0);
+  assert.equal(byId(tree, "settlement-paid-header").props.style.justifyContent, "center");
+  assert.doesNotMatch(text(tree), /chris@test\.com/);
+  assert.equal(text(byId(tree, "settlement-header-amount")), "₹500");
 });
 
 test("owes-you modal shows secondary Remind under primary Record payment", () => {

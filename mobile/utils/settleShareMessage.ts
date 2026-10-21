@@ -1,5 +1,9 @@
-import { formatCurrency } from "./currency";
+import { getCurrencySymbol } from "./currency";
+import { ZERO_DECIMAL_CURRENCIES } from "./isoCurrencies";
 import { isValidE164Phone, normalizePhoneToE164 } from "./phoneValidation";
+
+/** Indian grouping for settle share / modal amounts (e.g. 1,00,000). */
+const SHARE_AMOUNT_LOCALE = "en-IN";
 
 export type SettleShareLine = {
   counterpartyName: string;
@@ -40,8 +44,30 @@ export function settleSharePersonName(person: {
     const local = email.split("@")[0]?.trim();
     if (local) return local;
   }
-  if (email) return email;
   return "Someone";
+}
+
+/**
+ * Settlement modal person label: full display name exactly as entered,
+ * else email local-part. Never returns "You" or a raw email address.
+ */
+export function settleModalPersonName(person: {
+  full_name?: string | null;
+  email?: string | null;
+}): string {
+  const full = (person.full_name ?? "").trim();
+  if (full && full.toLowerCase() !== "you") return full;
+  const email = (person.email ?? "").trim();
+  if (email.includes("@")) {
+    const local = email.split("@")[0]?.trim();
+    if (local) return local;
+  }
+  return "Someone";
+}
+
+/** Sentence-start vs mid-sentence pronoun in the “X paid Y” header. */
+export function settleModalYouLabel(role: "from" | "to"): string {
+  return role === "from" ? "You" : "you";
 }
 
 /**
@@ -85,19 +111,48 @@ export function buildWhatsAppSendUrl(phoneDigits: string, text: string): string 
   return `whatsapp://send?phone=${digits}&text=${encodeURIComponent(text)}`;
 }
 
+function shareAmountDecimals(currencyCode: string): number {
+  return ZERO_DECIMAL_CURRENCIES.has(currencyCode.toUpperCase()) ? 0 : 2;
+}
+
 /**
- * Currency for shared chat text: keep locale grouping, drop trailing `.00`
+ * Bare amount with en-IN grouping: drop trailing `.00` for whole amounts,
+ * keep fractional digits when non-zero (e.g. `1,00,000` / `5,625.50`).
+ */
+export function formatShareAmountInput(
+  amount: number,
+  currencyCode: string,
+): string {
+  const abs = Math.abs(amount);
+  const decimals = shareAmountDecimals(currencyCode);
+  const formatted = abs.toLocaleString(SHARE_AMOUNT_LOCALE, {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+  if (decimals === 0) return formatted;
+  if (/\.\d*[1-9]\d*$/.test(formatted)) return formatted;
+  return formatted.replace(/\.0+$/, "");
+}
+
+/**
+ * Currency for shared chat text: en-IN grouping, drop trailing `.00`
  * for whole amounts, keep fractional digits when non-zero (e.g. ₹431.20).
  */
 export function formatShareCurrency(
   amount: number,
   currencyCode: string,
 ): string {
-  const abs = Math.abs(amount);
-  const formatted = formatCurrency(abs, currencyCode);
-  // formatCurrency always uses en-US fraction digits for non-zero-decimal codes.
-  if (/\.\d*[1-9]\d*$/.test(formatted)) return formatted;
-  return formatted.replace(/\.0+$/, "");
+  return `${getCurrencySymbol(currencyCode)}${formatShareAmountInput(amount, currencyCode)}`;
+}
+
+/** Parse an amount typed/prefilled with optional thousands separators. */
+export function parseShareAmountInput(text: string): number | null {
+  const trimmed = text.trim().replace(/,/g, "");
+  if (!trimmed) return null;
+  if (!/^\d+(\.\d{1,2})?$/.test(trimmed)) return null;
+  const value = Number.parseFloat(trimmed);
+  if (!Number.isFinite(value) || value < 0) return null;
+  return value;
 }
 
 /**
