@@ -5,15 +5,17 @@ on:
     branches:
       - main
       - 'release/**'
+    types: [opened, synchronize, reopened, ready_for_review]
 
 concurrency:
-  group: pr-checks-${{ github.ref }}
+  group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   web:
     name: Web Test, Lint & Build
     runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -39,6 +41,7 @@ jobs:
   mobile:
     name: Mobile Typecheck & Config Tests
     runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -61,6 +64,7 @@ jobs:
   supabase:
     name: Supabase Edge Functions & Shared Tests
     runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
     steps:
       - name: Checkout
         uses: actions/checkout@v4
