@@ -11,6 +11,10 @@ on:
   workflow_dispatch:
     # Allow manual triggering
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest

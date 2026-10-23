@@ -2,17 +2,21 @@ name: PR Version Sync
 
 on:
   pull_request:
-    types: [opened, reopened, synchronize, edited]
+    types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:
   contents: write
   pull-requests: write
 
+concurrency:
+  group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   guard-version:
     name: Ensure version.json matches PR type
     runs-on: ubuntu-latest
-    if: ${{ !startsWith(github.event.pull_request.title, 'chore') && !startsWith(github.event.pull_request.title, 'docs') }}
+    if: ${{ github.event.pull_request.draft == false && !startsWith(github.event.pull_request.title, 'chore') && !startsWith(github.event.pull_request.title, 'docs') && !startsWith(github.event.pull_request.title, 'ci') }}
     steps:
       - name: Validate PR title
         id: title
