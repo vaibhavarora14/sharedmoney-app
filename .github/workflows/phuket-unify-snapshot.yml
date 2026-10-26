@@ -21,7 +21,7 @@ concurrency:
 jobs:
   snapshot:
     name: Anonymized Phuket balances
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     environment: Production
     if: ${{ (github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository) && (github.event_name != 'pull_request' || github.event.pull_request.draft == false) }}
     steps:

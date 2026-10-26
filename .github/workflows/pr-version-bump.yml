@@ -15,7 +15,7 @@ concurrency:
 jobs:
   guard-version:
     name: Ensure version.json matches PR type
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     if: ${{ github.event.pull_request.draft == false && !startsWith(github.event.pull_request.title, 'chore') && !startsWith(github.event.pull_request.title, 'docs') && !startsWith(github.event.pull_request.title, 'ci') }}
     steps:
       - name: Validate PR title

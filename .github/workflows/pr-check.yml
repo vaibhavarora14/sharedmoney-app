@@ -14,7 +14,7 @@ concurrency:
 jobs:
   web:
     name: Web Test, Lint & Build
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     if: github.event.pull_request.draft == false
     steps:
       - name: Checkout
@@ -40,7 +40,7 @@ jobs:
 
   mobile:
     name: Mobile Typecheck & Config Tests
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     if: github.event.pull_request.draft == false
     steps:
       - name: Checkout
@@ -63,7 +63,7 @@ jobs:
 
   supabase:
     name: Supabase Edge Functions & Shared Tests
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     if: github.event.pull_request.draft == false
     steps:
       - name: Checkout

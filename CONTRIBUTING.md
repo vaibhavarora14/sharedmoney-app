@@ -23,7 +23,7 @@ Before you get started, ensure you have the following installed:
 ### 1. Clone and Install Dependencies
 
 ```bash
-git clone https://github.com/vaibhavarora14/sharedmoney-app.git
+git clone https://github.com/onima-tech/sharedmoney-app.git
 cd sharedmoney-app
 npm install
 ```

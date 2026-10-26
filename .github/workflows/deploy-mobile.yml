@@ -55,7 +55,7 @@ concurrency:
 jobs:
   resolve:
     name: Resolve release options
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     outputs:
       platform: ${{ steps.resolve.outputs.platform }}
       submit: ${{ steps.resolve.outputs.submit }}
@@ -100,7 +100,7 @@ jobs:
   build:
     name: EAS ${{ matrix.platform }}
     needs: resolve
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     environment: Production
     permissions:
       contents: write
@@ -297,7 +297,7 @@ jobs:
     name: Publish GitHub release
     needs: [resolve, build]
     if: ${{ always() && needs.resolve.outputs.create_github_release == 'true' && (needs.resolve.outputs.platform == 'all' || needs.resolve.outputs.platform == 'android') }}
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
       contents: write
     steps:

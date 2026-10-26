@@ -438,11 +438,11 @@ if command -v gh &> /dev/null; then
         --title "Release ${TAG}" \
         --notes "$RELEASE_NOTES" \
         "${RELEASE_ARTIFACT}" \
-        --repo vaibhavarora14/sharedmoney-app
+        --repo onima-tech/sharedmoney-app
     
     echo ""
     echo "✅ GitHub release created successfully!"
-    echo "   https://github.com/vaibhavarora14/sharedmoney-app/releases/tag/${TAG}"
+    echo "   https://github.com/onima-tech/sharedmoney-app/releases/tag/${TAG}"
 else
     echo "📝 Manual release steps (gh CLI not found):"
     echo ""
@@ -451,7 +451,7 @@ else
     echo "   git push origin ${TAG}"
     echo ""
     echo "2. Go to GitHub and create a release:"
-    echo "   https://github.com/vaibhavarora14/sharedmoney-app/releases/new"
+    echo "   https://github.com/onima-tech/sharedmoney-app/releases/new"
     echo ""
     echo "3. Select tag: ${TAG}"
     echo "4. Upload artifact: $RELEASE_ARTIFACT"

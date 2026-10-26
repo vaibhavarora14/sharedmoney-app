@@ -44,7 +44,7 @@ concurrency:
 jobs:
   resolve:
     name: Resolve submit targets
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     outputs:
       matrix: ${{ steps.resolve.outputs.matrix }}
       submit_profile: ${{ steps.resolve.outputs.submit_profile }}
@@ -97,7 +97,7 @@ jobs:
   submit:
     name: EAS submit ${{ matrix.platform }}
     needs: resolve
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     environment: Production
     strategy:
       fail-fast: false
