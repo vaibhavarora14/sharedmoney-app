@@ -1,13 +1,8 @@
 name: Deploy Expo Redirect
 
+# Push trigger removed: fails with "EAS project not configured".
+# Manual-only until resolved, see https://github.com/vaibhavarora14/sharedmoney-app/issues/401
 on:
-  push:
-    branches:
-      - "main"
-    paths:
-      - "mobile/expo-redirect/**"
-      - "mobile/scripts/export-expo-redirect.mjs"
-      - ".github/workflows/deploy-web.yml"
   workflow_dispatch:
     # Allow manual triggering
 
