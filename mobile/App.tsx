@@ -1676,7 +1676,6 @@ if (!process.env.EXPO_PUBLIC_SENTRY_DSN) {
 } else {
   const replayRates = resolveSentryReplaySampleRates({
     platform: Platform.OS,
-    env: process.env as Record<string, string | undefined>,
   });
 
   Sentry.init({

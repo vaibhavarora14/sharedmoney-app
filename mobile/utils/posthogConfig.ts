@@ -15,12 +15,24 @@ export type PostHogEnvConfig = {
 /**
  * Resolve PostHog env for the mobile client.
  * Analytics stay disabled when EXPO_PUBLIC_POSTHOG_KEY is unset (same pattern as Sentry DSN).
+ *
+ * When `env` is omitted, read `process.env.EXPO_PUBLIC_…` via direct member
+ * access so Expo/Metro can inline the values. Prefer passing an explicit bag
+ * only in tests.
  */
 export function resolvePostHogEnvConfig(
-  env: PostHogEnvInput = {},
+  env?: PostHogEnvInput,
 ): PostHogEnvConfig {
-  const key = env.EXPO_PUBLIC_POSTHOG_KEY?.trim() || null;
-  const host = env.EXPO_PUBLIC_POSTHOG_HOST?.trim() || DEFAULT_POSTHOG_HOST;
+  const key = (
+    env
+      ? env.EXPO_PUBLIC_POSTHOG_KEY
+      : process.env.EXPO_PUBLIC_POSTHOG_KEY
+  )?.trim() || null;
+  const host = (
+    env
+      ? env.EXPO_PUBLIC_POSTHOG_HOST
+      : process.env.EXPO_PUBLIC_POSTHOG_HOST
+  )?.trim() || DEFAULT_POSTHOG_HOST;
   return {
     key,
     host,
@@ -28,6 +40,6 @@ export function resolvePostHogEnvConfig(
   };
 }
 
-export function isPostHogConfigured(env: PostHogEnvInput = {}): boolean {
+export function isPostHogConfigured(env?: PostHogEnvInput): boolean {
   return resolvePostHogEnvConfig(env).enabled;
 }

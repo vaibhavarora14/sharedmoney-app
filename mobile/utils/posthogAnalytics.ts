@@ -41,10 +41,7 @@ function sanitizeProperties(
  * No-ops safely when the key is missing (mirrors Sentry DSN gating).
  */
 export function initializePostHog(): boolean {
-  const config = resolvePostHogEnvConfig({
-    EXPO_PUBLIC_POSTHOG_KEY: process.env.EXPO_PUBLIC_POSTHOG_KEY,
-    EXPO_PUBLIC_POSTHOG_HOST: process.env.EXPO_PUBLIC_POSTHOG_HOST,
-  });
+  const config = resolvePostHogEnvConfig();
 
   if (!config.enabled || !config.key) {
     if (__DEV__) {
