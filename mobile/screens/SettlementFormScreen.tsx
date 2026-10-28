@@ -922,9 +922,17 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
       presentationStyle="pageSheet"
       testID="settlement-form-modal"
     >
-      <View style={[styles.rootContainer, { backgroundColor: theme.colors.background }]}>
+      <View
+        style={[
+          styles.rootContainer,
+          { backgroundColor: theme.colors.background },
+        ]}
+      >
         <KeyboardAvoidingView
-          style={styles.container}
+          style={[
+            styles.container,
+            { backgroundColor: theme.colors.background },
+          ]}
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           keyboardVerticalOffset={insets.top}
         >
@@ -934,6 +942,11 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
               styles.sheetHeader,
               { backgroundColor: theme.colors.background },
             ]}
+            theme={{
+              colors: {
+                surface: theme.colors.background,
+              },
+            }}
           >
             <Pressable
               onPress={onDismiss}
