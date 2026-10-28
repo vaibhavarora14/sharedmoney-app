@@ -1,6 +1,7 @@
 import DateTimePicker from "@react-native-community/datetimepicker";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
+    ActionSheetIOS,
     Alert,
     AppState,
     Clipboard,
@@ -13,7 +14,17 @@ import {
     StyleSheet,
     View,
 } from "react-native";
-import { Appbar, Button, Chip, Dialog, Portal, Text, TextInput, useTheme } from "react-native-paper";
+import {
+  Appbar,
+  Button,
+  Chip,
+  Dialog,
+  IconButton,
+  Portal,
+  Text,
+  TextInput,
+  useTheme,
+} from "react-native-paper";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Skeleton, SkeletonGroup } from "../components/Skeleton";
 import { UpiQrCode } from "../components/UpiQrCode";
@@ -122,6 +133,8 @@ interface SettlementFormScreenProps {
   previewInstalledUpiApps?: UpiAppDefinition[];
   /** Design-review only: render desktop web QR + Copy surface. */
   previewForceDesktopWeb?: boolean;
+  /** Design-review only: show picker Copy row as Copied. */
+  previewUpiCopied?: boolean;
 }
 
 function toDateInputValue(value?: string | null): string {
@@ -206,6 +219,7 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
   previewShowUpiAppPicker,
   previewInstalledUpiApps,
   previewForceDesktopWeb = false,
+  previewUpiCopied = false,
 }) => {
   const isEditing = !!settlement;
   const isAdminMode = !!(fromParticipantId && toParticipantId);
@@ -236,7 +250,7 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
   const [amountError, setAmountError] = useState<string>("");
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [upiCopied, setUpiCopied] = useState(false);
+  const [upiCopied, setUpiCopied] = useState(!!previewUpiCopied);
   const [upiPhase, setUpiPhase] = useState<UpiPhase>(
     previewUpiPhase ?? "idle",
   );
@@ -407,6 +421,10 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
   }, [previewShowUpiAppPicker, previewInstalledUpiApps]);
 
   useEffect(() => {
+    if (previewUpiCopied) setUpiCopied(true);
+  }, [previewUpiCopied]);
+
+  useEffect(() => {
     if (upiPhase !== "awaiting_return") return;
     const sub = AppState.addEventListener("change", (next) => {
       if (next === "active" && launchedUpiRef.current) {
@@ -483,6 +501,59 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
     }
   };
 
+  const presentUpiAppPicker = async (appsOverride?: UpiAppDefinition[]) => {
+    setUpiAppsLoading(true);
+    let apps: UpiAppDefinition[] = [];
+    try {
+      apps = appsOverride
+        ? [...appsOverride]
+        : previewInstalledUpiApps
+          ? [...previewInstalledUpiApps]
+          : await detectInstalledUpiApps();
+      setInstalledUpiApps(apps);
+    } finally {
+      setUpiAppsLoading(false);
+    }
+
+    // Native iOS: system action sheet. Design preview / web / Android use the
+    // bottom sheet so Copy can flip to Copied inline.
+    const useNativeActionSheet =
+      Platform.OS === "ios" &&
+      !previewShowUpiAppPicker &&
+      !inUpiDesignPreview;
+
+    if (useNativeActionSheet) {
+      const options = [
+        ...apps.map((app) => app.label),
+        COPY_UPI_ID_LABEL,
+        "Cancel",
+      ];
+      const cancelButtonIndex = options.length - 1;
+      const copyButtonIndex = options.length - 2;
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          title: "Pay with",
+          options,
+          cancelButtonIndex,
+        },
+        (buttonIndex) => {
+          if (buttonIndex === undefined || buttonIndex === cancelButtonIndex) {
+            return;
+          }
+          if (buttonIndex === copyButtonIndex) {
+            copyPayeeUpiId();
+            return;
+          }
+          const app = apps[buttonIndex];
+          if (app) void launchUpiApp(app);
+        },
+      );
+      return;
+    }
+
+    setShowUpiAppPicker(true);
+  };
+
   const handlePayViaUpi = async () => {
     if (!payeeUpiId) return;
     const amountNum = parseShareAmountInput(amount);
@@ -495,14 +566,7 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
       return;
     }
     if (iosUpiPicker) {
-      setUpiAppsLoading(true);
-      setShowUpiAppPicker(true);
-      try {
-        const apps = await detectInstalledUpiApps();
-        setInstalledUpiApps(apps);
-      } finally {
-        setUpiAppsLoading(false);
-      }
+      await presentUpiAppPicker();
       return;
     }
     await launchGenericUpi();
@@ -864,8 +928,21 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           keyboardVerticalOffset={insets.top}
         >
-          <Appbar.Header>
-            <Appbar.Action icon="close" accessibilityLabel="Close settlement" onPress={onDismiss} testID="settlement-form-close" />
+          <Appbar.Header
+            elevated={false}
+            style={[
+              styles.sheetHeader,
+              { backgroundColor: theme.colors.background },
+            ]}
+          >
+            <IconButton
+              icon="close"
+              size={22}
+              accessibilityLabel="Close settlement"
+              onPress={onDismiss}
+              testID="settlement-form-close"
+              style={styles.closeIconButton}
+            />
             <Appbar.Content title={isEditing ? "Edit settlement" : "Record settlement"} />
             {isEditing && onDelete ? (
               <Appbar.Action
@@ -883,7 +960,7 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
           >
-            {!isEditing ? (
+            {!isEditing && !showPayViaUpi && !showingConfirm ? (
               <Text
                 variant="bodyMedium"
                 style={{
@@ -1176,21 +1253,10 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                 >
                   {NOT_YET_LABEL}
                 </Button>
-                <Button
-                  mode="outlined"
-                  onPress={onDismiss}
-                  disabled={loading}
-                  style={styles.cancelButton}
-                >
-                  Cancel
-                </Button>
               </View>
             ) : (
               <>
             <View style={styles.section}>
-              <Text variant="labelLarge" style={styles.label}>
-                Amount
-              </Text>
               <TextInput
                 label="Amount"
                 value={amount}
@@ -1226,7 +1292,7 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                   variant="bodySmall"
                   style={[
                     styles.payeeUpiLine,
-                    { color: theme.colors.onSurfaceVariant },
+                    { color: theme.colors.onSurface, opacity: 0.72 },
                   ]}
                   testID="settlement-payee-upi-line"
                 >
@@ -1323,7 +1389,7 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                       {payeeUpiId}
                     </Text>
                     <Button
-                      mode="contained"
+                      mode="outlined"
                       compact
                       onPress={copyPayeeUpiId}
                       disabled={loading}
@@ -1497,19 +1563,28 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
           </Modal>
         )}
 
-        {/* Nested Modal (not Portal Dialog) so the picker paints above the
-            settle sheet on web and in Design preview screenshots. */}
+        {/* Bottom sheet for web / Android / Design preview. Native iOS uses
+            ActionSheetIOS in presentUpiAppPicker. */}
         <Modal
           visible={showUpiAppPicker}
           transparent
-          animationType="fade"
+          animationType="slide"
           onRequestClose={() => setShowUpiAppPicker(false)}
         >
           <View style={styles.upiPickerOverlay}>
+            <Pressable
+              style={StyleSheet.absoluteFillObject}
+              onPress={() => setShowUpiAppPicker(false)}
+              accessibilityRole="button"
+              accessibilityLabel="Dismiss Pay with"
+            />
             <View
               style={[
                 styles.upiPickerSheet,
-                { backgroundColor: theme.colors.surface },
+                {
+                  backgroundColor: theme.colors.surface,
+                  paddingBottom: Math.max(insets.bottom, 16),
+                },
               ]}
               testID="settlement-upi-app-picker"
             >
@@ -1525,7 +1600,7 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                   <View style={{ height: 8 }} />
                   <Skeleton width="100%" height={44} borderRadius={8} />
                 </SkeletonGroup>
-              ) : installedUpiApps.length > 0 ? (
+              ) : (
                 installedUpiApps.map((app) => (
                   <Button
                     key={app.id}
@@ -1539,34 +1614,20 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                     {app.label}
                   </Button>
                 ))
-              ) : (
-                <View>
-                  <Text
-                    variant="bodyMedium"
-                    style={{
-                      color: theme.colors.onSurfaceVariant,
-                      marginBottom: 12,
-                    }}
-                  >
-                    No UPI apps found on this device. Copy the UPI ID and pay in your app.
-                  </Text>
-                  <Button
-                    mode="contained"
-                    onPress={() => {
-                      setShowUpiAppPicker(false);
-                      copyPayeeUpiId();
-                    }}
-                    style={{ borderRadius: 8 }}
-                    testID="settlement-upi-picker-copy"
-                  >
-                    {COPY_UPI_ID_LABEL}
-                  </Button>
-                </View>
               )}
+              <Button
+                mode="outlined"
+                onPress={copyPayeeUpiId}
+                style={styles.upiAppRow}
+                testID="settlement-upi-picker-copy"
+                accessibilityLabel={upiCopied ? "Copied" : COPY_UPI_ID_LABEL}
+              >
+                {upiCopied ? "Copied" : COPY_UPI_ID_LABEL}
+              </Button>
               <Button
                 mode="text"
                 onPress={() => setShowUpiAppPicker(false)}
-                style={{ marginTop: 8 }}
+                style={{ marginTop: 4 }}
                 testID="settlement-upi-picker-cancel"
               >
                 Cancel
@@ -1626,6 +1687,18 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: WEB_MAX_WIDTH,
     alignSelf: "center",
+    backgroundColor: "transparent",
+  },
+  sheetHeader: {
+    width: "100%",
+    elevation: 0,
+    shadowOpacity: 0,
+  },
+  closeIconButton: {
+    width: 44,
+    height: 44,
+    margin: 0,
+    borderRadius: 22,
   },
   scrollView: {
     flex: 1,
@@ -1723,20 +1796,22 @@ const styles = StyleSheet.create({
   },
   upiPickerOverlay: {
     flex: 1,
-    justifyContent: "center",
+    justifyContent: "flex-end",
     backgroundColor: "rgba(0,0,0,0.4)",
-    padding: 24,
   },
   upiPickerSheet: {
-    borderRadius: 12,
-    padding: 20,
-    maxWidth: 420,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingHorizontal: 20,
+    paddingTop: 20,
     width: "100%",
+    maxWidth: WEB_MAX_WIDTH,
     alignSelf: "center",
   },
   upiPickerTitle: {
     fontWeight: "700",
     marginBottom: 16,
+    textAlign: "center",
   },
   remindBlock: {
     alignItems: "center",
