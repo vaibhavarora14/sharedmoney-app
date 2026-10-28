@@ -19,6 +19,6 @@ Key features:
 - Track balances across group members
 - Record settlements when someone pays back
 - Invite people to groups
-- Keep receipts, splits, and balances organized in one place
+- Keep every expense, split, and settlement in one shared record
 
 No more guessing, screenshots, or messy notes. SharedMoney gives your group a simple answer to the question: who owes who?
