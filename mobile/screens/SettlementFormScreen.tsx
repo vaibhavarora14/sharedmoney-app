@@ -1,7 +1,8 @@
 import DateTimePicker from "@react-native-community/datetimepicker";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
     Alert,
+    AppState,
     Clipboard,
     KeyboardAvoidingView,
     Linking,
@@ -15,6 +16,7 @@ import {
 import { Appbar, Button, Chip, Dialog, Portal, Text, TextInput, useTheme } from "react-native-paper";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Skeleton, SkeletonGroup } from "../components/Skeleton";
+import { UpiQrCode } from "../components/UpiQrCode";
 import { WEB_MAX_WIDTH } from "../constants/layout";
 import { useUserProfiles } from "../hooks/useUserProfiles";
 import { Balance, GroupMember, Participant, Settlement } from "../types";
@@ -26,17 +28,20 @@ import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
 import { captureIdentifiedAnalyticsEvent } from "../utils/posthogAnalytics";
 import { ANALYTICS_EVENTS } from "../utils/posthogEvents";
 import {
-  askAddUpiIdHint,
+  COPY_UPI_ID_LABEL,
+  formatDidYouPayQuestion,
+  formatPayeeUpiLine,
+  NOT_YET_LABEL,
   PAY_VIA_UPI_LABEL,
   RECORD_SETTLEMENT_LABEL,
   SETTLE_OUTSIDE_APP_HELP,
   UPDATE_SETTLEMENT_LABEL,
+  YES_RECORD_IT_LABEL,
 } from "../utils/settleCopy";
 import {
   formatShareAmountInput,
   formatShareCurrency,
   parseShareAmountInput,
-  settleFirstName,
   settleModalPersonName,
   settleModalYouLabel,
 } from "../utils/settleShareMessage";
@@ -45,10 +50,17 @@ import {
   type SettlementPresence,
 } from "../utils/settlementPresence";
 import {
+  buildUpiAppPayUri,
   buildUpiPayUri,
-  canUseUpiDeepLink,
+  isDesktopWebUpiSurface,
+  needsUpiAppPicker,
   normalizeUpiId,
+  type UpiAppDefinition,
+  type UpiPayUriInput,
 } from "../utils/upi";
+import { detectInstalledUpiApps } from "../utils/upiApps";
+
+type UpiPhase = "idle" | "awaiting_return" | "confirm";
 
 interface SettlementFormScreenProps {
   visible: boolean;
@@ -93,13 +105,23 @@ interface SettlementFormScreenProps {
   remindShareAnotherWay?: boolean;
   onRemindPress?: () => void;
   onRemindShareAnotherWay?: () => void;
-  /** Group display name for UPI `tn` note (`SharedMoney: {group}`). */
+  /** Group display name for UPI `tn` note (`SharedMoney · {group}`). */
   groupName?: string;
   /**
    * @deprecated Presence chrome lives on the group settle row only — the modal
    * header is a single sentence with no suffix. Kept optional for call-site compat.
    */
   counterpartyPresence?: SettlementPresence;
+  /** Design-review only: force payee VPA (skips profile fetch when set). */
+  previewPayeeUpiId?: string | null;
+  /** Design-review only: force post-UPI confirm / awaiting state. */
+  previewUpiPhase?: UpiPhase;
+  /** Design-review only: open the iOS app picker. */
+  previewShowUpiAppPicker?: boolean;
+  /** Design-review only: apps listed in the picker. */
+  previewInstalledUpiApps?: UpiAppDefinition[];
+  /** Design-review only: render desktop web QR + Copy surface. */
+  previewForceDesktopWeb?: boolean;
 }
 
 function toDateInputValue(value?: string | null): string {
@@ -179,6 +201,11 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
   onRemindPress,
   onRemindShareAnotherWay,
   groupName,
+  previewPayeeUpiId,
+  previewUpiPhase,
+  previewShowUpiAppPicker,
+  previewInstalledUpiApps,
+  previewForceDesktopWeb = false,
 }) => {
   const isEditing = !!settlement;
   const isAdminMode = !!(fromParticipantId && toParticipantId);
@@ -210,6 +237,13 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [upiCopied, setUpiCopied] = useState(false);
+  const [upiPhase, setUpiPhase] = useState<UpiPhase>("idle");
+  const [showUpiAppPicker, setShowUpiAppPicker] = useState(false);
+  const [installedUpiApps, setInstalledUpiApps] = useState<UpiAppDefinition[]>(
+    [],
+  );
+  const [upiAppsLoading, setUpiAppsLoading] = useState(false);
+  const launchedUpiRef = useRef(false);
 
   // Determine settlement direction
   const isPaying = useMemo(() => {
@@ -225,6 +259,15 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
   const showRemind = !isEditing && !isPaying && !!onRemindPress;
 
   const isInrSettle = effectiveDefaultCurrency.toUpperCase() === "INR";
+  const webUserAgent =
+    Platform.OS === "web" && typeof navigator !== "undefined"
+      ? navigator.userAgent
+      : undefined;
+  const desktopWebUpi =
+    previewForceDesktopWeb ||
+    isDesktopWebUpiSurface(Platform.OS, webUserAgent);
+  const iosUpiPicker =
+    !previewForceDesktopWeb && needsUpiAppPicker(Platform.OS);
 
   const payeeUserId = useMemo(() => {
     if (isEditing || !isPaying) return null;
@@ -247,15 +290,23 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
     participants,
   ]);
 
+  const shouldFetchPayeeUpi =
+    previewPayeeUpiId === undefined &&
+    visible &&
+    isInrSettle &&
+    !!payeeUserId;
   const payeeProfilesQuery = useUserProfiles(
-    visible && isInrSettle && payeeUserId ? [payeeUserId] : [],
+    shouldFetchPayeeUpi && payeeUserId ? [payeeUserId] : [],
   );
   const payeeUpiId = useMemo(() => {
+    if (previewPayeeUpiId !== undefined) {
+      return normalizeUpiId(previewPayeeUpiId);
+    }
     if (!payeeUserId) return null;
     return normalizeUpiId(
       payeeProfilesQuery.data.get(payeeUserId)?.upi_id ?? null,
     );
-  }, [payeeUserId, payeeProfilesQuery.data]);
+  }, [previewPayeeUpiId, payeeUserId, payeeProfilesQuery.data]);
 
   const payeeDisplayName = useMemo(() => {
     if (balance) {
@@ -277,31 +328,148 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
     groupMembers,
   ]);
 
+  const effectiveUpiPhase = previewUpiPhase ?? upiPhase;
   const showUpiSkeleton =
     !isEditing &&
     isPaying &&
     isInrSettle &&
     !!payeeUserId &&
+    previewPayeeUpiId === undefined &&
     payeeProfilesQuery.isLoading;
   const showPayViaUpi =
-    !isEditing && isPaying && isInrSettle && !!payeeUpiId;
-  const showAskUpiHint =
     !isEditing &&
     isPaying &&
     isInrSettle &&
-    !!payeeUserId &&
-    !payeeProfilesQuery.isLoading &&
-    !payeeUpiId;
-  const useUpiDeepLink = canUseUpiDeepLink(
-    Platform.OS,
-    Platform.OS === "web" && typeof navigator !== "undefined"
-      ? navigator.userAgent
-      : undefined,
-  );
+    !!payeeUpiId &&
+    effectiveUpiPhase !== "confirm";
+  const showingConfirm =
+    !isEditing && isPaying && isInrSettle && effectiveUpiPhase === "confirm";
+
+  const upiPayInput = useMemo((): UpiPayUriInput | null => {
+    if (!payeeUpiId) return null;
+    const amountNum = parseShareAmountInput(amount);
+    if (amountNum == null || amountNum <= 0) return null;
+    return {
+      vpa: payeeUpiId,
+      payeeName: payeeDisplayName,
+      amount: amountNum,
+      groupName: groupName || "group",
+    };
+  }, [payeeUpiId, amount, payeeDisplayName, groupName]);
+
+  const desktopUpiUri = useMemo(() => {
+    if (!desktopWebUpi || !upiPayInput) return null;
+    try {
+      return buildUpiPayUri(upiPayInput);
+    } catch {
+      return null;
+    }
+  }, [desktopWebUpi, upiPayInput]);
+
+  const confirmAmountLabel = useMemo(() => {
+    const amountNum = parseShareAmountInput(amount);
+    if (amountNum == null) {
+      return formatShareCurrency(0, effectiveDefaultCurrency);
+    }
+    return formatShareCurrency(amountNum, effectiveDefaultCurrency);
+  }, [amount, effectiveDefaultCurrency]);
 
   useEffect(() => {
-    if (!visible) setUpiCopied(false);
+    if (!visible) {
+      setUpiCopied(false);
+      setUpiPhase("idle");
+      setShowUpiAppPicker(false);
+      setInstalledUpiApps([]);
+      launchedUpiRef.current = false;
+    }
   }, [visible]);
+
+  useEffect(() => {
+    if (previewShowUpiAppPicker) {
+      setShowUpiAppPicker(true);
+      if (previewInstalledUpiApps) {
+        setInstalledUpiApps(previewInstalledUpiApps);
+        setUpiAppsLoading(false);
+      }
+    }
+  }, [previewShowUpiAppPicker, previewInstalledUpiApps]);
+
+  useEffect(() => {
+    if (upiPhase !== "awaiting_return") return;
+    const sub = AppState.addEventListener("change", (next) => {
+      if (next === "active" && launchedUpiRef.current) {
+        launchedUpiRef.current = false;
+        setUpiPhase("confirm");
+      }
+    });
+    return () => sub.remove();
+  }, [upiPhase]);
+
+  const copyPayeeUpiId = () => {
+    if (!payeeUpiId) return;
+    Clipboard.setString(payeeUpiId);
+    setUpiCopied(true);
+    captureIdentifiedAnalyticsEvent(
+      currentUserId,
+      ANALYTICS_EVENTS.UPI_PAY_TAPPED,
+      {
+        currency: "INR",
+        platform: Platform.OS,
+        mode: "copy",
+        group_id: groupId,
+      },
+    );
+  };
+
+  const launchUpiUri = async (uri: string, mode: string) => {
+    captureIdentifiedAnalyticsEvent(
+      currentUserId,
+      ANALYTICS_EVENTS.UPI_PAY_TAPPED,
+      {
+        currency: "INR",
+        platform: Platform.OS,
+        mode,
+        group_id: groupId,
+      },
+    );
+    launchedUpiRef.current = true;
+    setUpiPhase("awaiting_return");
+    try {
+      await Linking.openURL(uri);
+    } catch {
+      launchedUpiRef.current = false;
+      setUpiPhase("idle");
+      Alert.alert(
+        "Could not open UPI",
+        "Open your UPI app and pay manually, then come back to record it.",
+      );
+    }
+  };
+
+  const launchGenericUpi = async () => {
+    if (!upiPayInput) {
+      setAmountError("Please enter a valid amount greater than 0");
+      return;
+    }
+    try {
+      await launchUpiUri(buildUpiPayUri(upiPayInput), "deep_link");
+    } catch {
+      setAmountError("Please enter a valid amount greater than 0");
+    }
+  };
+
+  const launchUpiApp = async (app: UpiAppDefinition) => {
+    if (!upiPayInput) {
+      setAmountError("Please enter a valid amount greater than 0");
+      return;
+    }
+    setShowUpiAppPicker(false);
+    try {
+      await launchUpiUri(buildUpiAppPayUri(app, upiPayInput), `app_${app.id}`);
+    } catch {
+      setAmountError("Please enter a valid amount greater than 0");
+    }
+  };
 
   const handlePayViaUpi = async () => {
     if (!payeeUpiId) return;
@@ -310,35 +478,22 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
       setAmountError("Please enter a valid amount greater than 0");
       return;
     }
-    captureIdentifiedAnalyticsEvent(
-      currentUserId,
-      ANALYTICS_EVENTS.UPI_PAY_TAPPED,
-      {
-        currency: "INR",
-        platform: Platform.OS,
-        mode: useUpiDeepLink ? "deep_link" : "copy",
-        group_id: groupId,
-      },
-    );
-    if (!useUpiDeepLink) {
-      Clipboard.setString(payeeUpiId);
-      setUpiCopied(true);
+    if (desktopWebUpi) {
+      copyPayeeUpiId();
       return;
     }
-    try {
-      const uri = buildUpiPayUri({
-        vpa: payeeUpiId,
-        payeeName: payeeDisplayName,
-        amount: amountNum,
-        groupName: groupName || "group",
-      });
-      await Linking.openURL(uri);
-    } catch {
-      Alert.alert(
-        "Could not open UPI",
-        "Open your UPI app and pay manually, then record the settlement here.",
-      );
+    if (iosUpiPicker) {
+      setUpiAppsLoading(true);
+      setShowUpiAppPicker(true);
+      try {
+        const apps = await detectInstalledUpiApps();
+        setInstalledUpiApps(apps);
+      } finally {
+        setUpiAppsLoading(false);
+      }
+      return;
     }
+    await launchGenericUpi();
   };
 
   // Determine fixed payer/receiver display names
@@ -424,6 +579,10 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
       setAmountError("");
       setShowDatePicker(false);
       setShowDeleteConfirm(false);
+      setUpiPhase("idle");
+      setShowUpiAppPicker(false);
+      setUpiCopied(false);
+      launchedUpiRef.current = false;
       return;
     }
 
@@ -969,6 +1128,53 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
               </>
             )}
 
+            {showingConfirm ? (
+              <View
+                style={styles.buttonContainer}
+                testID="settlement-upi-confirm"
+              >
+                <Text
+                  variant="titleMedium"
+                  style={[
+                    styles.confirmQuestion,
+                    { color: theme.colors.onSurface },
+                  ]}
+                  testID="settlement-upi-confirm-question"
+                >
+                  {formatDidYouPayQuestion(payeeDisplayName, confirmAmountLabel)}
+                </Text>
+                <Button
+                  mode="contained"
+                  onPress={handleSave}
+                  loading={loading}
+                  disabled={loading || !amount}
+                  style={[styles.saveButton, { borderRadius: 8 }]}
+                  testID="settlement-upi-confirm-yes"
+                  accessibilityLabel={YES_RECORD_IT_LABEL}
+                >
+                  {YES_RECORD_IT_LABEL}
+                </Button>
+                <Button
+                  mode="text"
+                  onPress={() => setUpiPhase("idle")}
+                  disabled={loading}
+                  style={styles.notYetButton}
+                  testID="settlement-upi-confirm-not-yet"
+                  accessibilityLabel={NOT_YET_LABEL}
+                >
+                  {NOT_YET_LABEL}
+                </Button>
+                <Button
+                  mode="outlined"
+                  onPress={onDismiss}
+                  disabled={loading}
+                  style={styles.cancelButton}
+                >
+                  Cancel
+                </Button>
+              </View>
+            ) : (
+              <>
             <View style={styles.section}>
               <Text variant="labelLarge" style={styles.label}>
                 Amount
@@ -1001,6 +1207,18 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                   style={[styles.errorText, { color: theme.colors.error }]}
                 >
                   {amountError}
+                </Text>
+              ) : null}
+              {showPayViaUpi && payeeUpiId ? (
+                <Text
+                  variant="bodySmall"
+                  style={[
+                    styles.payeeUpiLine,
+                    { color: theme.colors.onSurfaceVariant },
+                  ]}
+                  testID="settlement-payee-upi-line"
+                >
+                  {formatPayeeUpiLine(payeeDisplayName, payeeUpiId)}
                 </Text>
               ) : null}
             </View>
@@ -1051,7 +1269,7 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                   <Skeleton width="100%" height={48} borderRadius={8} />
                 </SkeletonGroup>
               ) : null}
-              {showPayViaUpi && useUpiDeepLink ? (
+              {showPayViaUpi && !desktopWebUpi ? (
                 <Button
                   mode="contained"
                   onPress={() => {
@@ -1066,7 +1284,7 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                   {PAY_VIA_UPI_LABEL}
                 </Button>
               ) : null}
-              {showPayViaUpi && !useUpiDeepLink ? (
+              {showPayViaUpi && desktopWebUpi ? (
                 <View
                   style={[
                     styles.upiDesktopBlock,
@@ -1074,6 +1292,9 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                   ]}
                   testID="settlement-upi-desktop-copy"
                 >
+                  {desktopUpiUri ? (
+                    <UpiQrCode value={desktopUpiUri} size={160} />
+                  ) : null}
                   <View style={styles.upiDesktopCopy}>
                     <Text
                       variant="labelLarge"
@@ -1089,56 +1310,58 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                     >
                       {payeeUpiId}
                     </Text>
+                    <Button
+                      mode="contained"
+                      compact
+                      onPress={copyPayeeUpiId}
+                      disabled={loading}
+                      style={{ borderRadius: 8, alignSelf: "flex-start", marginTop: 8 }}
+                      testID="settlement-upi-copy-button"
+                      accessibilityLabel={upiCopied ? "Copied" : COPY_UPI_ID_LABEL}
+                    >
+                      {upiCopied ? "Copied" : "Copy"}
+                    </Button>
                   </View>
-                  <Button
-                    mode="contained"
-                    compact
-                    onPress={() => {
-                      void handlePayViaUpi();
-                    }}
-                    disabled={loading}
-                    style={{ borderRadius: 8 }}
-                    testID="settlement-upi-copy-button"
-                    accessibilityLabel={upiCopied ? "Copied" : "Copy UPI ID"}
-                  >
-                    {upiCopied ? "Copied" : "Copy"}
-                  </Button>
                 </View>
               ) : null}
-              <Button
-                mode={showPayViaUpi ? "outlined" : "contained"}
-                onPress={handleSave}
-                loading={loading}
-                disabled={
-                  loading ||
-                  !amount ||
-                  (!isEditing && !isAdminMode && !selectedToParticipantId && !balance) ||
-                  (isEditing &&
-                    (!selectedFromParticipantId || !selectedToParticipantId))
-                }
-                style={[styles.saveButton, { borderRadius: 8 }]}
-                icon={isEditing || showPayViaUpi ? undefined : "arrow-right"}
-                contentStyle={
-                  isEditing || showPayViaUpi
-                    ? undefined
-                    : { flexDirection: "row-reverse" }
-                }
-                testID="settlement-save-button"
-              >
-                {isEditing ? UPDATE_SETTLEMENT_LABEL : RECORD_SETTLEMENT_LABEL}
-              </Button>
-              {showAskUpiHint ? (
-                <Text
-                  variant="bodySmall"
-                  style={[
-                    styles.askUpiHint,
-                    { color: theme.colors.onSurfaceVariant },
-                  ]}
-                  testID="settlement-ask-upi-hint"
+              {showPayViaUpi ? (
+                <Button
+                  mode="text"
+                  onPress={handleSave}
+                  loading={loading}
+                  disabled={
+                    loading ||
+                    !amount ||
+                    (!isEditing && !isAdminMode && !selectedToParticipantId && !balance)
+                  }
+                  style={styles.quietRecordButton}
+                  testID="settlement-save-button"
+                  accessibilityLabel={RECORD_SETTLEMENT_LABEL}
                 >
-                  {askAddUpiIdHint(settleFirstName(payeeDisplayName))}
-                </Text>
-              ) : null}
+                  {RECORD_SETTLEMENT_LABEL}
+                </Button>
+              ) : (
+                <Button
+                  mode="contained"
+                  onPress={handleSave}
+                  loading={loading}
+                  disabled={
+                    loading ||
+                    !amount ||
+                    (!isEditing && !isAdminMode && !selectedToParticipantId && !balance) ||
+                    (isEditing &&
+                      (!selectedFromParticipantId || !selectedToParticipantId))
+                  }
+                  style={[styles.saveButton, { borderRadius: 8 }]}
+                  icon={isEditing ? undefined : "arrow-right"}
+                  contentStyle={
+                    isEditing ? undefined : { flexDirection: "row-reverse" }
+                  }
+                  testID="settlement-save-button"
+                >
+                  {isEditing ? UPDATE_SETTLEMENT_LABEL : RECORD_SETTLEMENT_LABEL}
+                </Button>
+              )}
               {showRemind ? (
                 <View style={styles.remindBlock}>
                   <Button
@@ -1189,6 +1412,8 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                 Cancel
               </Button>
             </View>
+              </>
+            )}
           </ScrollView>
         </KeyboardAvoidingView>
 
@@ -1259,6 +1484,67 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
             </View>
           </Modal>
         )}
+
+        <Portal>
+          <Dialog
+            visible={showUpiAppPicker}
+            onDismiss={() => setShowUpiAppPicker(false)}
+            testID="settlement-upi-app-picker"
+          >
+            <Dialog.Title>Pay with</Dialog.Title>
+            <Dialog.Content>
+              {upiAppsLoading ? (
+                <SkeletonGroup testID="settlement-upi-apps-skeleton">
+                  <Skeleton width="100%" height={44} borderRadius={8} />
+                  <View style={{ height: 8 }} />
+                  <Skeleton width="100%" height={44} borderRadius={8} />
+                </SkeletonGroup>
+              ) : installedUpiApps.length > 0 ? (
+                installedUpiApps.map((app) => (
+                  <Button
+                    key={app.id}
+                    mode="outlined"
+                    onPress={() => {
+                      void launchUpiApp(app);
+                    }}
+                    style={styles.upiAppRow}
+                    testID={`settlement-upi-app-${app.id}`}
+                  >
+                    {app.label}
+                  </Button>
+                ))
+              ) : (
+                <View>
+                  <Text
+                    variant="bodyMedium"
+                    style={{ color: theme.colors.onSurfaceVariant, marginBottom: 12 }}
+                  >
+                    No UPI apps found on this device. Copy the UPI ID and pay in your app.
+                  </Text>
+                  <Button
+                    mode="contained"
+                    onPress={() => {
+                      setShowUpiAppPicker(false);
+                      copyPayeeUpiId();
+                    }}
+                    style={{ borderRadius: 8 }}
+                    testID="settlement-upi-picker-copy"
+                  >
+                    {COPY_UPI_ID_LABEL}
+                  </Button>
+                </View>
+              )}
+            </Dialog.Content>
+            <Dialog.Actions>
+              <Button
+                onPress={() => setShowUpiAppPicker(false)}
+                testID="settlement-upi-picker-cancel"
+              >
+                Cancel
+              </Button>
+            </Dialog.Actions>
+          </Dialog>
+        </Portal>
 
         <Portal>
           <Dialog
@@ -1372,25 +1658,39 @@ const styles = StyleSheet.create({
   upiSkeleton: {
     marginBottom: 8,
   },
+  payeeUpiLine: {
+    marginTop: 8,
+  },
   upiDesktopBlock: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-    borderWidth: 1,
+    gap: 16,
+    borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 8,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 12,
     marginBottom: 8,
   },
   upiDesktopCopy: {
     flex: 1,
     gap: 2,
   },
-  askUpiHint: {
+  quietRecordButton: {
+    alignSelf: "center",
+    marginBottom: 4,
+  },
+  confirmQuestion: {
     textAlign: "center",
+    fontWeight: "600",
+    marginBottom: 16,
+  },
+  notYetButton: {
+    alignSelf: "center",
+    marginBottom: 4,
+  },
+  upiAppRow: {
     marginBottom: 8,
-    marginTop: 4,
+    borderRadius: 8,
   },
   remindBlock: {
     alignItems: "center",

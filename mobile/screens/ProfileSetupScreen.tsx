@@ -62,7 +62,6 @@ import {
 import {
   getOptionalUpiIdFormatError,
   normalizeUpiId,
-  UPI_ID_PLACEHOLDER,
   UPI_ID_PROFILE_HELPER,
 } from "../utils/upi";
 import { SplitBillScreen } from "./SplitBillScreen";
@@ -440,9 +439,7 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
               value={upiId}
               onChangeText={(value) => {
                 setUpiId(value);
-                if (upiIdError) {
-                  setUpiIdError(getOptionalUpiIdFormatError(value) || "");
-                }
+                setUpiIdError(getOptionalUpiIdFormatError(value) || "");
               }}
               onBlur={() => {
                 setUpiIdError(getOptionalUpiIdFormatError(upiId) || "");
@@ -452,7 +449,6 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
               error={!!upiIdError}
               style={styles.input}
               left={<TextInput.Icon icon="bank" />}
-              placeholder={UPI_ID_PLACEHOLDER}
               autoCapitalize="none"
               autoCorrect={false}
               testID="profile-upi-id-input"
