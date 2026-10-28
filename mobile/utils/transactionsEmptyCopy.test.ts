@@ -4,6 +4,7 @@ import {
   countNonFormerParticipants,
   getTransactionsEmptyCopy,
   shouldPreferAddPeopleFab,
+  shouldShowGroupDetailsFab,
 } from "./transactionsEmptyCopy.ts";
 
 Deno.test("countActiveMembers counts only active (and missing status)", () => {
@@ -91,4 +92,39 @@ Deno.test("FAB prefers add people only for solo empty ledger", () => {
   assertEquals(shouldPreferAddPeopleFab(1, true), true);
   assertEquals(shouldPreferAddPeopleFab(1, false), false);
   assertEquals(shouldPreferAddPeopleFab(2, true), false);
+});
+
+Deno.test("group FAB hides only while transactions empty state is visible", () => {
+  assertEquals(
+    shouldShowGroupDetailsFab({
+      isActiveMember: true,
+      showMembers: false,
+      transactionsEmptyStateVisible: true,
+    }),
+    false,
+  );
+  assertEquals(
+    shouldShowGroupDetailsFab({
+      isActiveMember: true,
+      showMembers: false,
+      transactionsEmptyStateVisible: false,
+    }),
+    true,
+  );
+  assertEquals(
+    shouldShowGroupDetailsFab({
+      isActiveMember: true,
+      showMembers: true,
+      transactionsEmptyStateVisible: false,
+    }),
+    false,
+  );
+  assertEquals(
+    shouldShowGroupDetailsFab({
+      isActiveMember: false,
+      showMembers: false,
+      transactionsEmptyStateVisible: false,
+    }),
+    false,
+  );
 });

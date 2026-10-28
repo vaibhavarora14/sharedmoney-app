@@ -123,6 +123,7 @@ import {
   countActiveMembers,
   countNonFormerParticipants,
   shouldPreferAddPeopleFab,
+  shouldShowGroupDetailsFab,
 } from "../utils/transactionsEmptyCopy";
 import { resolveGroupDetailsLoadingTreatment } from "../utils/groupDetailsLoadingTreatment";
 import {
@@ -1443,6 +1444,15 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     activeMemberCount,
     ledgerIsEmpty,
   );
+  const transactionsEmptyStateVisible =
+    listMode === "transactions" &&
+    !groupOpenShellLoading &&
+    loadingTreatment.showListEmptyState;
+  const showGroupFab = shouldShowGroupDetailsFab({
+    isActiveMember,
+    showMembers,
+    transactionsEmptyStateVisible,
+  });
 
   const handleOpenEditGroup = () => {
     setEditName(group.name);
@@ -2216,7 +2226,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
         />
       )}
 
-      {!showMembers && isActiveMember && (
+      {showGroupFab && (
         <FAB
           testID={preferAddPeopleFab ? "add-people-fab" : "add-expense-button"}
           icon={preferAddPeopleFab ? "account-plus" : "plus"}
