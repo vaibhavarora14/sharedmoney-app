@@ -7,6 +7,7 @@ export const RECORD_SETTLEMENT_LABEL = "Record settlement";
 export const UPDATE_SETTLEMENT_LABEL = "Update settlement";
 
 export {
+  COPIED_UPI_LABEL,
   COPY_UPI_ID_LABEL,
   formatDidYouPayQuestion,
   formatPayeeUpiLine,

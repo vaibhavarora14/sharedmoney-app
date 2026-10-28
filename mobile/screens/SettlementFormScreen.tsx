@@ -39,6 +39,7 @@ import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
 import { captureIdentifiedAnalyticsEvent } from "../utils/posthogAnalytics";
 import { ANALYTICS_EVENTS } from "../utils/posthogEvents";
 import {
+  COPIED_UPI_LABEL,
   COPY_UPI_ID_LABEL,
   formatDidYouPayQuestion,
   formatPayeeUpiLine,
@@ -262,6 +263,9 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
   );
   const [upiAppsLoading, setUpiAppsLoading] = useState(false);
   const launchedUpiRef = useRef(false);
+  const upiCopiedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
   // Determine settlement direction
   const isPaying = useMemo(() => {
@@ -402,6 +406,10 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
 
   useEffect(() => {
     if (!visible) {
+      if (upiCopiedTimeoutRef.current) {
+        clearTimeout(upiCopiedTimeoutRef.current);
+        upiCopiedTimeoutRef.current = null;
+      }
       setUpiCopied(false);
       setUpiPhase("idle");
       setShowUpiAppPicker(false);
@@ -425,6 +433,14 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
   }, [previewUpiCopied]);
 
   useEffect(() => {
+    return () => {
+      if (upiCopiedTimeoutRef.current) {
+        clearTimeout(upiCopiedTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     if (upiPhase !== "awaiting_return") return;
     const sub = AppState.addEventListener("change", (next) => {
       if (next === "active" && launchedUpiRef.current) {
@@ -439,6 +455,17 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
     if (!payeeUpiId) return;
     Clipboard.setString(payeeUpiId);
     setUpiCopied(true);
+    if (upiCopiedTimeoutRef.current) {
+      clearTimeout(upiCopiedTimeoutRef.current);
+      upiCopiedTimeoutRef.current = null;
+    }
+    // Design preview keeps Copied pinned for screenshots.
+    if (!previewUpiCopied) {
+      upiCopiedTimeoutRef.current = setTimeout(() => {
+        setUpiCopied(false);
+        upiCopiedTimeoutRef.current = null;
+      }, 2000);
+    }
     captureIdentifiedAnalyticsEvent(
       currentUserId,
       ANALYTICS_EVENTS.UPI_PAY_TAPPED,
@@ -1343,17 +1370,13 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
             ) : null}
 
             <View style={styles.section}>
-              <Text variant="labelLarge" style={styles.label}>
-                Note
-              </Text>
               <TextInput
-                label="What's this payment for?"
+                label="Note"
                 value={notes}
                 onChangeText={setNotes}
                 mode="outlined"
                 multiline
                 numberOfLines={3}
-                placeholder="What's this payment for?"
                 testID="settlement-notes-input"
               />
             </View>
@@ -1415,9 +1438,11 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                       disabled={loading}
                       style={{ borderRadius: 8, alignSelf: "flex-start", marginTop: 8 }}
                       testID="settlement-upi-copy-button"
-                      accessibilityLabel={upiCopied ? "Copied" : COPY_UPI_ID_LABEL}
+                      accessibilityLabel={
+                        upiCopied ? COPIED_UPI_LABEL : COPY_UPI_ID_LABEL
+                      }
                     >
-                      {upiCopied ? "Copied" : "Copy"}
+                      {upiCopied ? COPIED_UPI_LABEL : "Copy"}
                     </Button>
                   </View>
                 </View>
@@ -1640,9 +1665,11 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                 onPress={copyPayeeUpiId}
                 style={styles.upiAppRow}
                 testID="settlement-upi-picker-copy"
-                accessibilityLabel={upiCopied ? "Copied" : COPY_UPI_ID_LABEL}
+                accessibilityLabel={
+                  upiCopied ? COPIED_UPI_LABEL : COPY_UPI_ID_LABEL
+                }
               >
-                {upiCopied ? "Copied" : COPY_UPI_ID_LABEL}
+                {upiCopied ? COPIED_UPI_LABEL : COPY_UPI_ID_LABEL}
               </Button>
               <Button
                 mode="text"
