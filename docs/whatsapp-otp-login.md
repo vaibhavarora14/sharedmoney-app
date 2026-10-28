@@ -52,8 +52,24 @@ EXPO_PUBLIC_API_URL=https://YOUR_PROJECT_REF.supabase.co/functions/v1
 | `WHATSAPP_OTP_DELIVERY` | production: `template` | `template` (prod) or `text` (Meta test recipients) |
 | `WHATSAPP_OTP_TEMPLATE_NAME` | optional | default `sharedmoney_otp` |
 | `WHATSAPP_OTP_TEMPLATE_LANG` | optional | default `en` |
+| `WHATSAPP_MONTHLY_BUDGET_INR` | optional | default `500` — hard IST monthly spend cap (fail closed if invalid) |
+| `WHATSAPP_OTP_COST_INR` | optional | default `0.14` — estimated INR per auth template incl. GST |
+| `WHATSAPP_OTP_ALLOWED_COUNTRY_CODES` | optional | default `91` — comma/space-separated calling codes |
 | `SUPABASE_SERVICE_ROLE_KEY` | yes | Already required by other functions |
 | `SUPABASE_URL` / `SUPABASE_ANON_KEY` | yes | Already required |
+
+Invalid `WHATSAPP_MONTHLY_BUDGET_INR` / `WHATSAPP_OTP_COST_INR` / `WHATSAPP_OTP_ALLOWED_COUNTRY_CODES` values **fail closed** (no send). Budget exhaustion and reserve DB errors return **503** with code `WHATSAPP_BUDGET_EXHAUSTED` and message *WhatsApp sign-in is unavailable right now. Please use another sign-in method.* — not `404` / `FEATURE_DISABLED`. The existing Auth UI shows that server message inline; users can still go back to other sign-in methods.
+
+## Spend & abuse controls (server)
+
+On every `action=send`:
+
+1. **Country allow-list** — numbers outside `WHATSAPP_OTP_ALLOWED_COUNTRY_CODES` are rejected (`400`).
+2. **Per-IP limit** — `x-forwarded-for` (first hop) is hashed with `WHATSAPP_OTP_PEPPER` into `request_fingerprint` / `ip_hash`; at most **10** sends/hour per IP.
+3. **Atomic reserve** — `reserve_whatsapp_otp_send` takes a transaction advisory lock, sums non-`failed` `est_cost_inr` for the current **IST** calendar month, refuses if `spent + cost > budget`, otherwise inserts a `reserved` row. The same lock makes per-phone cooldown (60s) and hourly (5) checks race-safe.
+4. After Meta accepts, the row is marked `accepted` with `meta_message_id`; on Meta rejection it is marked `failed` (releases budget).
+
+Approx capacity at defaults: ₹500 / ₹0.14 ≈ **3,500** auth templates / IST month.
 
 ## Database
 
@@ -64,7 +80,9 @@ Migration `supabase/migrations/20261020120000_whatsapp_otp_challenges.sql` creat
 - Explicit `REVOKE ALL … FROM PUBLIC, anon, authenticated`
 - Explicit `GRANT ALL … TO service_role` (and `postgres`)
 
-Apply on the hosted project when enabling the feature; edge functions use the service role.
+Migration `supabase/migrations/20261028160000_whatsapp_otp_sends.sql` creates `public.whatsapp_otp_sends` (monthly ledger) with the same RLS / revoke / service_role grant pattern, plus `public.reserve_whatsapp_otp_send(...)` (`SECURITY DEFINER`, `search_path` fixed, **EXECUTE** only for `service_role`).
+
+Apply both on the hosted project when enabling the feature; edge functions use the service role.
 
 ## Local / Meta-test flip-on
 
@@ -100,7 +118,8 @@ export TEST_RECIPIENT_PHONE='+91XXXXXXXXXX'
 
 - [x] Template `sharedmoney_otp` approved
 - [x] Production phone number ID / WABA / token / pepper / `WHATSAPP_OTP_DELIVERY=template` secrets
-- [ ] Hosted migration applied
+- [ ] Hosted migrations applied (`whatsapp_otp_challenges` + `whatsapp_otp_sends` / `reserve_whatsapp_otp_send`)
+- [ ] Confirm monthly budget defaults (₹500 / ₹0.14 / country `91`) or set edge env overrides — **do not** rely on Meta’s dashboard spend cap
 - [ ] `ENABLE_WHATSAPP_OTP_LOGIN=true` on production edge (API)
 - [ ] Decide when to set Production `EXPO_PUBLIC_ENABLE_WHATSAPP_OTP_LOGIN` (UI) — keep unset until then
 - [ ] OTA / store build that includes the client flag only when intentionally launching
