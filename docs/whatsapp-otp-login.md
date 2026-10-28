@@ -65,9 +65,9 @@ Invalid `WHATSAPP_MONTHLY_BUDGET_INR` / `WHATSAPP_OTP_COST_INR` / `WHATSAPP_OTP_
 On every `action=send`:
 
 1. **Country allow-list** — numbers outside `WHATSAPP_OTP_ALLOWED_COUNTRY_CODES` are rejected (`400`).
-2. **Per-IP limit** — `x-forwarded-for` (first hop) is hashed with `WHATSAPP_OTP_PEPPER` into `request_fingerprint` / `ip_hash`; at most **10** sends/hour per IP.
-3. **Atomic reserve** — `reserve_whatsapp_otp_send` takes a transaction advisory lock, sums non-`failed` `est_cost_inr` for the current **IST** calendar month, refuses if `spent + cost > budget`, otherwise inserts a `reserved` row. The same lock makes per-phone cooldown (60s) and hourly (5) checks race-safe.
-4. After Meta accepts, the row is marked `accepted` with `meta_message_id`; on Meta rejection it is marked `failed` (releases budget).
+2. **Per-IP limit** — client IP is taken from **`x-real-ip`** (Supabase gateway overwrites caller-supplied values) or, if absent, the **rightmost** `x-forwarded-for` hop (platform-appended). Leftmost XFF is never used (spoofable). `cf-connecting-ip` is not relied on. The IP is hashed with `WHATSAPP_OTP_PEPPER` into `request_fingerprint` / `ip_hash`; at most **10** sends/hour per IP.
+3. **Atomic reserve** — `reserve_whatsapp_otp_send` takes a transaction advisory lock, sums non-`failed` `est_cost_inr` for the current **IST** calendar month, refuses if `spent + cost > budget`, otherwise inserts a `reserved` row. Per-phone cooldown (60s) and hourly (5) limits count **non-failed** rows on `whatsapp_otp_sends` under the same lock (not `whatsapp_otp_challenges`, which are written after the lock releases).
+4. After Meta accepts, the row is marked `accepted` with `meta_message_id`. Only a **definite Meta rejection** (HTTP 4xx with an error body) marks the row `failed` and releases budget. Timeouts, network errors, and 5xx leave the row `reserved` (conservative — the message may still have been sent).
 
 Approx capacity at defaults: ₹500 / ₹0.14 ≈ **3,500** auth templates / IST month.
 

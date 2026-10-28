@@ -32,6 +32,7 @@ import {
   hashOtpCode,
   hashRequestIp,
   isPhoneCountryAllowed,
+  istBudgetMonth,
   isWhatsAppOtpLoginEnabled,
   mapReserveWhatsAppOtpError,
   OTP_EXPIRY_MS,
@@ -56,6 +57,7 @@ import {
   buildWhatsAppTemplatePayload,
   buildWhatsAppTextPayload,
   getOptionalSecret,
+  isDefiniteWhatsAppMetaRejection,
   isMissingSecretsResult,
   loadWhatsAppTemplateConfig,
   resolveLiveSecrets,
@@ -294,8 +296,11 @@ async function handleSend(
   req: Request,
 ): Promise<Response> {
   const budgetConfig = resolveWhatsAppOtpBudgetConfig();
+  const budgetMonth = istBudgetMonth();
   if (!budgetConfig) {
-    log.error('WhatsApp OTP budget config invalid; refusing send', 'whatsapp-otp');
+    log.error('WhatsApp OTP budget config invalid; refusing send', 'whatsapp-otp', {
+      budgetMonth,
+    });
     return createErrorResponse(
       503,
       WHATSAPP_BUDGET_EXHAUSTED_MESSAGE,
@@ -347,6 +352,9 @@ async function handleSend(
       throw err;
     }
     if (err instanceof OtpBudgetExhaustedError) {
+      log.info('WhatsApp OTP monthly budget exhausted or refused', 'whatsapp-otp', {
+        budgetMonth,
+      });
       return createErrorResponse(
         503,
         WHATSAPP_BUDGET_EXHAUSTED_MESSAGE,
@@ -356,6 +364,7 @@ async function handleSend(
       );
     }
     log.error('WhatsApp OTP reserve failed', 'whatsapp-otp', {
+      budgetMonth,
       error: err instanceof Error ? err.message : String(err),
     });
     return createErrorResponse(
@@ -390,6 +399,7 @@ async function handleSend(
     await markOtpSendStatus(admin, sendId, 'accepted', messageId);
     log.info('WhatsApp OTP sent', 'whatsapp-otp', {
       delivery,
+      budgetMonth,
       hasMessageId: Boolean(messageId),
       expiresInSec: Math.floor(OTP_EXPIRY_MS / 1000),
     });
@@ -405,7 +415,16 @@ async function handleSend(
       req,
     );
   } catch (sendError) {
-    await markOtpSendStatus(admin, sendId, 'failed');
+    // Only definite Meta 4xx rejections release budget. Timeouts / network /
+    // 5xx may still have delivered the message — leave the row reserved.
+    if (isDefiniteWhatsAppMetaRejection(sendError)) {
+      await markOtpSendStatus(admin, sendId, 'failed');
+    } else {
+      log.error('WhatsApp OTP delivery ambiguous; leaving send reserved', 'whatsapp-otp', {
+        budgetMonth,
+        error: sendError instanceof Error ? sendError.message : String(sendError),
+      });
+    }
     // Meta allowlist / test-recipient hints stay in logs only — never in user-facing copy.
     log.error('WhatsApp OTP delivery failed', 'whatsapp-otp', {
       error: sendError instanceof Error ? sendError.message : String(sendError),

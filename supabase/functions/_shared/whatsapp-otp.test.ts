@@ -37,7 +37,9 @@ import {
   buildWhatsAppTextPayload,
   DEFAULT_OTP_TEMPLATE_LANG,
   DEFAULT_OTP_TEMPLATE_NAME,
+  isDefiniteWhatsAppMetaRejection,
   sendWhatsAppMessage,
+  WhatsAppMetaHttpError,
   type WhatsAppTemplateConfig,
 } from './whatsapp.ts';
 
@@ -210,19 +212,36 @@ Deno.test('hashRequestIp is stable and salt-scoped', async () => {
   assertEquals(a.length, 64);
 });
 
-Deno.test('extractClientIp prefers first x-forwarded-for hop', () => {
-  const req = new Request('https://example.test', {
-    headers: {
-      'x-forwarded-for': '203.0.113.9, 10.0.0.1',
-      'x-real-ip': '10.0.0.2',
-    },
-  });
-  assertEquals(extractClientIp(req), '203.0.113.9');
+Deno.test('extractClientIp prefers x-real-ip then rightmost x-forwarded-for', () => {
+  // Spoofable leftmost XFF must not win when x-real-ip is present.
+  assertEquals(
+    extractClientIp(new Request('https://example.test', {
+      headers: {
+        'x-forwarded-for': '203.0.113.9, 10.0.0.1',
+        'x-real-ip': '198.51.100.4',
+      },
+    })),
+    '198.51.100.4',
+  );
+  // Without x-real-ip, use the platform-appended (rightmost) hop.
+  assertEquals(
+    extractClientIp(new Request('https://example.test', {
+      headers: { 'x-forwarded-for': '203.0.113.9, 10.0.0.1' },
+    })),
+    '10.0.0.1',
+  );
   assertEquals(
     extractClientIp(new Request('https://example.test', {
       headers: { 'x-real-ip': '198.51.100.4' },
     })),
     '198.51.100.4',
+  );
+  // cf-connecting-ip alone is not treated as trusted for Supabase Edge.
+  assertEquals(
+    extractClientIp(new Request('https://example.test', {
+      headers: { 'cf-connecting-ip': '203.0.113.50' },
+    })),
+    null,
   );
   assertEquals(extractClientIp(new Request('https://example.test')), null);
 });
@@ -358,7 +377,7 @@ Deno.test('sendWhatsAppMessage posts mocked Graph API and returns message id', a
   assertEquals(JSON.parse(String(calls[0].init.body)).type, 'text');
 });
 
-Deno.test('sendWhatsAppMessage surfaces Graph errors', async () => {
+Deno.test('sendWhatsAppMessage surfaces Graph 4xx as definite Meta rejection', async () => {
   const fetchImpl: typeof fetch = () =>
     Promise.resolve(
       new Response(JSON.stringify({ error: { message: '(#131030) Recipient not in allowed list', code: 131030 } }), {
@@ -367,7 +386,7 @@ Deno.test('sendWhatsAppMessage surfaces Graph errors', async () => {
       }),
     );
 
-  await assertRejects(
+  const err = await assertRejects(
     () =>
       sendWhatsAppMessage({
         token: 't',
@@ -375,7 +394,45 @@ Deno.test('sendWhatsAppMessage surfaces Graph errors', async () => {
         payload: buildWhatsAppTextPayload('+14155552671', 'x'),
         fetchImpl,
       }),
-    Error,
+    WhatsAppMetaHttpError,
     'WhatsApp Graph API returned 400',
+  );
+  assertEquals(err instanceof WhatsAppMetaHttpError, true);
+  assertEquals((err as WhatsAppMetaHttpError).definiteRejection, true);
+  assertEquals(isDefiniteWhatsAppMetaRejection(err), true);
+});
+
+Deno.test('sendWhatsAppMessage 5xx is not a definite rejection (keep budget reserved)', async () => {
+  const fetchImpl: typeof fetch = () =>
+    Promise.resolve(new Response('upstream timeout', { status: 503 }));
+
+  const err = await assertRejects(
+    () =>
+      sendWhatsAppMessage({
+        token: 't',
+        phoneNumberId: '1',
+        payload: buildWhatsAppTextPayload('+14155552671', 'x'),
+        fetchImpl,
+      }),
+    WhatsAppMetaHttpError,
+    'WhatsApp Graph API returned 503',
+  );
+  assertEquals((err as WhatsAppMetaHttpError).definiteRejection, false);
+  assertEquals(isDefiniteWhatsAppMetaRejection(err), false);
+});
+
+Deno.test('network failures are not definite Meta rejections', () => {
+  assertEquals(isDefiniteWhatsAppMetaRejection(new Error('network reset')), false);
+  assertEquals(
+    isDefiniteWhatsAppMetaRejection(
+      new WhatsAppMetaHttpError('empty 400', 400, ''),
+    ),
+    false,
+  );
+  assertEquals(
+    isDefiniteWhatsAppMetaRejection(
+      new WhatsAppMetaHttpError('reject', 400, '{"error":{}}'),
+    ),
+    true,
   );
 });

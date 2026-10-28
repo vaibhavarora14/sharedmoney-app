@@ -159,15 +159,27 @@ export function isPhoneCountryAllowed(
   return extractCountryCallingCode(phoneE164, allowedCodes) !== null;
 }
 
-/** Client IP from x-forwarded-for (first hop) or x-real-ip. */
+/**
+ * Client IP for per-IP rate limits.
+ *
+ * Prefer `x-real-ip`: the Supabase stack/API gateway sets this to the TCP peer
+ * and replaces any client-supplied value. Else use the **rightmost**
+ * `x-forwarded-for` hop (platform-appended). Never use the leftmost XFF entry —
+ * clients can spoof it. Do not trust `cf-connecting-ip` here: hosted Edge
+ * Functions are not documented to expose a Cloudflare-verified client IP.
+ *
+ * @see https://github.com/supabase/cli/pull/7345 (gateway appends peer to XFF / sets X-Real-IP)
+ */
 export function extractClientIp(req: Request): string | null {
+  const realIp = req.headers.get('x-real-ip')?.trim();
+  if (realIp) return realIp;
+
   const forwarded = req.headers.get('x-forwarded-for');
   if (forwarded) {
-    const first = forwarded.split(',')[0]?.trim();
-    if (first) return first;
+    const hops = forwarded.split(',').map((part) => part.trim()).filter(Boolean);
+    if (hops.length > 0) return hops[hops.length - 1];
   }
-  const realIp = req.headers.get('x-real-ip')?.trim();
-  return realIp || null;
+  return null;
 }
 
 /** SHA-256 hex fingerprint of IP + server salt (pepper). */

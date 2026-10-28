@@ -12,6 +12,10 @@ import {
   WHATSAPP_BUDGET_EXHAUSTED_CODE,
   WHATSAPP_BUDGET_EXHAUSTED_MESSAGE,
 } from '../_shared/whatsapp-otp.ts';
+import {
+  isDefiniteWhatsAppMetaRejection,
+  WhatsAppMetaHttpError,
+} from '../_shared/whatsapp.ts';
 
 function makeEnv(entries: Record<string, string | undefined>): Deno.Env {
   return {
@@ -55,4 +59,20 @@ Deno.test('handleSend preconditions: non-IN numbers rejected by default allow-li
   assertEquals(config?.allowedCountryCodes, ['91']);
   assertEquals(isPhoneCountryAllowed('+919876543210', config!.allowedCountryCodes), true);
   assertEquals(isPhoneCountryAllowed('+14155552671', config!.allowedCountryCodes), false);
+});
+
+Deno.test('definite Meta 4xx releases budget; ambiguous errors do not', () => {
+  assertEquals(
+    isDefiniteWhatsAppMetaRejection(
+      new WhatsAppMetaHttpError('reject', 400, '{"error":{"code":131030}}'),
+    ),
+    true,
+  );
+  assertEquals(
+    isDefiniteWhatsAppMetaRejection(
+      new WhatsAppMetaHttpError('gateway', 502, 'Bad Gateway'),
+    ),
+    false,
+  );
+  assertEquals(isDefiniteWhatsAppMetaRejection(new TypeError('fetch failed')), false);
 });

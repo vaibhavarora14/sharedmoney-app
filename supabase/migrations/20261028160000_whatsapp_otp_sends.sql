@@ -64,7 +64,7 @@ CREATE OR REPLACE FUNCTION public.reserve_whatsapp_otp_send(
 RETURNS uuid
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, pg_temp
 AS $$
 DECLARE
   v_budget_month text;
@@ -105,11 +105,14 @@ BEGIN
     RAISE EXCEPTION 'WHATSAPP_BUDGET_EXHAUSTED';
   END IF;
 
-  SELECT c.created_at
+  -- Phone cooldown/hourly must read this ledger under the lock (challenge rows
+  -- are inserted after the transaction commits and are not race-safe here).
+  SELECT s.created_at
     INTO v_latest_created
-  FROM public.whatsapp_otp_challenges c
-  WHERE c.phone_e164 = p_phone_e164
-  ORDER BY c.created_at DESC
+  FROM public.whatsapp_otp_sends s
+  WHERE s.phone_e164 = p_phone_e164
+    AND s.status <> 'failed'
+  ORDER BY s.created_at DESC
   LIMIT 1;
 
   IF v_latest_created IS NOT NULL
@@ -125,9 +128,10 @@ BEGIN
 
   SELECT COUNT(*)::integer
     INTO v_phone_hourly
-  FROM public.whatsapp_otp_challenges c
-  WHERE c.phone_e164 = p_phone_e164
-    AND c.created_at >= now() - interval '1 hour';
+  FROM public.whatsapp_otp_sends s
+  WHERE s.phone_e164 = p_phone_e164
+    AND s.status <> 'failed'
+    AND s.created_at >= now() - interval '1 hour';
 
   IF v_phone_hourly >= p_max_sends_per_hour THEN
     RAISE EXCEPTION 'RATE_LIMITED:hourly';
