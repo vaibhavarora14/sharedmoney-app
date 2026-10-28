@@ -392,6 +392,18 @@ export const TransactionsEmptyState: React.FC<TransactionsEmptyStateProps> = ({
     return (
       <View style={styles.emptyState} testID="transactions-empty-state">
         <Text
+          variant="titleMedium"
+          style={{
+            color: theme.colors.onSurface,
+            textAlign: "center",
+            fontWeight: "600",
+            marginBottom: 8,
+            maxWidth: 280,
+          }}
+        >
+          {emptyCopy.title}
+        </Text>
+        <Text
           variant="bodyLarge"
           style={{
             color: theme.colors.onSurfaceVariant,
@@ -432,6 +444,18 @@ export const TransactionsEmptyState: React.FC<TransactionsEmptyStateProps> = ({
 
   return (
     <View style={styles.emptyState} testID="transactions-empty-state">
+      <Text
+        variant="titleMedium"
+        style={{
+          color: theme.colors.onSurface,
+          textAlign: "center",
+          fontWeight: "600",
+          marginBottom: 8,
+          maxWidth: 280,
+        }}
+      >
+        {emptyCopy.title}
+      </Text>
       <Text
         variant="bodyLarge"
         style={{
