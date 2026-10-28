@@ -102,3 +102,20 @@ export function shouldPreferAddPeopleFab(
 ): boolean {
   return ledgerIsEmpty && activeMemberCount <= 1;
 }
+
+/**
+ * Whether the group-details FAB should render.
+ * Hide it while {@link TransactionsEmptyState} is showing: the empty state's
+ * inline CTAs already cover invite / add-expense, and the FAB overlaps them
+ * on small screens. Show again once the ledger is non-empty (or the user
+ * leaves the transactions empty state).
+ */
+export function shouldShowGroupDetailsFab(options: {
+  isActiveMember: boolean;
+  showMembers: boolean;
+  transactionsEmptyStateVisible: boolean;
+}): boolean {
+  const { isActiveMember, showMembers, transactionsEmptyStateVisible } =
+    options;
+  return isActiveMember && !showMembers && !transactionsEmptyStateVisible;
+}
