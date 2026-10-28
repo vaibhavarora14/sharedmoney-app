@@ -19,7 +19,7 @@ import {
   Button,
   Chip,
   Dialog,
-  IconButton,
+  Icon,
   Portal,
   Text,
   TextInput,
@@ -935,14 +935,21 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
               { backgroundColor: theme.colors.background },
             ]}
           >
-            <IconButton
-              icon="close"
-              size={22}
-              accessibilityLabel="Close settlement"
+            <Pressable
               onPress={onDismiss}
+              accessibilityRole="button"
+              accessibilityLabel="Close settlement"
               testID="settlement-form-close"
-              style={styles.closeIconButton}
-            />
+              hitSlop={8}
+              style={[
+                styles.closePressable,
+                Platform.OS === "web"
+                  ? ({ outlineStyle: "none", outlineWidth: 0 } as object)
+                  : null,
+              ]}
+            >
+              <Icon source="close" size={24} color={theme.colors.onSurface} />
+            </Pressable>
             <Appbar.Content title={isEditing ? "Edit settlement" : "Record settlement"} />
             {isEditing && onDelete ? (
               <Appbar.Action
@@ -1292,7 +1299,7 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                   variant="bodySmall"
                   style={[
                     styles.payeeUpiLine,
-                    { color: theme.colors.onSurface, opacity: 0.72 },
+                    { color: theme.colors.onSurface, opacity: 0.82 },
                   ]}
                   testID="settlement-payee-upi-line"
                 >
@@ -1694,11 +1701,12 @@ const styles = StyleSheet.create({
     elevation: 0,
     shadowOpacity: 0,
   },
-  closeIconButton: {
+  closePressable: {
     width: 44,
     height: 44,
-    margin: 0,
-    borderRadius: 22,
+    marginLeft: 4,
+    alignItems: "center",
+    justifyContent: "center",
   },
   scrollView: {
     flex: 1,
