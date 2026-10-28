@@ -263,11 +263,19 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
     Platform.OS === "web" && typeof navigator !== "undefined"
       ? navigator.userAgent
       : undefined;
-  const desktopWebUpi =
-    previewForceDesktopWeb ||
-    isDesktopWebUpiSurface(Platform.OS, webUserAgent);
-  const iosUpiPicker =
-    !previewForceDesktopWeb && needsUpiAppPicker(Platform.OS);
+  // Design preview: default to mobile Pay via UPI CTA; only
+  // previewForceDesktopWeb opts into QR + Copy (desktop web).
+  const inUpiDesignPreview = previewPayeeUpiId !== undefined;
+  const desktopWebUpi = previewForceDesktopWeb
+    ? true
+    : inUpiDesignPreview
+      ? false
+      : isDesktopWebUpiSurface(Platform.OS, webUserAgent);
+  const iosUpiPicker = previewShowUpiAppPicker
+    ? true
+    : inUpiDesignPreview
+      ? false
+      : needsUpiAppPicker(Platform.OS);
 
   const payeeUserId = useMemo(() => {
     if (isEditing || !isPaying) return null;
