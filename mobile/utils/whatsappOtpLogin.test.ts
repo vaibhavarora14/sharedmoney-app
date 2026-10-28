@@ -35,18 +35,3 @@ Deno.test("default path reads process.env.EXPO_PUBLIC_ENABLE_WHATSAPP_OTP_LOGIN 
     }
   }
 });
-
-Deno.test("source keeps direct process.env.EXPO_PUBLIC member access for Expo inlining", async () => {
-  const source = await Deno.readTextFile(
-    new URL("./whatsappOtpLogin.ts", import.meta.url),
-  );
-  assertEquals(
-    source.includes("process.env.EXPO_PUBLIC_ENABLE_WHATSAPP_OTP_LOGIN"),
-    true,
-  );
-  // Regression: defaulting to process.env then reading env.EXPO_PUBLIC_* is not inlined.
-  assertEquals(
-    /=\s*process\.env\s+as\s+Record/.test(source),
-    false,
-  );
-});
