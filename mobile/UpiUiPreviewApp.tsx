@@ -32,6 +32,7 @@ type PreviewKind =
   | "settle-no-upi"
   | "settle-confirm"
   | "settle-ios-picker"
+  | "settle-ios-picker-copied"
   | "settle-desktop-qr";
 
 const PREVIEW_KINDS: PreviewKind[] = [
@@ -42,6 +43,7 @@ const PREVIEW_KINDS: PreviewKind[] = [
   "settle-no-upi",
   "settle-confirm",
   "settle-ios-picker",
+  "settle-ios-picker-copied",
   "settle-desktop-qr",
 ];
 
@@ -186,10 +188,15 @@ function SettlePreview({ kind }: { kind: PreviewKind }) {
       defaultCurrency={currency}
       previewPayeeUpiId={hasUpi ? "maya@okhdfc" : null}
       previewUpiPhase={kind === "settle-confirm" ? "confirm" : undefined}
-      previewShowUpiAppPicker={kind === "settle-ios-picker"}
-      previewInstalledUpiApps={
-        kind === "settle-ios-picker" ? [...UPI_APPS] : undefined
+      previewShowUpiAppPicker={
+        kind === "settle-ios-picker" || kind === "settle-ios-picker-copied"
       }
+      previewInstalledUpiApps={
+        kind === "settle-ios-picker" || kind === "settle-ios-picker-copied"
+          ? [...UPI_APPS]
+          : undefined
+      }
+      previewUpiCopied={kind === "settle-ios-picker-copied"}
       previewForceDesktopWeb={kind === "settle-desktop-qr"}
       onSave={async () => {}}
       onDismiss={() => {}}
