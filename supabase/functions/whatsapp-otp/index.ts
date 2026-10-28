@@ -24,22 +24,32 @@ import { findUserIdByPhone } from '../_shared/user-lookup.ts';
 import { isValidE164Phone, validateBodySize } from '../_shared/validation.ts';
 import {
   assertChallengeVerifiable,
-  assertHourlySendLimit,
-  assertResendAllowed,
   buildOtpTextBody,
   codesMatch,
+  extractClientIp,
+  extractCountryCallingCode,
   generateOtpCode,
   hashOtpCode,
+  hashRequestIp,
+  isPhoneCountryAllowed,
+  istBudgetMonth,
   isWhatsAppOtpLoginEnabled,
+  mapReserveWhatsAppOtpError,
   OTP_EXPIRY_MS,
   OTP_MAX_ATTEMPTS,
+  OTP_MAX_SENDS_PER_HOUR,
+  OTP_MAX_SENDS_PER_IP_HOUR,
   OTP_RESEND_COOLDOWN_MS,
   otpExpiresAt,
+  OtpBudgetExhaustedError,
   OtpRateLimitError,
   OtpVerifyError,
   phonePlaceholderEmail,
   resendCooldownRemainingSeconds,
   resolveOtpDeliveryMode,
+  resolveWhatsAppOtpBudgetConfig,
+  WHATSAPP_BUDGET_EXHAUSTED_CODE,
+  WHATSAPP_BUDGET_EXHAUSTED_MESSAGE,
   WHATSAPP_OTP_PEPPER_ENV,
   type OtpChallengeRecord,
 } from '../_shared/whatsapp-otp.ts';
@@ -47,6 +57,7 @@ import {
   buildWhatsAppTemplatePayload,
   buildWhatsAppTextPayload,
   getOptionalSecret,
+  isDefiniteWhatsAppMetaRejection,
   isMissingSecretsResult,
   loadWhatsAppTemplateConfig,
   resolveLiveSecrets,
@@ -87,39 +98,57 @@ function requirePepper(): string {
   return pepper;
 }
 
-async function countSendsLastHour(
+async function markOtpSendStatus(
   admin: SupabaseClient,
-  phone: string,
-): Promise<number> {
-  const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-  const { count, error } = await admin
-    .from('whatsapp_otp_challenges')
-    .select('id', { count: 'exact', head: true })
-    .eq('phone_e164', phone)
-    .gte('created_at', since);
-  if (error) {
-    throw new Error(`Failed to check OTP rate limit: ${error.message}`);
+  sendId: string,
+  status: 'accepted' | 'failed',
+  metaMessageId?: string | null,
+): Promise<void> {
+  const patch: { status: string; meta_message_id?: string } = { status };
+  if (status === 'accepted' && metaMessageId) {
+    patch.meta_message_id = metaMessageId;
   }
-  return count ?? 0;
+  const { error } = await admin
+    .from('whatsapp_otp_sends')
+    .update(patch)
+    .eq('id', sendId)
+    .eq('status', 'reserved');
+  if (error) {
+    log.error('Failed to update WhatsApp OTP send status', 'whatsapp-otp', {
+      status,
+      error: error.message,
+    });
+  }
 }
 
-async function latestChallenge(
+async function reserveOtpSend(
   admin: SupabaseClient,
-  phone: string,
-): Promise<OtpChallengeRecord | null> {
-  const { data, error } = await admin
-    .from('whatsapp_otp_challenges')
-    .select(
-      'id, phone_e164, code_hash, expires_at, attempt_count, max_attempts, consumed_at, created_at',
-    )
-    .eq('phone_e164', phone)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  params: {
+    phone: string;
+    countryCode: string;
+    ipHash: string | null;
+    costInr: number;
+    budgetInr: number;
+  },
+): Promise<string> {
+  const { data, error } = await admin.rpc('reserve_whatsapp_otp_send', {
+    p_phone_e164: params.phone,
+    p_country_code: params.countryCode,
+    p_ip_hash: params.ipHash,
+    p_est_cost_inr: params.costInr,
+    p_budget_inr: params.budgetInr,
+    p_cooldown_seconds: Math.floor(OTP_RESEND_COOLDOWN_MS / 1000),
+    p_max_sends_per_hour: OTP_MAX_SENDS_PER_HOUR,
+    p_max_sends_per_ip_hour: OTP_MAX_SENDS_PER_IP_HOUR,
+  });
+
   if (error) {
-    throw new Error(`Failed to load OTP challenge: ${error.message}`);
+    throw mapReserveWhatsAppOtpError(error.message || String(error));
   }
-  return (data as OtpChallengeRecord | null) ?? null;
+  if (typeof data !== 'string' || !data) {
+    throw new OtpBudgetExhaustedError();
+  }
+  return data;
 }
 
 async function activeChallenge(
@@ -266,13 +295,88 @@ async function handleSend(
   phone: string,
   req: Request,
 ): Promise<Response> {
-  const latest = await latestChallenge(admin, phone);
-  assertResendAllowed(latest?.created_at);
-  const hourly = await countSendsLastHour(admin, phone);
-  assertHourlySendLimit(hourly);
+  const budgetConfig = resolveWhatsAppOtpBudgetConfig();
+  const budgetMonth = istBudgetMonth();
+  if (!budgetConfig) {
+    log.error('WhatsApp OTP budget config invalid; refusing send', 'whatsapp-otp', {
+      budgetMonth,
+    });
+    return createErrorResponse(
+      503,
+      WHATSAPP_BUDGET_EXHAUSTED_MESSAGE,
+      WHATSAPP_BUDGET_EXHAUSTED_CODE,
+      undefined,
+      req,
+    );
+  }
+
+  if (!isPhoneCountryAllowed(phone, budgetConfig.allowedCountryCodes)) {
+    return createErrorResponse(
+      400,
+      'WhatsApp sign-in is only available for supported country codes.',
+      'VALIDATION_ERROR',
+      undefined,
+      req,
+    );
+  }
+
+  const countryCode = extractCountryCallingCode(
+    phone,
+    budgetConfig.allowedCountryCodes,
+  );
+  if (!countryCode) {
+    return createErrorResponse(
+      400,
+      'WhatsApp sign-in is only available for supported country codes.',
+      'VALIDATION_ERROR',
+      undefined,
+      req,
+    );
+  }
+
+  const pepper = requirePepper();
+  const clientIp = extractClientIp(req);
+  const ipHash = clientIp ? await hashRequestIp(clientIp, pepper) : null;
+
+  let sendId: string;
+  try {
+    sendId = await reserveOtpSend(admin, {
+      phone,
+      countryCode,
+      ipHash,
+      costInr: budgetConfig.costInr,
+      budgetInr: budgetConfig.monthlyBudgetInr,
+    });
+  } catch (err) {
+    if (err instanceof OtpRateLimitError) {
+      throw err;
+    }
+    if (err instanceof OtpBudgetExhaustedError) {
+      log.info('WhatsApp OTP monthly budget exhausted or refused', 'whatsapp-otp', {
+        budgetMonth,
+      });
+      return createErrorResponse(
+        503,
+        WHATSAPP_BUDGET_EXHAUSTED_MESSAGE,
+        WHATSAPP_BUDGET_EXHAUSTED_CODE,
+        undefined,
+        req,
+      );
+    }
+    log.error('WhatsApp OTP reserve failed', 'whatsapp-otp', {
+      budgetMonth,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return createErrorResponse(
+      503,
+      WHATSAPP_BUDGET_EXHAUSTED_MESSAGE,
+      WHATSAPP_BUDGET_EXHAUSTED_CODE,
+      undefined,
+      req,
+    );
+  }
 
   const code = generateOtpCode();
-  const pepper = requirePepper();
   const codeHash = await hashOtpCode(code, phone, pepper);
   const expiresAt = otpExpiresAt();
 
@@ -282,16 +386,20 @@ async function handleSend(
     expires_at: expiresAt.toISOString(),
     attempt_count: 0,
     max_attempts: OTP_MAX_ATTEMPTS,
+    request_fingerprint: ipHash,
   });
 
   if (insertError) {
+    await markOtpSendStatus(admin, sendId, 'failed');
     throw new Error(`Failed to store OTP challenge: ${insertError.message}`);
   }
 
   try {
     const { messageId, delivery } = await deliverOtp(phone, code);
+    await markOtpSendStatus(admin, sendId, 'accepted', messageId);
     log.info('WhatsApp OTP sent', 'whatsapp-otp', {
       delivery,
+      budgetMonth,
       hasMessageId: Boolean(messageId),
       expiresInSec: Math.floor(OTP_EXPIRY_MS / 1000),
     });
@@ -307,6 +415,16 @@ async function handleSend(
       req,
     );
   } catch (sendError) {
+    // Only definite Meta 4xx rejections release budget. Timeouts / network /
+    // 5xx may still have delivered the message — leave the row reserved.
+    if (isDefiniteWhatsAppMetaRejection(sendError)) {
+      await markOtpSendStatus(admin, sendId, 'failed');
+    } else {
+      log.error('WhatsApp OTP delivery ambiguous; leaving send reserved', 'whatsapp-otp', {
+        budgetMonth,
+        error: sendError instanceof Error ? sendError.message : String(sendError),
+      });
+    }
     // Meta allowlist / test-recipient hints stay in logs only — never in user-facing copy.
     log.error('WhatsApp OTP delivery failed', 'whatsapp-otp', {
       error: sendError instanceof Error ? sendError.message : String(sendError),
@@ -469,6 +587,15 @@ Deno.serve(async (req: Request): Promise<Response> => {
             err.message,
             'RATE_LIMITED',
             `retry_after=${err.retryAfterSeconds}`,
+            req,
+          );
+        }
+        if (err instanceof OtpBudgetExhaustedError) {
+          return createErrorResponse(
+            503,
+            WHATSAPP_BUDGET_EXHAUSTED_MESSAGE,
+            WHATSAPP_BUDGET_EXHAUSTED_CODE,
+            undefined,
             req,
           );
         }

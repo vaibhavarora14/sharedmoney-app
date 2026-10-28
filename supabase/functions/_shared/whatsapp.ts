@@ -287,6 +287,34 @@ export interface MetaSendResult {
   raw: unknown;
 }
 
+/**
+ * Graph API HTTP failure. `definiteRejection` is true only for 4xx responses
+ * that include a body (safe to release reserved budget). Timeouts, network
+ * errors, and 5xx are not this class — leave the ledger row reserved.
+ */
+export class WhatsAppMetaHttpError extends Error {
+  readonly status: number;
+  readonly definiteRejection: boolean;
+  readonly responseBody: string;
+
+  constructor(
+    message: string,
+    status: number,
+    responseBody: string,
+  ) {
+    super(message);
+    this.name = 'WhatsAppMetaHttpError';
+    this.status = status;
+    this.responseBody = responseBody;
+    this.definiteRejection = status >= 400 && status < 500 &&
+      responseBody.trim().length > 0;
+  }
+}
+
+export function isDefiniteWhatsAppMetaRejection(error: unknown): boolean {
+  return error instanceof WhatsAppMetaHttpError && error.definiteRejection;
+}
+
 export async function sendWhatsAppMessage(options: {
   token: string;
   phoneNumberId: string;
@@ -320,7 +348,11 @@ export async function sendWhatsAppMessage(options: {
       typeof raw === 'object' && raw !== null && 'error' in raw
         ? JSON.stringify((raw as { error: unknown }).error).slice(0, 500)
         : responseText.slice(0, 500);
-    throw new Error(`WhatsApp Graph API returned ${response.status}: ${detail}`);
+    throw new WhatsAppMetaHttpError(
+      `WhatsApp Graph API returned ${response.status}: ${detail}`,
+      response.status,
+      responseText,
+    );
   }
 
   const messageId =
