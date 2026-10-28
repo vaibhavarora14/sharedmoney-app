@@ -237,10 +237,14 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [upiCopied, setUpiCopied] = useState(false);
-  const [upiPhase, setUpiPhase] = useState<UpiPhase>("idle");
-  const [showUpiAppPicker, setShowUpiAppPicker] = useState(false);
+  const [upiPhase, setUpiPhase] = useState<UpiPhase>(
+    previewUpiPhase ?? "idle",
+  );
+  const [showUpiAppPicker, setShowUpiAppPicker] = useState(
+    !!previewShowUpiAppPicker,
+  );
   const [installedUpiApps, setInstalledUpiApps] = useState<UpiAppDefinition[]>(
-    [],
+    previewInstalledUpiApps ?? [],
   );
   const [upiAppsLoading, setUpiAppsLoading] = useState(false);
   const launchedUpiRef = useRef(false);
