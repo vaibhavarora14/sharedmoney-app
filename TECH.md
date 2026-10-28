@@ -340,6 +340,10 @@ access token and project reference.
 | Android / iOS binaries | Manual (`mobile/build-release*.sh`, `eas submit`) | — |
 | Mobile OTA (EAS Update) | `.github/workflows/publish-ota.yml` | Manual `workflow_dispatch` (`preview` default; `production` explicit) |
 
+#### Vercel preview deployments (Hobby quota)
+
+Vercel Hobby caps the whole account at 100 deployments per rolling 24h, shared with glassmoney and statements-ai. `vercel.json` sets `git.deploymentEnabled` so `cursor/**` (cloud-agent) branches do not create Vercel deployments, unless the branch name contains `preview` (for example `cursor/preview-settle-ab12`). `main`, `ci/*`, `ota/*`, `dependabot/*` and every other branch deploy as before. An Ignored Build Step would not help, because Vercel counts canceled builds against the quota. Need a preview for a `cursor/*` branch? Rename it to include `preview`, or run `vercel deploy` from the repo root (never `--prod`).
+
 Canonical app links must use `https://sharedmoney.app/app`. The Expo hostname is
 kept only as a path-preserving legacy redirect for old links and should not be
 used when generating new invite, group, reminder, or support links.
