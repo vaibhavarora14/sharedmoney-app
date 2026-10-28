@@ -1497,14 +1497,28 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
           </Modal>
         )}
 
-        <Portal>
-          <Dialog
-            visible={showUpiAppPicker}
-            onDismiss={() => setShowUpiAppPicker(false)}
-            testID="settlement-upi-app-picker"
-          >
-            <Dialog.Title>Pay with</Dialog.Title>
-            <Dialog.Content>
+        {/* Nested Modal (not Portal Dialog) so the picker paints above the
+            settle sheet on web and in Design preview screenshots. */}
+        <Modal
+          visible={showUpiAppPicker}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowUpiAppPicker(false)}
+        >
+          <View style={styles.upiPickerOverlay}>
+            <View
+              style={[
+                styles.upiPickerSheet,
+                { backgroundColor: theme.colors.surface },
+              ]}
+              testID="settlement-upi-app-picker"
+            >
+              <Text
+                variant="titleMedium"
+                style={[styles.upiPickerTitle, { color: theme.colors.onSurface }]}
+              >
+                Pay with
+              </Text>
               {upiAppsLoading ? (
                 <SkeletonGroup testID="settlement-upi-apps-skeleton">
                   <Skeleton width="100%" height={44} borderRadius={8} />
@@ -1529,7 +1543,10 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                 <View>
                   <Text
                     variant="bodyMedium"
-                    style={{ color: theme.colors.onSurfaceVariant, marginBottom: 12 }}
+                    style={{
+                      color: theme.colors.onSurfaceVariant,
+                      marginBottom: 12,
+                    }}
                   >
                     No UPI apps found on this device. Copy the UPI ID and pay in your app.
                   </Text>
@@ -1546,17 +1563,17 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                   </Button>
                 </View>
               )}
-            </Dialog.Content>
-            <Dialog.Actions>
               <Button
+                mode="text"
                 onPress={() => setShowUpiAppPicker(false)}
+                style={{ marginTop: 8 }}
                 testID="settlement-upi-picker-cancel"
               >
                 Cancel
               </Button>
-            </Dialog.Actions>
-          </Dialog>
-        </Portal>
+            </View>
+          </View>
+        </Modal>
 
         <Portal>
           <Dialog
