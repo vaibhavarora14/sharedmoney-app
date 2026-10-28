@@ -37,11 +37,14 @@ Deno.test("countNonFormerParticipants includes no-account and pending invites", 
 Deno.test("solo empty all: Just you so far + quiet secondary", () => {
   const copy = getTransactionsEmptyCopy("all", 1);
   assertEquals(copy.title, "Just you so far");
-  assertEquals(copy.body, "Add people to start sharing expenses together.");
+  assertEquals(
+    copy.body,
+    "Send a link to the people you split costs with. They join with one tap, and you can add expenses now or later.",
+  );
   assertEquals(copy.primaryAction, "add_people");
-  assertEquals(copy.primaryLabel, "Add people");
+  assertEquals(copy.primaryLabel, "Invite people");
   assertEquals(copy.secondaryAction, "add_expense");
-  assertEquals(copy.secondaryLabel, "Add expense anyway");
+  assertEquals(copy.secondaryLabel, "Add an expense first");
   // No over-explaining secondary / banner copy
   assertEquals((copy as { infoFooter?: string }).infoFooter, undefined);
   assertEquals((copy as { secondaryBody?: string }).secondaryBody, undefined);
@@ -55,7 +58,11 @@ Deno.test("solo with zero active still people-first", () => {
 
 Deno.test("two+ empty all: expense-first CTA", () => {
   const copy = getTransactionsEmptyCopy("all", 2);
-  assertEquals(copy.title, "No transactions yet");
+  assertEquals(copy.title, "No expenses yet");
+  assertEquals(
+    copy.body,
+    "Add what someone paid and who shared it. SharedMoney works out who owes whom.",
+  );
   assertEquals(copy.primaryAction, "add_expense");
   assertEquals(copy.primaryLabel, "Add first expense");
   assertEquals(copy.secondaryLabel, undefined);

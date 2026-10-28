@@ -60,10 +60,10 @@ export function getTransactionsEmptyCopy(
     if (isSolo) {
       return {
         title: "Just you so far",
-        body: "Add people to start sharing expenses together.",
-        primaryLabel: "Add people",
+        body: "Send a link to the people you split costs with. They join with one tap, and you can add expenses now or later.",
+        primaryLabel: "Invite people",
         primaryAction: "add_people",
-        secondaryLabel: "Add expense anyway",
+        secondaryLabel: "Add an expense first",
         secondaryAction: "add_expense",
       };
     }
@@ -79,17 +79,17 @@ export function getTransactionsEmptyCopy(
   if (isSolo) {
     return {
       title: "Just you so far",
-      body: "Add people to start sharing expenses together.",
-      primaryLabel: "Add people",
+      body: "Send a link to the people you split costs with. They join with one tap, and you can add expenses now or later.",
+      primaryLabel: "Invite people",
       primaryAction: "add_people",
-      secondaryLabel: "Add expense anyway",
+      secondaryLabel: "Add an expense first",
       secondaryAction: "add_expense",
     };
   }
 
   return {
-    title: "No transactions yet",
-    body: "Add an expense or record a payment to get started.",
+    title: "No expenses yet",
+    body: "Add what someone paid and who shared it. SharedMoney works out who owes whom.",
     primaryLabel: "Add first expense",
     primaryAction: "add_expense",
   };
