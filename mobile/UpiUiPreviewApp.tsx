@@ -34,19 +34,25 @@ type PreviewKind =
   | "settle-ios-picker"
   | "settle-desktop-qr";
 
+const PREVIEW_KINDS: PreviewKind[] = [
+  "profile-empty",
+  "profile-filled",
+  "profile-invalid",
+  "settle-with-upi",
+  "settle-no-upi",
+  "settle-confirm",
+  "settle-ios-picker",
+  "settle-desktop-qr",
+];
+
 function resolvePreview(): PreviewKind {
-  const raw = process.env.EXPO_PUBLIC_UPI_UI_PREVIEW?.trim() || "settle-with-upi";
-  const allowed: PreviewKind[] = [
-    "profile-empty",
-    "profile-filled",
-    "profile-invalid",
-    "settle-with-upi",
-    "settle-no-upi",
-    "settle-confirm",
-    "settle-ios-picker",
-    "settle-desktop-qr",
-  ];
-  return (allowed.includes(raw as PreviewKind) ? raw : "settle-with-upi") as PreviewKind;
+  let raw = process.env.EXPO_PUBLIC_UPI_UI_PREVIEW?.trim() || "";
+  if (Platform.OS === "web" && typeof window !== "undefined") {
+    const fromQuery = new URLSearchParams(window.location.search).get("upiPreview");
+    if (fromQuery) raw = fromQuery;
+  }
+  if (!raw) raw = "settle-with-upi";
+  return (PREVIEW_KINDS.includes(raw as PreviewKind) ? raw : "settle-with-upi") as PreviewKind;
 }
 
 function ProfileUpiPreview({ kind }: { kind: PreviewKind }) {
