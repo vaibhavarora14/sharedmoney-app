@@ -38,6 +38,20 @@ Deno.test("replay env overrides win over platform defaults", () => {
   );
 });
 
+Deno.test("replay default path uses direct process.env.EXPO_PUBLIC member access", async () => {
+  const source = await Deno.readTextFile(
+    new URL("./sentryTriagePolicy.ts", import.meta.url),
+  );
+  assertEquals(
+    source.includes("process.env.EXPO_PUBLIC_SENTRY_REPLAYS_SESSION_SAMPLE_RATE"),
+    true,
+  );
+  assertEquals(
+    source.includes("process.env.EXPO_PUBLIC_SENTRY_REPLAYS_ON_ERROR_SAMPLE_RATE"),
+    true,
+  );
+});
+
 Deno.test("auth session transitions stay PII-free and stable", () => {
   assertEquals(resolveAuthSessionTransition(null, "u1"), "signed_in");
   assertEquals(resolveAuthSessionTransition("u1", null), "signed_out");
