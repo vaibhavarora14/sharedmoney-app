@@ -14,6 +14,8 @@ export interface Profile {
   terms_accepted_at?: string | null;
   terms_version?: string | null;
   preferred_currency?: string | null;
+  /** Optional UPI VPA; group co-members can read for settle Pay via UPI. */
+  upi_id?: string | null;
   created_at: string;
   updated_at: string;
 }

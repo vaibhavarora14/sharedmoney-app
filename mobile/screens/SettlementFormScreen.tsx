@@ -2,7 +2,9 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import React, { useEffect, useMemo, useState } from "react";
 import {
     Alert,
+    Clipboard,
     KeyboardAvoidingView,
+    Linking,
     Modal,
     Platform,
     Pressable,
@@ -12,14 +14,20 @@ import {
 } from "react-native";
 import { Appbar, Button, Chip, Dialog, Portal, Text, TextInput, useTheme } from "react-native-paper";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Skeleton, SkeletonGroup } from "../components/Skeleton";
 import { WEB_MAX_WIDTH } from "../constants/layout";
+import { useUserProfiles } from "../hooks/useUserProfiles";
 import { Balance, GroupMember, Participant, Settlement } from "../types";
 import {
     getCurrencySymbol,
     getDefaultCurrency,
 } from "../utils/currency";
 import { getUserFriendlyErrorMessage } from "../utils/errorMessages";
+import { captureIdentifiedAnalyticsEvent } from "../utils/posthogAnalytics";
+import { ANALYTICS_EVENTS } from "../utils/posthogEvents";
 import {
+  askAddUpiIdHint,
+  PAY_VIA_UPI_LABEL,
   RECORD_SETTLEMENT_LABEL,
   SETTLE_OUTSIDE_APP_HELP,
   UPDATE_SETTLEMENT_LABEL,
@@ -28,6 +36,7 @@ import {
   formatShareAmountInput,
   formatShareCurrency,
   parseShareAmountInput,
+  settleFirstName,
   settleModalPersonName,
   settleModalYouLabel,
 } from "../utils/settleShareMessage";
@@ -35,6 +44,11 @@ import {
   settlementCounterpartyDisplayName,
   type SettlementPresence,
 } from "../utils/settlementPresence";
+import {
+  buildUpiPayUri,
+  canUseUpiDeepLink,
+  normalizeUpiId,
+} from "../utils/upi";
 
 interface SettlementFormScreenProps {
   visible: boolean;
@@ -79,6 +93,8 @@ interface SettlementFormScreenProps {
   remindShareAnotherWay?: boolean;
   onRemindPress?: () => void;
   onRemindShareAnotherWay?: () => void;
+  /** Group display name for UPI `tn` note (`SharedMoney: {group}`). */
+  groupName?: string;
   /**
    * @deprecated Presence chrome lives on the group settle row only — the modal
    * header is a single sentence with no suffix. Kept optional for call-site compat.
@@ -162,6 +178,7 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
   remindShareAnotherWay = false,
   onRemindPress,
   onRemindShareAnotherWay,
+  groupName,
 }) => {
   const isEditing = !!settlement;
   const isAdminMode = !!(fromParticipantId && toParticipantId);
@@ -192,6 +209,7 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
   const [amountError, setAmountError] = useState<string>("");
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [upiCopied, setUpiCopied] = useState(false);
 
   // Determine settlement direction
   const isPaying = useMemo(() => {
@@ -205,6 +223,123 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
 
   // Owes-you create only: secondary Remind under primary. You-owe / edit: never.
   const showRemind = !isEditing && !isPaying && !!onRemindPress;
+
+  const isInrSettle = effectiveDefaultCurrency.toUpperCase() === "INR";
+
+  const payeeUserId = useMemo(() => {
+    if (isEditing || !isPaying) return null;
+    if (balance?.user_id) return balance.user_id;
+    const targetParticipantId = toParticipantId || selectedToParticipantId;
+    if (!targetParticipantId) return null;
+    const member = groupMembers.find(
+      (m) => m.participant_id === targetParticipantId,
+    );
+    if (member?.user_id) return member.user_id;
+    const person = participants.find((p) => p.id === targetParticipantId);
+    return person?.user_id || null;
+  }, [
+    isEditing,
+    isPaying,
+    balance?.user_id,
+    toParticipantId,
+    selectedToParticipantId,
+    groupMembers,
+    participants,
+  ]);
+
+  const payeeProfilesQuery = useUserProfiles(
+    visible && isInrSettle && payeeUserId ? [payeeUserId] : [],
+  );
+  const payeeUpiId = useMemo(() => {
+    if (!payeeUserId) return null;
+    return normalizeUpiId(
+      payeeProfilesQuery.data.get(payeeUserId)?.upi_id ?? null,
+    );
+  }, [payeeUserId, payeeProfilesQuery.data]);
+
+  const payeeDisplayName = useMemo(() => {
+    if (balance) {
+      return settlementCounterpartyDisplayName(balance, participants);
+    }
+    const targetParticipantId = toParticipantId || selectedToParticipantId;
+    const member = groupMembers.find(
+      (m) => m.participant_id === targetParticipantId,
+    );
+    if (member) return settleModalPersonName(member);
+    const person = participants.find((p) => p.id === targetParticipantId);
+    if (person) return settleModalPersonName(person);
+    return "Member";
+  }, [
+    balance,
+    participants,
+    toParticipantId,
+    selectedToParticipantId,
+    groupMembers,
+  ]);
+
+  const showUpiSkeleton =
+    !isEditing &&
+    isPaying &&
+    isInrSettle &&
+    !!payeeUserId &&
+    payeeProfilesQuery.isLoading;
+  const showPayViaUpi =
+    !isEditing && isPaying && isInrSettle && !!payeeUpiId;
+  const showAskUpiHint =
+    !isEditing &&
+    isPaying &&
+    isInrSettle &&
+    !!payeeUserId &&
+    !payeeProfilesQuery.isLoading &&
+    !payeeUpiId;
+  const useUpiDeepLink = canUseUpiDeepLink(
+    Platform.OS,
+    Platform.OS === "web" && typeof navigator !== "undefined"
+      ? navigator.userAgent
+      : undefined,
+  );
+
+  useEffect(() => {
+    if (!visible) setUpiCopied(false);
+  }, [visible]);
+
+  const handlePayViaUpi = async () => {
+    if (!payeeUpiId) return;
+    const amountNum = parseShareAmountInput(amount);
+    if (amountNum == null || amountNum <= 0) {
+      setAmountError("Please enter a valid amount greater than 0");
+      return;
+    }
+    captureIdentifiedAnalyticsEvent(
+      currentUserId,
+      ANALYTICS_EVENTS.UPI_PAY_TAPPED,
+      {
+        currency: "INR",
+        platform: Platform.OS,
+        mode: useUpiDeepLink ? "deep_link" : "copy",
+        group_id: groupId,
+      },
+    );
+    if (!useUpiDeepLink) {
+      Clipboard.setString(payeeUpiId);
+      setUpiCopied(true);
+      return;
+    }
+    try {
+      const uri = buildUpiPayUri({
+        vpa: payeeUpiId,
+        payeeName: payeeDisplayName,
+        amount: amountNum,
+        groupName: groupName || "group",
+      });
+      await Linking.openURL(uri);
+    } catch {
+      Alert.alert(
+        "Could not open UPI",
+        "Open your UPI app and pay manually, then record the settlement here.",
+      );
+    }
+  };
 
   // Determine fixed payer/receiver display names
   const adminPayer = useMemo(() => {
@@ -908,8 +1043,70 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
             </View>
 
             <View style={styles.buttonContainer}>
+              {showUpiSkeleton ? (
+                <SkeletonGroup
+                  style={styles.upiSkeleton}
+                  testID="settlement-upi-skeleton"
+                >
+                  <Skeleton width="100%" height={48} borderRadius={8} />
+                </SkeletonGroup>
+              ) : null}
+              {showPayViaUpi && useUpiDeepLink ? (
+                <Button
+                  mode="contained"
+                  onPress={() => {
+                    void handlePayViaUpi();
+                  }}
+                  disabled={loading || !amount}
+                  style={[styles.saveButton, { borderRadius: 8 }]}
+                  icon="contactless-payment"
+                  testID="settlement-pay-via-upi-button"
+                  accessibilityLabel={PAY_VIA_UPI_LABEL}
+                >
+                  {PAY_VIA_UPI_LABEL}
+                </Button>
+              ) : null}
+              {showPayViaUpi && !useUpiDeepLink ? (
+                <View
+                  style={[
+                    styles.upiDesktopBlock,
+                    { borderColor: theme.colors.outline },
+                  ]}
+                  testID="settlement-upi-desktop-copy"
+                >
+                  <View style={styles.upiDesktopCopy}>
+                    <Text
+                      variant="labelLarge"
+                      style={{ color: theme.colors.onSurfaceVariant }}
+                    >
+                      UPI ID
+                    </Text>
+                    <Text
+                      variant="titleMedium"
+                      selectable
+                      style={{ color: theme.colors.onSurface }}
+                      testID="settlement-upi-id-value"
+                    >
+                      {payeeUpiId}
+                    </Text>
+                  </View>
+                  <Button
+                    mode="contained"
+                    compact
+                    onPress={() => {
+                      void handlePayViaUpi();
+                    }}
+                    disabled={loading}
+                    style={{ borderRadius: 8 }}
+                    testID="settlement-upi-copy-button"
+                    accessibilityLabel={upiCopied ? "Copied" : "Copy UPI ID"}
+                  >
+                    {upiCopied ? "Copied" : "Copy"}
+                  </Button>
+                </View>
+              ) : null}
               <Button
-                mode="contained"
+                mode={showPayViaUpi ? "outlined" : "contained"}
                 onPress={handleSave}
                 loading={loading}
                 disabled={
@@ -920,12 +1117,28 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                     (!selectedFromParticipantId || !selectedToParticipantId))
                 }
                 style={[styles.saveButton, { borderRadius: 8 }]}
-                icon={isEditing ? undefined : "arrow-right"}
-                contentStyle={{ flexDirection: "row-reverse" }}
+                icon={isEditing || showPayViaUpi ? undefined : "arrow-right"}
+                contentStyle={
+                  isEditing || showPayViaUpi
+                    ? undefined
+                    : { flexDirection: "row-reverse" }
+                }
                 testID="settlement-save-button"
               >
                 {isEditing ? UPDATE_SETTLEMENT_LABEL : RECORD_SETTLEMENT_LABEL}
               </Button>
+              {showAskUpiHint ? (
+                <Text
+                  variant="bodySmall"
+                  style={[
+                    styles.askUpiHint,
+                    { color: theme.colors.onSurfaceVariant },
+                  ]}
+                  testID="settlement-ask-upi-hint"
+                >
+                  {askAddUpiIdHint(settleFirstName(payeeDisplayName))}
+                </Text>
+              ) : null}
               {showRemind ? (
                 <View style={styles.remindBlock}>
                   <Button
@@ -1155,6 +1368,29 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     marginBottom: 4,
+  },
+  upiSkeleton: {
+    marginBottom: 8,
+  },
+  upiDesktopBlock: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 8,
+  },
+  upiDesktopCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  askUpiHint: {
+    textAlign: "center",
+    marginBottom: 8,
+    marginTop: 4,
   },
   remindBlock: {
     alignItems: "center",

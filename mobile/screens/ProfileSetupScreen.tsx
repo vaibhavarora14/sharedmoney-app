@@ -51,12 +51,20 @@ import {
 } from "../utils/countryCodes";
 import { showErrorAlert } from "../utils/errorHandling";
 import { isTransactionNotificationsEnabled } from "../utils/featureFlags";
+import { captureIdentifiedAnalyticsEvent } from "../utils/posthogAnalytics";
+import { ANALYTICS_EVENTS } from "../utils/posthogEvents";
 import {
   buildSupportEmailUrl,
   SUPPORT_EMAIL,
   SUPPORT_TOPICS,
   type SupportTopic,
 } from "../utils/supportEmail";
+import {
+  getOptionalUpiIdFormatError,
+  normalizeUpiId,
+  UPI_ID_PLACEHOLDER,
+  UPI_ID_PROFILE_HELPER,
+} from "../utils/upi";
 import { SplitBillScreen } from "./SplitBillScreen";
 
 interface ProfileSetupScreenProps {
@@ -76,6 +84,8 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [phoneNumber, setPhoneNumber] = useState(""); // Phone number without country code
+  const [upiId, setUpiId] = useState("");
+  const [upiIdError, setUpiIdError] = useState("");
   const [selectedCountry, setSelectedCountry] = useState<CountryCode>(
     getDefaultCountry()
   );
@@ -101,6 +111,8 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
   useEffect(() => {
     if (profile) {
       setFullName(profile.full_name || "");
+      setUpiId(profile.upi_id || "");
+      setUpiIdError("");
       const phoneValue = profile.phone || "";
 
       // Parse existing phone number to extract country code
@@ -175,9 +187,11 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
     if (!profile) return false;
     const originalFullName = (profile.full_name || "").trim();
     const originalPhone = (profile.phone || "").trim();
+    const originalUpiId = (profile.upi_id || "").trim().toLowerCase();
     const originalCountryCode = (profile.country_code || "").toUpperCase();
     const currentFullName = fullName.trim();
     const currentPhone = phone.trim();
+    const currentUpiId = upiId.trim().toLowerCase();
     const currentCountryCode = selectedCountry.code.toUpperCase();
 
     // Only consider country code changed if there is a phone number
@@ -188,22 +202,35 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
     return (
       originalFullName !== currentFullName ||
       originalPhone !== currentPhone ||
+      originalUpiId !== currentUpiId ||
       countryChanged
     );
-  }, [profile, fullName, phone, selectedCountry]);
+  }, [profile, fullName, phone, upiId, selectedCountry]);
 
   const handleComplete = async () => {
-    // Validation
+    const formatError = getOptionalUpiIdFormatError(upiId);
+    if (formatError) {
+      setUpiIdError(formatError);
+      return;
+    }
+    setUpiIdError("");
 
     setLoading(true);
     try {
+      const normalizedUpi = normalizeUpiId(upiId);
       await updateProfile({
         full_name: fullName.trim(),
         phone: phone.trim() || undefined,
         country_code: selectedCountry.code,
         profile_completed: true,
         preferred_currency: preferredCurrency,
+        upi_id: normalizedUpi,
       });
+      if (normalizedUpi) {
+        captureIdentifiedAnalyticsEvent(user?.id, ANALYTICS_EVENTS.UPI_ID_SAVED, {
+          platform: Platform.OS,
+        });
+      }
       onComplete();
     } catch (error) {
       showErrorAlert(error, signOut, "Error");
@@ -407,6 +434,50 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
                 contentStyle={styles.phoneInputContent}
               />
             </View>
+
+            <TextInput
+              label="UPI ID"
+              value={upiId}
+              onChangeText={(value) => {
+                setUpiId(value);
+                if (upiIdError) {
+                  setUpiIdError(getOptionalUpiIdFormatError(value) || "");
+                }
+              }}
+              onBlur={() => {
+                setUpiIdError(getOptionalUpiIdFormatError(upiId) || "");
+              }}
+              mode="outlined"
+              disabled={loading}
+              error={!!upiIdError}
+              style={styles.input}
+              left={<TextInput.Icon icon="bank" />}
+              placeholder={UPI_ID_PLACEHOLDER}
+              autoCapitalize="none"
+              autoCorrect={false}
+              testID="profile-upi-id-input"
+              accessibilityHint={UPI_ID_PROFILE_HELPER}
+            />
+            {upiIdError ? (
+              <Text
+                variant="bodySmall"
+                accessibilityLiveRegion="polite"
+                style={{ color: theme.colors.error, marginTop: -8, marginBottom: 8 }}
+              >
+                {upiIdError}
+              </Text>
+            ) : (
+              <Text
+                variant="bodySmall"
+                style={{
+                  color: theme.colors.onSurfaceVariant,
+                  marginTop: -8,
+                  marginBottom: 12,
+                }}
+              >
+                {UPI_ID_PROFILE_HELPER}
+              </Text>
+            )}
 
             <View style={styles.appearanceSection}>
               <View style={styles.appearanceHeader}>
