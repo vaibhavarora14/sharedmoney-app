@@ -487,7 +487,7 @@ function AppContent() {
       setCurrentRoute("groups");
       setBanner({
         type: "error",
-        message: "We couldn't open that group. Make sure you have access.",
+        message: "We couldn't open that group. Ask whoever invited you to send a new link.",
       });
     } finally {
       await AsyncStorage.removeItem(PENDING_GROUP_DEEP_LINK_KEY).catch(
@@ -1586,6 +1586,7 @@ function AppContent() {
               <AddMemberScreen
                 visible={showAddMember}
                 groupId={selectedGroup.id}
+                groupName={selectedGroup.name}
                 onAddMember={async (person) => {
                   const result = await handleAddMember(person);
                   // Don't close modal automatically - let AddMemberScreen handle it

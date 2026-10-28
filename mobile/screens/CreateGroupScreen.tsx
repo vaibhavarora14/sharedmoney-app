@@ -48,7 +48,7 @@ export const CreateGroupScreen: React.FC<CreateGroupScreenProps> = ({
   const handleCreate = async () => {
     // Validation
     if (!name.trim()) {
-      Alert.alert("Error", "Please enter a group name");
+      Alert.alert("Name your group", "Add a name, like Goa trip or Flat 4B.");
       return;
     }
 
@@ -86,7 +86,7 @@ export const CreateGroupScreen: React.FC<CreateGroupScreenProps> = ({
           >
             <Appbar.BackAction onPress={handleDismiss} />
             <Appbar.Content
-              title="Create New Group"
+              title="New group"
               titleStyle={{ fontWeight: "bold" }}
             />
           </Appbar.Header>

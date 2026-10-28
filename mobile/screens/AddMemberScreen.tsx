@@ -51,6 +51,8 @@ import { ANALYTICS_EVENTS } from "../utils/posthogEvents";
 interface AddMemberScreenProps {
   visible: boolean;
   groupId: string;
+  /** Optional display name already loaded by the caller; used in share text only. */
+  groupName?: string;
   onAddMember: (person: {
     fullName?: string;
     email?: string | null;
@@ -66,9 +68,26 @@ type SheetMode = "chooser" | "create" | "existing";
 const LINK_MAX_USES = 10;
 const LINK_VALID_DAYS = 30;
 
+function buildInviteShareMessage(url: string, groupName?: string): string {
+  const trimmedName = groupName?.trim();
+  if (trimmedName) {
+    return `I started a SharedMoney group, ${trimmedName}, for us to track who paid and who owes. No bank link needed. Join here: ${url}`;
+  }
+  return `I started a SharedMoney group for us to track who paid and who owes. No bank link needed. Join here: ${url}`;
+}
+
+function buildInviteShareTitle(groupName?: string): string {
+  const trimmedName = groupName?.trim();
+  if (trimmedName) {
+    return `I started a SharedMoney group, ${trimmedName}`;
+  }
+  return "I started a SharedMoney group";
+}
+
 export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
   visible,
   groupId,
+  groupName,
   onAddMember,
   onDismiss,
 }) => {
@@ -180,8 +199,8 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
       if (Platform.OS === "web") {
         if (typeof navigator !== "undefined" && navigator.share) {
           await navigator.share({
-            title: "Join my group on SharedMoney!",
-            text: `Join my group on SharedMoney! ${url}`,
+            title: buildInviteShareTitle(groupName),
+            text: buildInviteShareMessage(url, groupName),
             url,
           });
           shared = true;
@@ -195,7 +214,7 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
         }
       } else {
         await Share.share({
-          message: `Join my group on SharedMoney! ${url}`,
+          message: buildInviteShareMessage(url, groupName),
           url,
         });
         shared = true;
@@ -225,8 +244,8 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
     if (Platform.OS === "web") {
       if (typeof navigator !== "undefined" && navigator.share) {
         await navigator.share({
-          title: "Join my group on SharedMoney!",
-          text: `Join my group on SharedMoney! ${url}`,
+          title: buildInviteShareTitle(groupName),
+          text: buildInviteShareMessage(url, groupName),
           url,
         });
         return;
@@ -242,7 +261,7 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
     }
 
     await Share.share({
-      message: `Join my group on SharedMoney! ${url}`,
+      message: buildInviteShareMessage(url, groupName),
       url,
     });
   };
@@ -544,7 +563,7 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
                           color: theme.colors.onSurfaceVariant,
                         }]}
                       >
-                        {`Send a link — up to ${LINK_MAX_USES} people · valid ${LINK_VALID_DAYS} days`}
+                        {`Anyone with this link can join. Works for up to ${LINK_MAX_USES} people for ${LINK_VALID_DAYS} days.`}
                       </Text>
                     </View>
                   )
