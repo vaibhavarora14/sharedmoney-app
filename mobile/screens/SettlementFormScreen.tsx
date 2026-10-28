@@ -1721,6 +1721,23 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     borderRadius: 8,
   },
+  upiPickerOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.4)",
+    padding: 24,
+  },
+  upiPickerSheet: {
+    borderRadius: 12,
+    padding: 20,
+    maxWidth: 420,
+    width: "100%",
+    alignSelf: "center",
+  },
+  upiPickerTitle: {
+    fontWeight: "700",
+    marginBottom: 16,
+  },
   remindBlock: {
     alignItems: "center",
     marginBottom: 4,
