@@ -71,7 +71,7 @@ const LINK_VALID_DAYS = 30;
 function buildInviteShareMessage(url: string, groupName?: string): string {
   const trimmedName = groupName?.trim();
   if (trimmedName) {
-    return `I started a SharedMoney group, ${trimmedName}, for us to track who paid and who owes. No bank link needed. Join here: ${url}`;
+    return `I started '${trimmedName}' on SharedMoney to track who paid and who owes. No bank link needed. Join here: ${url}`;
   }
   return `I started a SharedMoney group for us to track who paid and who owes. No bank link needed. Join here: ${url}`;
 }
@@ -79,7 +79,7 @@ function buildInviteShareMessage(url: string, groupName?: string): string {
 function buildInviteShareTitle(groupName?: string): string {
   const trimmedName = groupName?.trim();
   if (trimmedName) {
-    return `I started a SharedMoney group, ${trimmedName}`;
+    return `I started '${trimmedName}' on SharedMoney`;
   }
   return "I started a SharedMoney group";
 }
