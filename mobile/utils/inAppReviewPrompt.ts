@@ -7,6 +7,7 @@ import {
   type MaybeRequestInAppReviewInput,
   type StoreReviewModule,
 } from "./inAppReviewPromptLogic";
+import { loadStoreReview } from "./loadStoreReview";
 import { captureIdentifiedAnalyticsEvent } from "./posthogAnalytics";
 import { ANALYTICS_EVENTS } from "./posthogEvents";
 
@@ -16,16 +17,7 @@ export type {
   StoreReviewModule,
 } from "./inAppReviewPromptLogic";
 
-function defaultLoadStoreReview(): StoreReviewModule | null {
-  // Lazy require: expo-store-review touches requireNativeModule at load time.
-  // OTA to binaries that never linked ExpoStoreReview must not crash.
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    return require("expo-store-review") as StoreReviewModule;
-  } catch {
-    return null;
-  }
-}
+const defaultLoadStoreReview = loadStoreReview;
 
 function defaultDependencies(
   overrides: Partial<InAppReviewPromptDependencies> = {},
