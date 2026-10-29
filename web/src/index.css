@@ -3442,9 +3442,7 @@ p {
     grid-template-columns: 1fr;
   }
 
-  .related-pages {
-    grid-template-columns: 1fr;
-  }
+  /* Keep related-pages on its own breakpoints: 1 / 2 (48rem) / 4 (75rem). */
 
   .hero-actions .cta-primary,
   .route-hero-actions > .cta-primary {
