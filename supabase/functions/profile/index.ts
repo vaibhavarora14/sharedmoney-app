@@ -5,6 +5,10 @@ import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
 import { buildTermsAcceptanceUpdate } from '../_shared/profile.ts';
 import { normalizeOptionalCurrency } from '../_shared/rates.ts';
 import { createEmptyResponse, createSuccessResponse } from '../_shared/response.ts';
+import {
+  getOptionalUpiIdFormatError,
+  normalizeUpiId,
+} from '../_shared/upi.ts';
 import { fetchUserEmails } from '../_shared/user-email.ts';
 import { validateBodySize } from '../_shared/validation.ts';
 
@@ -18,11 +22,12 @@ interface Profile {
   terms_accepted_at?: string | null;
   terms_version?: string | null;
   preferred_currency?: string | null;
+  upi_id?: string | null;
   created_at: string;
   updated_at: string;
 }
 
-type ProfileUpdates = Partial<Pick<Profile, 'full_name' | 'avatar_url' | 'phone' | 'country_code' | 'profile_completed' | 'preferred_currency'>>;
+type ProfileUpdates = Partial<Pick<Profile, 'full_name' | 'avatar_url' | 'phone' | 'country_code' | 'profile_completed' | 'preferred_currency' | 'upi_id'>>;
 type ProfileUpdateRequest = ProfileUpdates & { accept_terms?: boolean };
 
 interface ValidationResult {
@@ -144,7 +149,58 @@ function validateProfileUpdates(updates: ProfileUpdateRequest): ValidationResult
     }
   }
 
+  if (updates.upi_id !== undefined && updates.upi_id !== null) {
+    if (typeof updates.upi_id !== 'string') {
+      return { valid: false, error: 'UPI ID must be a string' };
+    }
+    const upiError = getOptionalUpiIdFormatError(updates.upi_id);
+    if (upiError) {
+      return { valid: false, error: upiError };
+    }
+  }
+
   return { valid: true };
+}
+
+/**
+ * User IDs that share at least one active group with the viewer (plus self).
+ * Used to gate upi_id on service-role batch reads (RLS is bypassed there).
+ */
+async function sharedGroupUserIds(
+  serviceClient: ReturnType<typeof createClient>,
+  viewerId: string,
+  candidateIds: string[],
+): Promise<Set<string>> {
+  const allowed = new Set<string>([viewerId]);
+  const others = candidateIds.filter((id) => id && id !== viewerId);
+  if (others.length === 0) return allowed;
+
+  const { data: myMemberships, error: myError } = await serviceClient
+    .from('group_members')
+    .select('group_id')
+    .eq('user_id', viewerId)
+    .eq('status', 'active');
+
+  if (myError || !myMemberships?.length) {
+    return allowed;
+  }
+
+  const groupIds = myMemberships.map((row: { group_id: string }) => row.group_id);
+  const { data: coMembers, error: coError } = await serviceClient
+    .from('group_members')
+    .select('user_id')
+    .in('group_id', groupIds)
+    .in('user_id', others)
+    .eq('status', 'active');
+
+  if (coError) {
+    return allowed;
+  }
+
+  for (const row of coMembers || []) {
+    if (row.user_id) allowed.add(row.user_id);
+  }
+  return allowed;
 }
 
 Deno.serve(async (req: Request): Promise<Response> => {
@@ -207,15 +263,18 @@ Deno.serve(async (req: Request): Promise<Response> => {
             },
           });
           
-          // Fetch all profile fields using service role client (bypasses RLS)
+          // Fetch profile fields using service role (bypasses RLS). upi_id is
+          // stripped below unless the viewer shares an active group membership.
           const { data: profiles, error } = await serviceClient
             .from('profiles')
-            .select('id, full_name, avatar_url, phone, country_code, profile_completed, created_at, updated_at')
+            .select('id, full_name, avatar_url, phone, country_code, profile_completed, upi_id, created_at, updated_at')
             .in('id', userIds);
           
           if (error) {
             return handleError(error, 'fetching profiles', req);
           }
+
+          const upiAllowedIds = await sharedGroupUserIds(serviceClient, user.id, userIds);
           
           // Enrich profiles with email addresses
           const emailMap = await fetchUserEmails(userIds, user.id, user.email || null);
@@ -228,10 +287,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
           const enrichedProfiles = userIds.map(userId => {
             const existingProfile = profileMap.get(userId);
             const email = emailMap.get(userId) || null;
+            const canSeeUpi = upiAllowedIds.has(userId);
             
             if (existingProfile) {
               return {
                 ...existingProfile,
+                upi_id: canSeeUpi ? (existingProfile.upi_id ?? null) : null,
                 email,
               };
             } else {
@@ -243,6 +304,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
                 phone: null,
                 country_code: null,
                 profile_completed: false,
+                upi_id: null,
                 created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
                 email,
@@ -347,6 +409,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
         sanitizedUpdates.preferred_currency = normalizeOptionalCurrency(updates.preferred_currency).value ?? null;
       }
 
+      if (updates.upi_id !== undefined) {
+        sanitizedUpdates.upi_id = normalizeUpiId(updates.upi_id);
+      }
+
       if (updates.accept_terms === true) {
         Object.assign(sanitizedUpdates, buildTermsAcceptanceUpdate(true));
       }
@@ -370,6 +436,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
               country_code: sanitizedUpdates.country_code ?? null,
               profile_completed: sanitizedUpdates.profile_completed ?? false,
               preferred_currency: sanitizedUpdates.preferred_currency ?? null,
+              upi_id: sanitizedUpdates.upi_id ?? null,
               terms_accepted_at: sanitizedUpdates.terms_accepted_at ?? null,
               terms_version: sanitizedUpdates.terms_version ?? null,
             })
