@@ -110,6 +110,17 @@ function structuredData(page) {
           offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
           description: page.description,
         },
+        {
+          "@type": "FAQPage",
+          mainEntity: page.faqs.map((faq) => ({
+            "@type": "Question",
+            name: faq.question,
+            acceptedAnswer: {
+              "@type": "Answer",
+              text: faq.answer,
+            },
+          })),
+        },
       ],
     };
   }
