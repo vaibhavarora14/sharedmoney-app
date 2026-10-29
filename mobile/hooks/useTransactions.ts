@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import type { InfiniteData, QueryClient } from "@tanstack/react-query";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../contexts/AuthContext";
-import { Transaction } from "../types";
+import { Participant, Transaction } from "../types";
 import { fetchWithAuth } from "../utils/api";
 import { getDefaultCurrency } from "../utils/currency";
 import {
@@ -13,6 +13,8 @@ import {
   extractSplitAmongParticipantIds,
   resolveGroupDefaultSplitAmong,
 } from "../utils/groupSplit";
+import { countActiveGroupMembers } from "../utils/inAppReviewEligibility";
+import { maybeRequestInAppReviewAfterExpense } from "../utils/inAppReviewPrompt";
 import { captureIdentifiedAnalyticsEvent } from "../utils/posthogAnalytics";
 import { ANALYTICS_EVENTS } from "../utils/posthogEvents";
 import {
@@ -168,6 +170,17 @@ function invalidateTransactionAdjacents(queryClient: QueryClient, groupId?: stri
   queryClient.invalidateQueries({ queryKey: ["balances"] }); // Invalidate all balances (including global)
   queryClient.invalidateQueries({ queryKey: queryKeys.balances(groupId) });
   queryClient.invalidateQueries({ queryKey: queryKeys.activity(groupId) });
+}
+
+function resolveActiveGroupMemberCount(
+  queryClient: QueryClient,
+  groupId: string | undefined,
+): number {
+  if (!groupId) return 0;
+  const participants = queryClient.getQueryData<Participant[]>(
+    queryKeys.participants(groupId),
+  );
+  return countActiveGroupMembers(participants);
 }
 
 export function useGroupLastTransactionCurrency(groupId?: string | null) {
@@ -400,6 +413,13 @@ export function useCreateTransaction(onSuccess?: () => void) {
         ...(groupId ? { group_id: groupId } : {}),
       });
       onSuccess?.();
+      // After save UI settles (dismiss/navigate via onSuccess), maybe ask for
+      // a native in-app review. Never blocks the mutation; never throws.
+      void maybeRequestInAppReviewAfterExpense({
+        userId: user?.id,
+        transactionType: variables.type,
+        groupMemberCount: resolveActiveGroupMemberCount(queryClient, groupId),
+      });
     },
   });
 

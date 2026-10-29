@@ -27,7 +27,8 @@
  * `group_details_ready` (open latency; props: group_id, duration_ms),
  * `groups_home_loaded` (home list ready; props: duration_ms, group_count),
  * `upi_pay_tapped` (settle Pay via UPI; never include VPA),
- * `upi_id_saved` (profile UPI ID saved; never include VPA).
+ * `upi_id_saved` (profile UPI ID saved; never include VPA),
+ * `review_prompt_requested` (native in-app review API invoked).
  */
 export const ANALYTICS_EVENTS = {
   AUTH_SUCCEEDED: "auth_succeeded",
@@ -56,6 +57,8 @@ export const ANALYTICS_EVENTS = {
   UPI_PAY_TAPPED: "upi_pay_tapped",
   /** Profile UPI ID saved successfully. No VPA in properties. */
   UPI_ID_SAVED: "upi_id_saved",
+  /** Native StoreReview.requestReview invoked (OS may still throttle UI). */
+  REVIEW_PROMPT_REQUESTED: "review_prompt_requested",
 } as const;
 
 export type AnalyticsEventName =
