@@ -118,6 +118,8 @@ module.exports = ({ config }) => {
         buildNumber: versionConfig.buildNumber.toString(),
         usesAppleSignIn: true,
         // Avoid App Store Connect manual encryption questionnaire prompts.
+        // LSApplicationQueriesSchemes for UPI + WhatsApp are merged by
+        // ./plugins/withUpiAppQueries (needed for Linking.canOpenURL).
         infoPlist: {
           ITSAppUsesNonExemptEncryption: false
         },
@@ -192,6 +194,7 @@ module.exports = ({ config }) => {
         : {}),
       plugins: [
         './plugins/withStripAssociatedDomains',
+        './plugins/withUpiAppQueries',
         [
           "@sentry/react-native/expo",
           {

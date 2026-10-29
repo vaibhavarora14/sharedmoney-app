@@ -127,6 +127,7 @@
             "npm:expo-notifications@~57.0.21",
             "npm:expo-splash-screen@~57.0.9",
             "npm:expo-status-bar@~57.0.1",
+            "npm:expo-store-review@~57.0.3",
             "npm:expo-updates@~57.0.24",
             "npm:expo-web-browser@~57.0.3",
             "npm:expo@~57.0.26",
@@ -143,6 +144,7 @@
             "npm:react-native-web@0.21",
             "npm:react-native@0.86.3",
             "npm:react@19.2.3",
+            "npm:toqr@~0.1.1",
             "npm:typescript@~6.0.3"
           ]
         }
@@ -166,7 +168,7 @@
             "npm:react@^19.2.0",
             "npm:typescript-eslint@^8.46.4",
             "npm:typescript@~5.9.3",
-            "npm:vite@^7.3.6",
+            "npm:vite@^7.3.7",
             "npm:vitest@^4.1.11"
           ]
         }

@@ -291,6 +291,7 @@ export const AllSettlementsScreen: React.FC<AllSettlementsScreenProps> = ({
           participants={selectedMembers.participants}
           currentUserId={user.id}
           groupId={selectedLine.groupId}
+          groupName={selectedLine.groupName}
           defaultCurrency={selectedLine.currency || getDefaultCurrency()}
           fromParticipantId={
             selectedLine.direction === "pay"
