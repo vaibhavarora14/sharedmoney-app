@@ -71,7 +71,10 @@ export function SeoPageContent({ page }: { page: SeoPage }) {
 
   return (
     <>
-      <section className="section seo-sections section-band">
+      {/* Home follows trust (band), so these cards stay on a white page. Other routes use a band after the white hero. */}
+      <section
+        className={`section seo-sections${page.kind === "home" ? "" : " section-band"}`}
+      >
         <div className="container seo-section-grid">
           {page.sections.map((section) => (
             <article className="seo-copy-card" key={section.heading}>
@@ -92,22 +95,24 @@ export function SeoPageContent({ page }: { page: SeoPage }) {
         </div>
       </section>
 
-      <section className="section seo-faq-section" aria-labelledby="page-faq-title">
-        <div className="container seo-faq-shell">
-          <div className="section-head">
-            <p className="kicker">Questions, answered</p>
-            <h2 id="page-faq-title">Useful details before you start.</h2>
+      {page.kind === "home" ? null : (
+        <section className="section seo-faq-section" aria-labelledby="page-faq-title">
+          <div className="container seo-faq-shell">
+            <div className="section-head">
+              <p className="kicker">Questions, answered</p>
+              <h2 id="page-faq-title">Useful details before you start.</h2>
+            </div>
+            <div className="seo-faq-list">
+              {page.faqs.map((faq) => (
+                <details key={faq.question} className="seo-faq-item">
+                  <summary>{faq.question}</summary>
+                  <p>{faq.answer}</p>
+                </details>
+              ))}
+            </div>
           </div>
-          <div className="seo-faq-list">
-            {page.faqs.map((faq) => (
-              <details key={faq.question} className="seo-faq-item">
-                <summary>{faq.question}</summary>
-                <p>{faq.answer}</p>
-              </details>
-            ))}
-          </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       {related.length > 0 ? (
         <section className="section related-section section-band" aria-labelledby="related-pages-title">
