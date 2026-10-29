@@ -9,7 +9,7 @@
  *   EXPO_PUBLIC_UPI_UI_PREVIEW=settle-ios-action-sheet
  *     stubs one installed UPI app (GPay) and presents ActionSheetIOS on first paint
  *   EXPO_PUBLIC_UPI_UI_PREVIEW=settle-ios-copied
- *     pins inline "UPI ID copied" on the settle screen (zero-apps / after-copy)
+ *     pins inline "✓ UPI ID copied" on the settle screen (zero-apps / after-copy)
  *
  * Never set in Production store/OTA builds.
  */

@@ -19,7 +19,7 @@ export const COPY_UPI_ID_LABEL = "Copy UPI ID";
 export const COPIED_UPI_LABEL = "✓ Copied";
 
 /** Inline settle confirmation after iOS copy (zero apps or ActionSheet). */
-export const UPI_ID_COPIED_LABEL = "UPI ID copied";
+export const UPI_ID_COPIED_LABEL = "✓ UPI ID copied";
 
 /** Soft cap for UPI `tn` (NPCI-friendly). */
 export const UPI_NOTE_MAX_LENGTH = 50;

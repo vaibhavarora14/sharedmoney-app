@@ -26,7 +26,7 @@ Deno.test("UPI settle copy has no beta and no em dashes", () => {
   assertEquals(NOT_YET_LABEL, "Not yet");
   assertEquals(COPY_UPI_ID_LABEL, "Copy UPI ID");
   assertEquals(COPIED_UPI_LABEL, "✓ Copied");
-  assertEquals(UPI_ID_COPIED_LABEL, "UPI ID copied");
+  assertEquals(UPI_ID_COPIED_LABEL, "✓ UPI ID copied");
   for (const copy of [
     PAY_VIA_UPI_LABEL,
     UPI_ID_PROFILE_HELPER,
