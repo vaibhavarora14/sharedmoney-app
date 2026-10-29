@@ -47,6 +47,7 @@ import {
   PAY_VIA_UPI_LABEL,
   RECORD_SETTLEMENT_LABEL,
   SETTLE_OUTSIDE_APP_HELP,
+  UPI_ID_COPIED_LABEL,
   UPDATE_SETTLEMENT_LABEL,
   YES_RECORD_IT_LABEL,
 } from "../utils/settleCopy";
@@ -128,14 +129,24 @@ interface SettlementFormScreenProps {
   previewPayeeUpiId?: string | null;
   /** Design-review only: force post-UPI confirm / awaiting state. */
   previewUpiPhase?: UpiPhase;
-  /** Design-review only: open the iOS app picker. */
+  /**
+   * Design-review only: open the in-app UPI app picker sheet.
+   * Ignored on iOS (native ActionSheetIOS only; never the custom sheet).
+   */
   previewShowUpiAppPicker?: boolean;
-  /** Design-review only: apps listed in the picker. */
+  /** Design-review only: apps listed in the picker / ActionSheet stub. */
   previewInstalledUpiApps?: UpiAppDefinition[];
   /** Design-review only: render desktop web QR + Copy surface. */
   previewForceDesktopWeb?: boolean;
-  /** Design-review only: show picker Copy row as Copied. */
+  /** Design-review only: show web/Android sheet Copy row as Copied. */
   previewUpiCopied?: boolean;
+  /**
+   * Design-review only (iOS): present ActionSheetIOS with stubbed installed
+   * apps on first paint so the native sheet can be shot on simulator.
+   */
+  previewPresentIosActionSheet?: boolean;
+  /** Design-review only: pin inline "UPI ID copied" on the settle screen. */
+  previewUpiInlineCopied?: boolean;
 }
 
 function toDateInputValue(value?: string | null): string {
@@ -221,6 +232,8 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
   previewInstalledUpiApps,
   previewForceDesktopWeb = false,
   previewUpiCopied = false,
+  previewPresentIosActionSheet = false,
+  previewUpiInlineCopied = false,
 }) => {
   const isEditing = !!settlement;
   const isAdminMode = !!(fromParticipantId && toParticipantId);
@@ -252,11 +265,15 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [upiCopied, setUpiCopied] = useState(!!previewUpiCopied);
+  const [upiInlineCopied, setUpiInlineCopied] = useState(
+    !!previewUpiInlineCopied,
+  );
   const [upiPhase, setUpiPhase] = useState<UpiPhase>(
     previewUpiPhase ?? "idle",
   );
+  // Custom bottom sheet is web/Android only. iOS never mounts it open.
   const [showUpiAppPicker, setShowUpiAppPicker] = useState(
-    !!previewShowUpiAppPicker,
+    !!previewShowUpiAppPicker && Platform.OS !== "ios",
   );
   const [installedUpiApps, setInstalledUpiApps] = useState<UpiAppDefinition[]>(
     previewInstalledUpiApps ?? [],
@@ -266,6 +283,10 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
   const upiCopiedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
+  const upiInlineCopiedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const iosActionSheetPreviewPresentedRef = useRef(false);
 
   // Determine settlement direction
   const isPaying = useMemo(() => {
@@ -410,16 +431,23 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
         clearTimeout(upiCopiedTimeoutRef.current);
         upiCopiedTimeoutRef.current = null;
       }
+      if (upiInlineCopiedTimeoutRef.current) {
+        clearTimeout(upiInlineCopiedTimeoutRef.current);
+        upiInlineCopiedTimeoutRef.current = null;
+      }
       setUpiCopied(false);
+      setUpiInlineCopied(false);
       setUpiPhase("idle");
       setShowUpiAppPicker(false);
       setInstalledUpiApps([]);
       launchedUpiRef.current = false;
+      iosActionSheetPreviewPresentedRef.current = false;
     }
   }, [visible]);
 
   useEffect(() => {
-    if (previewShowUpiAppPicker) {
+    // Never open the custom sheet on iOS, even in Design preview.
+    if (previewShowUpiAppPicker && Platform.OS !== "ios") {
       setShowUpiAppPicker(true);
       if (previewInstalledUpiApps) {
         setInstalledUpiApps(previewInstalledUpiApps);
@@ -433,9 +461,16 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
   }, [previewUpiCopied]);
 
   useEffect(() => {
+    if (previewUpiInlineCopied) setUpiInlineCopied(true);
+  }, [previewUpiInlineCopied]);
+
+  useEffect(() => {
     return () => {
       if (upiCopiedTimeoutRef.current) {
         clearTimeout(upiCopiedTimeoutRef.current);
+      }
+      if (upiInlineCopiedTimeoutRef.current) {
+        clearTimeout(upiInlineCopiedTimeoutRef.current);
       }
     };
   }, []);
@@ -451,20 +486,41 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
     return () => sub.remove();
   }, [upiPhase]);
 
-  const copyPayeeUpiId = () => {
-    if (!payeeUpiId) return;
-    Clipboard.setString(payeeUpiId);
+  const flashButtonCopied = () => {
     setUpiCopied(true);
     if (upiCopiedTimeoutRef.current) {
       clearTimeout(upiCopiedTimeoutRef.current);
       upiCopiedTimeoutRef.current = null;
     }
-    // Design preview keeps Copied pinned for screenshots.
     if (!previewUpiCopied) {
       upiCopiedTimeoutRef.current = setTimeout(() => {
         setUpiCopied(false);
         upiCopiedTimeoutRef.current = null;
       }, 2000);
+    }
+  };
+
+  const flashInlineCopied = () => {
+    setUpiInlineCopied(true);
+    if (upiInlineCopiedTimeoutRef.current) {
+      clearTimeout(upiInlineCopiedTimeoutRef.current);
+      upiInlineCopiedTimeoutRef.current = null;
+    }
+    if (!previewUpiInlineCopied) {
+      upiInlineCopiedTimeoutRef.current = setTimeout(() => {
+        setUpiInlineCopied(false);
+        upiInlineCopiedTimeoutRef.current = null;
+      }, 2000);
+    }
+  };
+
+  const copyPayeeUpiId = (confirm: "inline" | "button" = "button") => {
+    if (!payeeUpiId) return;
+    Clipboard.setString(payeeUpiId);
+    if (confirm === "inline") {
+      flashInlineCopied();
+    } else {
+      flashButtonCopied();
     }
     captureIdentifiedAnalyticsEvent(
       currentUserId,
@@ -542,14 +598,13 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
       setUpiAppsLoading(false);
     }
 
-    // Native iOS: system action sheet. Design preview / web / Android use the
-    // bottom sheet so Copy can flip to Copied inline.
-    const useNativeActionSheet =
-      Platform.OS === "ios" &&
-      !previewShowUpiAppPicker &&
-      !inUpiDesignPreview;
-
-    if (useNativeActionSheet) {
+    // iOS: native ActionSheet when any UPI app is installed; otherwise copy
+    // immediately with inline confirmation. Never open the custom sheet.
+    if (Platform.OS === "ios") {
+      if (apps.length === 0) {
+        copyPayeeUpiId("inline");
+        return;
+      }
       const options = [
         ...apps.map((app) => app.label),
         COPY_UPI_ID_LABEL,
@@ -568,7 +623,7 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
             return;
           }
           if (buttonIndex === copyButtonIndex) {
-            copyPayeeUpiId();
+            copyPayeeUpiId("inline");
             return;
           }
           const app = apps[buttonIndex];
@@ -578,6 +633,7 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
       return;
     }
 
+    // Web / Android Design preview: in-app bottom sheet.
     setShowUpiAppPicker(true);
   };
 
@@ -589,15 +645,34 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
       return;
     }
     if (desktopWebUpi) {
-      copyPayeeUpiId();
+      copyPayeeUpiId("button");
       return;
     }
-    if (iosUpiPicker) {
+    if (iosUpiPicker || Platform.OS === "ios") {
       await presentUpiAppPicker();
       return;
     }
     await launchGenericUpi();
   };
+
+  useEffect(() => {
+    if (
+      !previewPresentIosActionSheet ||
+      Platform.OS !== "ios" ||
+      !visible ||
+      iosActionSheetPreviewPresentedRef.current
+    ) {
+      return;
+    }
+    iosActionSheetPreviewPresentedRef.current = true;
+    void presentUpiAppPicker(
+      previewInstalledUpiApps?.length
+        ? previewInstalledUpiApps
+        : undefined,
+    );
+    // presentUpiAppPicker closes over latest payee/amount; preview mounts once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Design preview one-shot
+  }, [previewPresentIosActionSheet, visible, previewInstalledUpiApps]);
 
   // Determine fixed payer/receiver display names
   const adminPayer = useMemo(() => {
@@ -685,6 +760,7 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
       setUpiPhase("idle");
       setShowUpiAppPicker(false);
       setUpiCopied(false);
+      setUpiInlineCopied(false);
       launchedUpiRef.current = false;
       return;
     }
@@ -1335,16 +1411,28 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                 </Text>
               ) : null}
               {showPayViaUpi && payeeUpiId ? (
-                <Text
-                  variant="bodySmall"
-                  style={[
-                    styles.payeeUpiLine,
-                    { color: theme.colors.onSurface, opacity: 0.82 },
-                  ]}
-                  testID="settlement-payee-upi-line"
-                >
-                  {formatPayeeUpiLine(payeeDisplayName, payeeUpiId)}
-                </Text>
+                <View style={styles.payeeUpiLineSlot}>
+                  <Text
+                    variant="bodySmall"
+                    style={[
+                      styles.payeeUpiLine,
+                      {
+                        color: theme.colors.onSurface,
+                        opacity: upiInlineCopied ? 1 : 0.82,
+                      },
+                    ]}
+                    testID={
+                      upiInlineCopied
+                        ? "settlement-upi-copied-confirm"
+                        : "settlement-payee-upi-line"
+                    }
+                    accessibilityLiveRegion="polite"
+                  >
+                    {upiInlineCopied
+                      ? UPI_ID_COPIED_LABEL
+                      : formatPayeeUpiLine(payeeDisplayName, payeeUpiId)}
+                  </Text>
+                </View>
               ) : null}
             </View>
 
@@ -1434,7 +1522,7 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
                     <Button
                       mode="outlined"
                       compact
-                      onPress={copyPayeeUpiId}
+                      onPress={() => copyPayeeUpiId("button")}
                       disabled={loading}
                       style={{ borderRadius: 8, alignSelf: "flex-start", marginTop: 8 }}
                       testID="settlement-upi-copy-button"
@@ -1608,17 +1696,17 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
           </Modal>
         )}
 
-        {/* Bottom sheet for web / Android / Design preview. Native iOS uses
-            ActionSheetIOS in presentUpiAppPicker. */}
+        {/* Bottom sheet for web / Android Design preview only. iOS always uses
+            ActionSheetIOS (or silent copy when no apps) and never this sheet. */}
         <Modal
-          visible={showUpiAppPicker}
+          visible={showUpiAppPicker && Platform.OS !== "ios"}
           transparent
           animationType="slide"
           onRequestClose={() => setShowUpiAppPicker(false)}
         >
           <View style={styles.upiPickerOverlay}>
             <Pressable
-              style={StyleSheet.absoluteFillObject}
+              style={StyleSheet.absoluteFill}
               onPress={() => setShowUpiAppPicker(false)}
               accessibilityRole="button"
               accessibilityLabel="Dismiss Pay with"
@@ -1662,7 +1750,7 @@ export const SettlementFormScreen: React.FC<SettlementFormScreenProps> = ({
               )}
               <Button
                 mode="outlined"
-                onPress={copyPayeeUpiId}
+                onPress={() => copyPayeeUpiId("button")}
                 style={styles.upiAppRow}
                 testID="settlement-upi-picker-copy"
                 accessibilityLabel={
@@ -1808,8 +1896,13 @@ const styles = StyleSheet.create({
   upiSkeleton: {
     marginBottom: 8,
   },
-  payeeUpiLine: {
+  payeeUpiLineSlot: {
     marginTop: 8,
+    minHeight: 20,
+    justifyContent: "center",
+  },
+  payeeUpiLine: {
+    // color/opacity set inline
   },
   upiDesktopBlock: {
     flexDirection: "row",

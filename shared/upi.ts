@@ -15,8 +15,11 @@ export const NOT_YET_LABEL = "Not yet";
 
 export const COPY_UPI_ID_LABEL = "Copy UPI ID";
 
-/** Shown for ~2s after copying a VPA, then reverts to Copy UPI ID. */
+/** Shown for ~2s after copying a VPA on web/Android sheet Copy row. */
 export const COPIED_UPI_LABEL = "✓ Copied";
+
+/** Inline settle confirmation after iOS copy (zero apps or ActionSheet). */
+export const UPI_ID_COPIED_LABEL = "UPI ID copied";
 
 /** Soft cap for UPI `tn` (NPCI-friendly). */
 export const UPI_NOTE_MAX_LENGTH = 50;

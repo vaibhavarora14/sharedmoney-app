@@ -1,8 +1,15 @@
 /**
  * Local design-review preview for Pay via UPI Profile + settle states.
  *
- *   EXPO_PUBLIC_UPI_UI_PREVIEW=profile-empty|profile-filled|profile-invalid|settle-with-upi|settle-no-upi|settle-confirm|settle-ios-picker|settle-desktop-qr \
+ * Web:
+ *   EXPO_PUBLIC_UPI_UI_PREVIEW=profile-empty|profile-filled|profile-invalid|settle-with-upi|settle-no-upi|settle-confirm|settle-ios-picker|settle-ios-picker-copied|settle-desktop-qr
  *   npx expo start --web --port 8081
+ *
+ * iOS simulator (native ActionSheet / inline copy; never the custom bottom sheet):
+ *   EXPO_PUBLIC_UPI_UI_PREVIEW=settle-ios-action-sheet
+ *     stubs one installed UPI app (GPay) and presents ActionSheetIOS on first paint
+ *   EXPO_PUBLIC_UPI_UI_PREVIEW=settle-ios-copied
+ *     pins inline "UPI ID copied" on the settle screen (zero-apps / after-copy)
  *
  * Never set in Production store/OTA builds.
  */
@@ -33,6 +40,8 @@ type PreviewKind =
   | "settle-confirm"
   | "settle-ios-picker"
   | "settle-ios-picker-copied"
+  | "settle-ios-action-sheet"
+  | "settle-ios-copied"
   | "settle-desktop-qr";
 
 const PREVIEW_KINDS: PreviewKind[] = [
@@ -44,6 +53,8 @@ const PREVIEW_KINDS: PreviewKind[] = [
   "settle-confirm",
   "settle-ios-picker",
   "settle-ios-picker-copied",
+  "settle-ios-action-sheet",
+  "settle-ios-copied",
   "settle-desktop-qr",
 ];
 
@@ -129,6 +140,19 @@ function SettlePreview({ kind }: { kind: PreviewKind }) {
   const hasUpi = kind !== "settle-no-upi";
   const balanceAmount = kind === "settle-no-upi" ? -40 : -120.5;
   const currency = "INR";
+  const isIos = Platform.OS === "ios";
+
+  // Web / Android Design: custom bottom sheet picker + ✓ Copied.
+  // iOS: never the custom sheet; use ActionSheet stub or inline copied.
+  const webSheetPicker =
+    !isIos &&
+    (kind === "settle-ios-picker" || kind === "settle-ios-picker-copied");
+  const iosActionSheet =
+    isIos &&
+    (kind === "settle-ios-action-sheet" || kind === "settle-ios-picker");
+  const iosInlineCopied =
+    isIos &&
+    (kind === "settle-ios-copied" || kind === "settle-ios-picker-copied");
 
   return (
     <SettlementFormScreen
@@ -188,15 +212,19 @@ function SettlePreview({ kind }: { kind: PreviewKind }) {
       defaultCurrency={currency}
       previewPayeeUpiId={hasUpi ? "maya@okhdfc" : null}
       previewUpiPhase={kind === "settle-confirm" ? "confirm" : undefined}
-      previewShowUpiAppPicker={
-        kind === "settle-ios-picker" || kind === "settle-ios-picker-copied"
-      }
+      previewShowUpiAppPicker={webSheetPicker}
       previewInstalledUpiApps={
-        kind === "settle-ios-picker" || kind === "settle-ios-picker-copied"
+        webSheetPicker
           ? [...UPI_APPS]
-          : undefined
+          : iosActionSheet
+            ? [UPI_APPS[0]]
+            : kind === "settle-ios-copied"
+              ? []
+              : undefined
       }
-      previewUpiCopied={kind === "settle-ios-picker-copied"}
+      previewUpiCopied={!isIos && kind === "settle-ios-picker-copied"}
+      previewPresentIosActionSheet={iosActionSheet}
+      previewUpiInlineCopied={iosInlineCopied}
       previewForceDesktopWeb={kind === "settle-desktop-qr"}
       onSave={async () => {}}
       onDismiss={() => {}}
