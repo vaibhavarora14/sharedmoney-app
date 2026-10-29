@@ -10,20 +10,27 @@ export function PageHero({
   page: SeoPage;
   primaryDestination: PlatformDestination;
 }) {
+  const storeCta = (
+    <div className="route-hero-actions">
+      <PlatformCta
+        destination={primaryDestination}
+        placement={`route_${page.id}`}
+        appearance="primary"
+      />
+    </div>
+  );
+
   return (
     <section className="route-hero">
       <div className="container route-hero-shell">
         <div>
           <p className="kicker">{page.eyebrow}</p>
           <h1>{page.heading}</h1>
+          {page.lead ? <p className="route-hero-lead">{page.lead}</p> : null}
+          {/* Keep the store CTA under the trust line so it stays above the fold on short mobile viewports. */}
+          {page.lead ? storeCta : null}
           <p>{page.body}</p>
-          <div className="route-hero-actions">
-            <PlatformCta
-              destination={primaryDestination}
-              placement={`route_${page.id}`}
-              appearance="primary"
-            />
-          </div>
+          {page.lead ? null : storeCta}
         </div>
         <ul aria-label={`${page.heading} highlights`}>
           {page.proof.map((item) => <li key={item}>{item}</li>)}

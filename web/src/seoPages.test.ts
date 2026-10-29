@@ -22,6 +22,13 @@ describe("SEO route content", () => {
     expect(pageByPath.get("/")?.heading).toBe("SharedMoney");
   });
 
+  it("adds the verified trust lead under roommate and Splitwise H1s", () => {
+    const lead = "No daily limits on expenses, no ads, no bank link.";
+    expect(pageByPath.get("/roommate-expense-tracker")?.lead).toBe(lead);
+    expect(pageByPath.get("/splitwise-alternative")?.lead).toBe(lead);
+    expect(pageByPath.get("/")?.lead).toBeUndefined();
+  });
+
   it("only resolves known paths and maintains related-page links", () => {
     const splitBills = pageByPath.get("/split-bills");
 

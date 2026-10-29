@@ -25,6 +25,8 @@ export type SeoPage = {
   description: string;
   eyebrow: string;
   heading: string;
+  /** Optional trust line rendered directly under the H1 with lead styling. */
+  lead?: string;
   body: string;
   proof: string[];
   sections: SeoSection[];
