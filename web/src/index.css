@@ -3516,4 +3516,8 @@ html.dark .hero-product-shot,
   .site-header .header-actions > .cta .cta-copy {
     display: none;
   }
+
+  .hero-lead {
+    max-width: 100%;
+  }
 }
