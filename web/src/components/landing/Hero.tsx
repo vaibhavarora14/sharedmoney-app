@@ -1,5 +1,5 @@
 import type { PlatformDestination } from "../../landingContent";
-import type { SeoPage } from "../../seoPages";
+import { proofItemKey, type SeoPage } from "../../seoPages";
 import { PlatformCta } from "./PlatformCta";
 import { StoreBadges } from "./StoreBadges";
 
@@ -41,7 +41,11 @@ export function Hero({
             </div>
             <StoreBadges placement="hero_store" />
             <div className="hero-trust-row" aria-label="SharedMoney highlights">
-              {page.proof.map((item) => <span key={item}>{item}</span>)}
+              {page.proof.map((item) => (
+                <span key={proofItemKey(item)}>
+                  {typeof item === "string" ? item : item.title}
+                </span>
+              ))}
             </div>
           </div>
         </div>

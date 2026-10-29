@@ -1,14 +1,21 @@
 import { trackRelatedPageClick } from "../../analytics";
 import type { PlatformDestination } from "../../landingContent";
-import { relatedPages, type SeoPage } from "../../seoPages";
+import {
+  isProofDetail,
+  proofItemKey,
+  relatedPages,
+  type SeoPage,
+} from "../../seoPages";
 import { PlatformCta } from "../landing/PlatformCta";
 
 export function PageHero({
   page,
   primaryDestination,
+  secondaryDestinations = [],
 }: {
   page: SeoPage;
   primaryDestination: PlatformDestination;
+  secondaryDestinations?: PlatformDestination[];
 }) {
   const storeCta = (
     <div className="route-hero-actions">
@@ -17,6 +24,18 @@ export function PageHero({
         placement={`route_${page.id}`}
         appearance="primary"
       />
+      {secondaryDestinations.length > 0 ? (
+        <div className="route-hero-secondary-actions">
+          {secondaryDestinations.map((destination) => (
+            <PlatformCta
+              key={destination.platform}
+              destination={destination}
+              placement={`route_${page.id}_secondary`}
+              appearance="text"
+            />
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 
@@ -29,11 +48,22 @@ export function PageHero({
           {page.lead ? <p className="route-hero-lead">{page.lead}</p> : null}
           {/* Keep the store CTA under the trust line so it stays above the fold on short mobile viewports. */}
           {page.lead ? storeCta : null}
-          <p>{page.body}</p>
+          <p className="route-hero-body">{page.body}</p>
           {page.lead ? null : storeCta}
         </div>
         <ul aria-label={`${page.heading} highlights`}>
-          {page.proof.map((item) => <li key={item}>{item}</li>)}
+          {page.proof.map((item) => (
+            <li key={proofItemKey(item)}>
+              {isProofDetail(item) ? (
+                <>
+                  <strong className="route-hero-proof-title">{item.title}</strong>
+                  <span className="route-hero-proof-body">{item.body}</span>
+                </>
+              ) : (
+                item
+              )}
+            </li>
+          ))}
         </ul>
       </div>
     </section>

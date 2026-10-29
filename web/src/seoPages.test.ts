@@ -29,6 +29,21 @@ describe("SEO route content", () => {
     expect(pageByPath.get("/")?.lead).toBeUndefined();
   });
 
+  it("keeps Splitwise proof cards free of bank-link duplication", () => {
+    const proof = pageByPath.get("/splitwise-alternative")?.proof ?? [];
+    expect(proof).toContainEqual({
+      title: "Settle up your own way",
+      body: "Settle outside the app with cash, UPI, or bank transfer, then record it in SharedMoney.",
+    });
+    expect(
+      proof.some(
+        (item) =>
+          typeof item === "string" &&
+          item.toLowerCase().includes("payment instruments"),
+      ),
+    ).toBe(false);
+  });
+
   it("only resolves known paths and maintains related-page links", () => {
     const splitBills = pageByPath.get("/split-bills");
 

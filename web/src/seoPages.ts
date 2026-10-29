@@ -14,6 +14,13 @@ export type SeoFaq = {
   answer: string;
 };
 
+export type SeoProofItem =
+  | string
+  | {
+      title: string;
+      body: string;
+    };
+
 export type SeoPage = {
   id: string;
   path: string;
@@ -28,11 +35,21 @@ export type SeoPage = {
   /** Optional trust line rendered directly under the H1 with lead styling. */
   lead?: string;
   body: string;
-  proof: string[];
+  proof: SeoProofItem[];
   sections: SeoSection[];
   faqs: SeoFaq[];
   related: string[];
 };
+
+export function proofItemKey(item: SeoProofItem): string {
+  return typeof item === "string" ? item : item.title;
+}
+
+export function isProofDetail(
+  item: SeoProofItem,
+): item is { title: string; body: string } {
+  return typeof item !== "string";
+}
 
 export const siteUrl = "https://sharedmoney.app";
 export const appUrl = `${siteUrl}/app`;

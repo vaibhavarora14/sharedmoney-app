@@ -95,7 +95,11 @@ function App() {
             <TrustSection />
           </>
         ) : (
-          <PageHero page={seoPage} primaryDestination={primaryDestination} />
+          <PageHero
+            page={seoPage}
+            primaryDestination={primaryDestination}
+            secondaryDestinations={secondaryDestinations}
+          />
         )}
 
         {isTool ? (
