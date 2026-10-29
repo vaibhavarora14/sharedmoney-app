@@ -126,14 +126,7 @@
     "heading": "A simple Splitwise alternative for clear group balances.",
     "lead": "No daily limits on expenses, no ads, no bank link.",
     "body": "SharedMoney focuses on the shared record: who paid, who joined, what remains open, and when a balance was settled outside the app.",
-    "proof": [
-      "Splitwise CSV import",
-      {
-        "title": "Settle up your own way",
-        "body": "Settle outside the app with cash, UPI, or bank transfer, then record it in SharedMoney."
-      },
-      "Free shared expense tracking"
-    ],
+    "proof": ["Splitwise CSV import", "Settle with cash, UPI or bank transfer", "Free shared expense tracking"],
     "sections": [
       {"heading": "Bring the ledger, not the payment account", "body": "For groups that want an expense record without making the app part of the payment flow, SharedMoney keeps the focus on the ledger. Members can use their own preferred way to settle.", "bullets": ["A shared view of expenses and balances", "Payment-free by design", "Settlements can be recorded when complete"]},
       {"heading": "Move a previous group carefully", "body": "SharedMoney supports Splitwise CSV import for groups that want to bring their record over. Review the imported data with the group before relying on it for a final settlement.", "bullets": ["Import a CSV export", "Review entries and balances together", "Start new activity in a shared group"]}

@@ -48,14 +48,7 @@ function ctaMarkup(page) {
 }
 
 function fallbackMarkup(page) {
-  const proofItems = page.proof
-    .map((item) => {
-      if (item && typeof item === "object" && item.title && item.body) {
-        return `<li><strong>${escapeHtml(item.title)}</strong><p>${escapeHtml(item.body)}</p></li>`;
-      }
-      return `<li>${escapeHtml(item)}</li>`;
-    })
-    .join("");
+  const proofItems = page.proof.map((item) => `<li>${escapeHtml(item)}</li>`).join("");
   const sections = page.sections
     .map((section) => {
       const bullets = section.bullets.map((item) => `<li>${escapeHtml(item)}</li>`).join("");

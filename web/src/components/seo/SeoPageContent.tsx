@@ -1,11 +1,6 @@
 import { trackRelatedPageClick } from "../../analytics";
 import type { PlatformDestination } from "../../landingContent";
-import {
-  isProofDetail,
-  proofItemKey,
-  relatedPages,
-  type SeoPage,
-} from "../../seoPages";
+import { relatedPages, type SeoPage } from "../../seoPages";
 import { PlatformCta } from "../landing/PlatformCta";
 
 export function PageHero({
@@ -52,18 +47,7 @@ export function PageHero({
           {page.lead ? null : storeCta}
         </div>
         <ul aria-label={`${page.heading} highlights`}>
-          {page.proof.map((item) => (
-            <li key={proofItemKey(item)}>
-              {isProofDetail(item) ? (
-                <>
-                  <strong className="route-hero-proof-title">{item.title}</strong>
-                  <span className="route-hero-proof-body">{item.body}</span>
-                </>
-              ) : (
-                item
-              )}
-            </li>
-          ))}
+          {page.proof.map((item) => <li key={item}>{item}</li>)}
         </ul>
       </div>
     </section>
