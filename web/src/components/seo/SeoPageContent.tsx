@@ -36,9 +36,11 @@ export function PageHero({
     </div>
   );
 
+  const showPlate = page.kind !== "tools" && page.kind !== "tool";
+
   return (
-    <section className="route-hero">
-      <div className="container route-hero-shell">
+    <section className={`route-hero${showPlate ? "" : " route-hero-compact"}`}>
+      <div className={`container${showPlate ? " route-hero-shell" : ""}`}>
         <div className="route-hero-copy">
           <p className="kicker">{page.eyebrow}</p>
           <h1>{page.heading}</h1>
@@ -48,7 +50,7 @@ export function PageHero({
           <p className="route-hero-body">{page.body}</p>
           {page.lead ? null : storeCta}
         </div>
-        <HeroAppCard />
+        {showPlate ? <HeroAppCard /> : null}
       </div>
       <div className="container">
         <ul className="route-hero-proof" aria-label={`${page.heading} highlights`}>

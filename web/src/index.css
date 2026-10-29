@@ -1875,7 +1875,7 @@ html.dark .hero-product-shot img,
 }
 
 .calculator-section {
-  background: var(--color-surface-alt);
+  background: transparent;
 }
 
 .calculator-shell {
@@ -1886,10 +1886,10 @@ html.dark .hero-product-shot img,
   display: grid;
   gap: var(--space-6);
   padding: clamp(var(--space-5), 4vw, var(--space-8));
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-2);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-media);
+  border: 0;
+  border-radius: var(--sm-r-card);
+  background: var(--sm-card-on-band);
+  box-shadow: none;
 }
 
 .calculator-heading,
@@ -1937,10 +1937,10 @@ html.dark .hero-product-shot img,
   min-height: 2.8rem;
   width: 100%;
   padding: 0.6rem 0.7rem;
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-1);
-  color: var(--color-text);
-  background: var(--color-canvas);
+  border: 1px solid var(--sm-line);
+  border-radius: var(--sm-r-ctl);
+  color: var(--sm-ink-1);
+  background: var(--sm-card-on-band);
 }
 
 .calculator-participants {
@@ -3488,4 +3488,42 @@ p {
 html.dark .hero-product-shot,
 .dark .hero-product-shot {
   background: var(--sm-bg);
+}
+
+/* /tools and calculators: band page, white static containers, lined controls */
+.landing-page.tools-surface {
+  background: var(--sm-band);
+}
+
+.landing-page.tools-surface .site-header {
+  background: var(--sm-band);
+}
+
+.landing-page.tools-surface .route-hero,
+.landing-page.tools-surface .tool-directory,
+.landing-page.tools-surface .calculator-section,
+.landing-page.tools-surface .seo-sections,
+.landing-page.tools-surface .seo-sections.section-band,
+.landing-page.tools-surface .seo-faq-section,
+.landing-page.tools-surface .related-section {
+  background: transparent;
+}
+
+.landing-page.tools-surface .seo-copy-card,
+.landing-page.tools-surface .seo-faq-item,
+.landing-page.tools-surface .route-hero-proof li,
+.landing-page.tools-surface .calculator-card {
+  background: var(--sm-card-on-band);
+  border: 0;
+  box-shadow: none;
+}
+
+.landing-page.tools-surface .related-pages a,
+.landing-page.tools-surface .tool-directory-card {
+  background: var(--sm-card-on-band);
+  border: 1px solid var(--sm-line);
+}
+
+.route-hero-compact .route-hero-copy {
+  max-width: 48rem;
 }

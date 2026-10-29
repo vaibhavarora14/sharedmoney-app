@@ -19,7 +19,7 @@ import { billSplitRoute } from "./billSplitApi";
 
 function ToolDirectory({ page }: { page: SeoPage }) {
   return (
-    <section className="section tool-directory section-band" aria-labelledby="tool-directory-title">
+    <section className="section tool-directory" aria-labelledby="tool-directory-title">
       <div className="container">
         <div className="section-head">
           <p className="kicker">Choose a calculator</p>
@@ -80,8 +80,10 @@ function App() {
   const isTool = seoPage.kind === "tool";
   const isToolDirectory = seoPage.kind === "tools";
 
+  const toolsSurface = isTool || isToolDirectory;
+
   return (
-    <div className="landing-page">
+    <div className={`landing-page${toolsSurface ? " tools-surface" : ""}`}>
       <Header primaryDestination={primaryDestination} />
 
       <main id="main-content">
