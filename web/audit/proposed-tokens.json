@@ -1,0 +1,68 @@
+{
+  "directionA_sharperPocket": {
+    "canvas": "#EEF2F8",
+    "surface": "#FFFFFF",
+    "surfaceAlt": "#E2E8F2",
+    "ink": "#0F1720",
+    "textSecondary": "#243041",
+    "muted": "#3A4960",
+    "border": "#74859B",
+    "borderStrong": "#5A6B82",
+    "brand": "#0B4DFF",
+    "brandHover": "#0839C7",
+    "brandText": "#FFFFFF",
+    "brandWash": "#DCE6FF",
+    "accentBerry": "#A83D57",
+    "accentWash": "#F8E2E8",
+    "success": "#007A64",
+    "successWash": "#DFF6EF",
+    "warn": "#9A5B00",
+    "warnWash": "#FFF1D6",
+    "ratios": {
+      "ink_on_canvas": 16.06,
+      "muted_on_canvas": 8.12,
+      "muted_on_wash": 7.3,
+      "brand_on_wash": 4.77,
+      "white_on_brand": 5.97,
+      "border_on_white": 3.77,
+      "border_on_canvas": 3.36,
+      "berry_on_white": 6.05,
+      "success_on_white": 5.29
+    }
+  },
+  "directionB_softLedger": {
+    "canvas": "#F3F6FB",
+    "surface": "#FFFFFF",
+    "surfaceAlt": "#E8EEF6",
+    "ink": "#141C26",
+    "textSecondary": "#2A3748",
+    "muted": "#445468",
+    "border": "#7F90A6",
+    "borderStrong": "#5F7086",
+    "brand": "#1553F0",
+    "brandHover": "#0F42C4",
+    "brandText": "#FFFFFF",
+    "brandWash": "#E4ECFF",
+    "accentBerry": "#B2445F",
+    "success": "#0A7A66",
+    "warn": "#8F5600",
+    "ratios": {
+      "ink_on_canvas": 15.84,
+      "muted_on_canvas": 7.14,
+      "brand_on_wash": 5.03,
+      "border_on_white": 3.26,
+      "border_on_canvas": 3.01
+    }
+  },
+  "pr432_seoHeroBody_on_liveGradient": {
+    "foreground": "#526074",
+    "rgb": "rgb(82,96,116)",
+    "darkestStop": { "token": "--color-blue-wash", "hex": "#eaf0ff", "ratio": 5.6, "passAA": true },
+    "lightestStop": { "token": "--color-canvas", "hex": "#f7f9fc", "ratio": 6.06, "passAA": true },
+    "darkMode": {
+      "foreground": "#b9c4d3",
+      "vs_blue_wash": 7.89,
+      "vs_canvas": 10.38
+    }
+  }
+}
