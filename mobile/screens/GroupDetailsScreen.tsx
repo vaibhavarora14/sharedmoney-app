@@ -2259,6 +2259,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
         participants={participants}
         currentUserId={session?.user?.id || ""}
         groupId={group.id}
+        groupName={group.name}
         defaultCurrency={getDefaultCurrency()}
         counterpartyPresence={settlingCounterpartyPresence}
         {...settlementRemindProps}

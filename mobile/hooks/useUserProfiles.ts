@@ -10,6 +10,8 @@ export interface UserProfile {
   phone?: string | null;
   country_code?: string | null;
   email?: string | null;
+  /** Present only when viewer shares an active group (or is self). */
+  upi_id?: string | null;
   profile_completed: boolean;
   created_at: string;
   updated_at: string;
