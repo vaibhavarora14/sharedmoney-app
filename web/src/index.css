@@ -1141,8 +1141,9 @@ html.dark .hero-product-shot img,
 }
 
 .scenario-member .amount {
-  max-width: 7rem;
+  max-width: none;
   font-size: 0.875rem;
+  white-space: nowrap;
 }
 
 .scenario-activity ol {
@@ -1802,8 +1803,20 @@ html.dark .hero-product-shot img,
 
 .related-pages {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: var(--space-4);
+}
+
+@media (min-width: 48rem) {
+  .related-pages {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 75rem) {
+  .related-pages {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
 
 .related-pages a,
@@ -2040,8 +2053,7 @@ html.dark .hero-product-shot img,
   .route-hero-shell,
   .seo-faq-shell,
   .seo-section-grid,
-  .tool-directory-grid,
-  .related-pages {
+  .tool-directory-grid {
     grid-template-columns: 1fr;
   }
 
@@ -3148,6 +3160,10 @@ p {
   color: var(--sm-neg);
 }
 
+.scenario-member .amount {
+  white-space: nowrap;
+}
+
 .avatar {
   border: 0;
   background: var(--sm-card);
@@ -3270,7 +3286,21 @@ p {
 }
 
 .related-pages {
+  display: grid;
+  grid-template-columns: 1fr;
   gap: 16px;
+}
+
+@media (min-width: 48rem) {
+  .related-pages {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 75rem) {
+  .related-pages {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
 
 .related-pages a,
@@ -3407,9 +3437,12 @@ p {
   .trust-boundaries,
   .use-case-panel,
   .seo-section-grid,
-  .related-pages,
   .route-hero-proof,
   .install-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .related-pages {
     grid-template-columns: 1fr;
   }
 

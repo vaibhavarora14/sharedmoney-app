@@ -131,7 +131,9 @@ export function SeoPageContent({ page }: { page: SeoPage }) {
                 >
                   <span>{relatedPage.eyebrow}</span>
                   <strong>{relatedPage.heading}</strong>
-                  <small>Explore</small>
+                  <small>
+                    Explore <span aria-hidden="true">→</span>
+                  </small>
                 </a>
               ))}
             </nav>

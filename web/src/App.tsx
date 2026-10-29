@@ -31,7 +31,9 @@ function ToolDirectory({ page }: { page: SeoPage }) {
               <span>{tool.eyebrow}</span>
               <strong>{tool.heading}</strong>
               <p>{tool.body}</p>
-              <small>Open calculator</small>
+              <small>
+                Open calculator <span aria-hidden="true">→</span>
+              </small>
             </a>
           ))}
         </div>
