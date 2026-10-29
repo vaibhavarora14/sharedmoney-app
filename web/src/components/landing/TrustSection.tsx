@@ -2,7 +2,7 @@ import { CreditCard, Database, ExternalLink, LockKeyhole } from "lucide-react";
 
 export function TrustSection() {
   return (
-    <section id="trust" className="section trust-section" aria-labelledby="trust-title">
+    <section id="trust" className="section trust-section section-band" aria-labelledby="trust-title">
       <div className="container">
         <div className="section-head section-head-wide">
           <p className="kicker">A ledger, not a wallet</p>

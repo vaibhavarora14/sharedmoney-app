@@ -27,17 +27,17 @@ export function InstallSection({
             destination={primaryDestination}
             placement="download_primary"
             appearance="inverse"
-            showStatus
           />
-          {secondaryDestinations.map((destination) => (
-            <PlatformCta
-              key={destination.platform}
-              destination={destination}
-              placement="download_secondary"
-              appearance="secondary"
-              showStatus
-            />
-          ))}
+          <div className="install-secondary-actions">
+            {secondaryDestinations.map((destination) => (
+              <PlatformCta
+                key={destination.platform}
+                destination={destination}
+                placement="download_secondary"
+                appearance="text"
+              />
+            ))}
+          </div>
         </div>
       </div>
     </section>

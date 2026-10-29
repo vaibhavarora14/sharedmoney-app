@@ -10,7 +10,7 @@
     "eyebrow": "No bank link. No payments. Web + mobile.",
     "heading": "SharedMoney",
     "body": "Record who paid and who owes for trips, rent and dinners. No daily limits, no ads.",
-    "proof": ["Trip and roommate ledgers", "Balances separated by currency", "No bank link or payment handling"],
+    "proof": ["Trip and roommate ledgers", "Balances separated by currency", "Settle outside the app"],
     "sections": [
       {"heading": "A shared record beats a message thread", "body": "When several people pay for the same plans, the hard part is remembering the details. SharedMoney keeps each expense, participant, payer, and settlement in one group record that everyone can review.", "bullets": ["Add expenses as they happen", "Use equal or uneven splits", "Keep settlements visible after they happen outside the app"]},
       {"heading": "Use it for the groups you already have", "body": "Create a ledger for a weekend away, recurring household costs, a dinner group, or any other shared plan. Each group has its own activity and balances so unrelated expenses do not get mixed together.", "bullets": ["Travel with changing payers", "Rent, utilities, groceries, and subscriptions", "Friends who take turns covering meals and tickets"]}

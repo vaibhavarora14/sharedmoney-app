@@ -1,6 +1,8 @@
+import { Check } from "lucide-react";
 import { trackRelatedPageClick } from "../../analytics";
 import type { PlatformDestination } from "../../landingContent";
 import { relatedPages, type SeoPage } from "../../seoPages";
+import { HeroAppCard } from "../landing/HeroAppCard";
 import { PlatformCta } from "../landing/PlatformCta";
 
 export function PageHero({
@@ -37,7 +39,7 @@ export function PageHero({
   return (
     <section className="route-hero">
       <div className="container route-hero-shell">
-        <div>
+        <div className="route-hero-copy">
           <p className="kicker">{page.eyebrow}</p>
           <h1>{page.heading}</h1>
           {page.lead ? <p className="route-hero-lead">{page.lead}</p> : null}
@@ -46,8 +48,18 @@ export function PageHero({
           <p className="route-hero-body">{page.body}</p>
           {page.lead ? null : storeCta}
         </div>
-        <ul aria-label={`${page.heading} highlights`}>
-          {page.proof.map((item) => <li key={item}>{item}</li>)}
+        <HeroAppCard />
+      </div>
+      <div className="container">
+        <ul className="route-hero-proof" aria-label={`${page.heading} highlights`}>
+          {page.proof.map((item) => (
+            <li key={item}>
+              <span className="proof-tick" aria-hidden>
+                <Check size={13} strokeWidth={2.4} />
+              </span>
+              {item}
+            </li>
+          ))}
         </ul>
       </div>
     </section>
@@ -59,14 +71,21 @@ export function SeoPageContent({ page }: { page: SeoPage }) {
 
   return (
     <>
-      <section className="section seo-sections">
+      <section className="section seo-sections section-band">
         <div className="container seo-section-grid">
           {page.sections.map((section) => (
             <article className="seo-copy-card" key={section.heading}>
               <h2>{section.heading}</h2>
               <p>{section.body}</p>
               <ul>
-                {section.bullets.map((item) => <li key={item}>{item}</li>)}
+                {section.bullets.map((item) => (
+                  <li key={item}>
+                    <span className="proof-tick" aria-hidden>
+                      <Check size={13} strokeWidth={2.4} />
+                    </span>
+                    {item}
+                  </li>
+                ))}
               </ul>
             </article>
           ))}
@@ -91,7 +110,7 @@ export function SeoPageContent({ page }: { page: SeoPage }) {
       </section>
 
       {related.length > 0 ? (
-        <section className="section related-section" aria-labelledby="related-pages-title">
+        <section className="section related-section section-band" aria-labelledby="related-pages-title">
           <div className="container">
             <div className="section-head">
               <p className="kicker">Keep exploring</p>
@@ -100,6 +119,7 @@ export function SeoPageContent({ page }: { page: SeoPage }) {
             <nav className="related-pages" aria-label="Related SharedMoney pages">
               {related.map((relatedPage) => (
                 <a
+                  className="related-link-card"
                   href={relatedPage.path}
                   key={relatedPage.id}
                   onClick={() => trackRelatedPageClick(page, relatedPage)}
@@ -125,8 +145,12 @@ export function NotFoundPage() {
         <h1>We can’t find that page</h1>
         <p>The link may be old or mistyped. Your groups and balances aren’t affected.</p>
         <p className="not-found-actions">
-          <a className="cta cta-primary" href="/">Go to SharedMoney home</a>
-          <a className="cta cta-secondary" href="/app">Open web app</a>
+          <a className="cta cta-primary" href="/">
+            Go to SharedMoney home
+          </a>
+          <a className="cta cta-secondary" href="/app">
+            Open web app
+          </a>
         </p>
       </div>
     </main>
