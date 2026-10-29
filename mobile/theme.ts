@@ -31,8 +31,8 @@ const lightColors = {
   surface: "#ffffff",
   onSurface: BRAND_INK,
   surfaceVariant: "#EEF2F7",
-  onSurfaceVariant: "#5B6776",
-  outline: "#C9D2DF",
+  onSurfaceVariant: "#4A5870",
+  outline: "#74859B",
   outlineVariant: "#DCE3EC",
   elevation: {
     level0: "transparent",
