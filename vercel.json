@@ -2,7 +2,8 @@
   "git": {
     "deploymentEnabled": {
       "cursor/**": false,
-      "cursor/*preview*": true
+      "cursor/*preview*": true,
+      "dependabot/**": false
     }
   },
   "buildCommand": "npm ci --prefix web && npm ci --prefix mobile && (test -e node_modules || ln -s mobile/node_modules node_modules) && npm run build --prefix web && npm run export:web:sharedmoney --prefix mobile",

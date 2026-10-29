@@ -38,6 +38,26 @@ Deno.test("replay env overrides win over platform defaults", () => {
   );
 });
 
+Deno.test("replay default path reads process.env.EXPO_PUBLIC_* directly", () => {
+  const sessionKey = "EXPO_PUBLIC_SENTRY_REPLAYS_SESSION_SAMPLE_RATE";
+  const onErrorKey = "EXPO_PUBLIC_SENTRY_REPLAYS_ON_ERROR_SAMPLE_RATE";
+  const previousSession = process.env[sessionKey];
+  const previousOnError = process.env[onErrorKey];
+  try {
+    process.env[sessionKey] = "0.2";
+    process.env[onErrorKey] = "0.75";
+    assertEquals(resolveSentryReplaySampleRates({ platform: "ios" }), {
+      replaysSessionSampleRate: 0.2,
+      replaysOnErrorSampleRate: 0.75,
+    });
+  } finally {
+    if (previousSession === undefined) delete process.env[sessionKey];
+    else process.env[sessionKey] = previousSession;
+    if (previousOnError === undefined) delete process.env[onErrorKey];
+    else process.env[onErrorKey] = previousOnError;
+  }
+});
+
 Deno.test("auth session transitions stay PII-free and stable", () => {
   assertEquals(resolveAuthSessionTransition(null, "u1"), "signed_in");
   assertEquals(resolveAuthSessionTransition("u1", null), "signed_out");

@@ -19,20 +19,25 @@ export function resolveAuthSessionTransition(
 /**
  * Default mobile replay sample rates: keep error sessions useful, lower
  * always-on sampling to reduce iOS RAM / quota pressure.
+ *
+ * When `env` is omitted, read `process.env.EXPO_PUBLIC_…` via direct member
+ * access so Expo/Metro can inline the values. Do not pass `process.env` as an
+ * object — that pattern is not rewritten for web.
  */
 export function resolveSentryReplaySampleRates(input: {
   platform: string;
   env?: Record<string, string | undefined>;
 }) {
-  const env = input.env ?? {};
   const sessionDefault = input.platform === "ios" ? "0.02" : "0.05";
+  const sessionRaw = input.env
+    ? input.env.EXPO_PUBLIC_SENTRY_REPLAYS_SESSION_SAMPLE_RATE
+    : process.env.EXPO_PUBLIC_SENTRY_REPLAYS_SESSION_SAMPLE_RATE;
+  const onErrorRaw = input.env
+    ? input.env.EXPO_PUBLIC_SENTRY_REPLAYS_ON_ERROR_SAMPLE_RATE
+    : process.env.EXPO_PUBLIC_SENTRY_REPLAYS_ON_ERROR_SAMPLE_RATE;
   return {
-    replaysSessionSampleRate: Number(
-      env.EXPO_PUBLIC_SENTRY_REPLAYS_SESSION_SAMPLE_RATE ?? sessionDefault,
-    ),
-    replaysOnErrorSampleRate: Number(
-      env.EXPO_PUBLIC_SENTRY_REPLAYS_ON_ERROR_SAMPLE_RATE ?? "1.0",
-    ),
+    replaysSessionSampleRate: Number(sessionRaw ?? sessionDefault),
+    replaysOnErrorSampleRate: Number(onErrorRaw ?? "1.0"),
   };
 }
 
