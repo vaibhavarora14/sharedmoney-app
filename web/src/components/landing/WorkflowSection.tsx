@@ -2,7 +2,7 @@ import { workflowSteps } from "../../landingContent";
 
 export function WorkflowSection() {
   return (
-    <section id="how-it-works" className="section workflow-section" aria-labelledby="workflow-title">
+    <section id="how-it-works" className="section workflow-section section-band" aria-labelledby="workflow-title">
       <div className="container">
         <div className="section-head section-head-wide">
           <p className="kicker">How it works</p>

@@ -7,20 +7,70 @@
     "updated": "2026-09-16",
     "title": "SharedMoney | Split Bills and Track Group Expenses",
     "description": "Shared expense ledger for trips and roommates. Clear balances. No bank link. Settle outside the app.",
-    "eyebrow": "No bank link. No payments. Web + mobile.",
+    "eyebrow": "Free on Android, iOS and web",
     "heading": "SharedMoney",
-    "body": "Split the trip. Settle up. One shared record for group money. Record who paid, choose who shared the cost, and see balances without linking a bank account or moving money in the app.",
-    "proof": ["Trip and roommate ledgers", "Balances separated by currency", "No bank link or payment handling"],
+    "body": "Record who paid and who owes for trips, rent and dinners. No daily limits, no ads.",
+    "proof": [
+      "Trip and roommate ledgers",
+      "Balances separated by currency",
+      "Settle outside the app"
+    ],
     "sections": [
-      {"heading": "A shared record beats a message thread", "body": "When several people pay for the same plans, the hard part is remembering the details. SharedMoney keeps each expense, participant, payer, and settlement in one group record that everyone can review.", "bullets": ["Add expenses as they happen", "Use equal or uneven splits", "Keep settlements visible after they happen outside the app"]},
-      {"heading": "Use it for the groups you already have", "body": "Create a ledger for a weekend away, recurring household costs, a dinner group, or any other shared plan. Each group has its own activity and balances so unrelated expenses do not get mixed together.", "bullets": ["Travel with changing payers", "Rent, utilities, groceries, and subscriptions", "Friends who take turns covering meals and tickets"]}
+      {
+        "heading": "A shared record beats a message thread",
+        "body": "When several people pay for the same plans, the hard part is remembering the details. SharedMoney keeps each expense, participant, payer, and settlement in one group record that everyone can review.",
+        "bullets": [
+          "Add expenses as they happen",
+          "Use equal or uneven splits",
+          "Keep settlements visible after they happen outside the app"
+        ]
+      },
+      {
+        "heading": "Use it for the groups you already have",
+        "body": "Create a ledger for a weekend away, recurring household costs, a dinner group, or any other shared plan. Each group has its own activity and balances so unrelated expenses do not get mixed together.",
+        "bullets": [
+          "Travel with changing payers",
+          "Rent, utilities, groceries, and subscriptions",
+          "Friends who take turns covering meals and tickets"
+        ]
+      }
     ],
     "faqs": [
-      {"question": "Does SharedMoney handle payments?", "answer": "No. SharedMoney records expenses and balances. Group members settle using the payment method they prefer, then can record that settlement in the shared ledger."},
-      {"question": "Can groups use different currencies?", "answer": "Yes. SharedMoney keeps balances specific to each currency instead of silently converting them."},
-      {"question": "Is SharedMoney on the App Store?", "answer": "Yes. SharedMoney is live on the App Store for iPhone and on Google Play for Android. You can also use the web app at sharedmoney.app/app."}
+      {
+        "question": "Is SharedMoney free to use?",
+        "answer": "Yes. SharedMoney is free for tracking shared expenses and balances."
+      },
+      {
+        "question": "Is my financial data secure?",
+        "answer": "SharedMoney stores group records, participants, expenses, and balances. We focus on clear records, not storing payment instruments."
+      },
+      {
+        "question": "Do my friends need to download an app?",
+        "answer": "SharedMoney is available on the web, Google Play (Android), and the App Store (iOS). Friends can use whichever works for them."
+      },
+      {
+        "question": "Is SharedMoney on the App Store?",
+        "answer": "Yes. SharedMoney is live on the App Store for iPhone and on Google Play for Android. You can also use the web app at sharedmoney.app/app."
+      },
+      {
+        "question": "What happens if someone doesn’t pay?",
+        "answer": "SharedMoney keeps the shared ledger visible and up-to-date. Payment happens in your preferred payment app outside SharedMoney."
+      },
+      {
+        "question": "Does SharedMoney handle payments?",
+        "answer": "No. SharedMoney records expenses and balances. Group members settle using the payment method they prefer, then can record that settlement in the shared ledger."
+      },
+      {
+        "question": "Can groups use different currencies?",
+        "answer": "Yes. SharedMoney keeps balances specific to each currency instead of silently converting them."
+      }
     ],
-    "related": ["split-bills", "group-expense-tracker", "trip-expense-splitter", "tools"]
+    "related": [
+      "split-bills",
+      "group-expense-tracker",
+      "trip-expense-splitter",
+      "tools"
+    ]
   },
   {
     "id": "split-bills",
@@ -33,17 +83,50 @@
     "eyebrow": "Split bills",
     "heading": "Split bills without losing the thread.",
     "body": "Add the payer, choose the people who shared the cost, adjust the split when it is not even, and keep the final balance readable for everyone in the group.",
-    "proof": ["Equal and uneven splits", "Clear payer history", "Simple settlement records"],
+    "proof": [
+      "Equal and uneven splits",
+      "Clear payer history",
+      "Simple settlement records"
+    ],
     "sections": [
-      {"heading": "Record the bill once", "body": "Enter the cost, the person who paid, and the members included. The group can see the same entry and the balance change it created, so there is less need to explain a bill after the fact.", "bullets": ["Meals, tickets, rides, and household purchases", "A visible payer and participant list", "Expense notes for useful context"]},
-      {"heading": "Keep the settlement separate from the payment", "body": "SharedMoney is not a payment service. It helps a group agree on what is owed; members can settle with any method they already use and add the settlement to the ledger afterward.", "bullets": ["No payment details stored", "Balances stay easy to review", "A record remains after the group settles"]}
+      {
+        "heading": "Record the bill once",
+        "body": "Enter the cost, the person who paid, and the members included. The group can see the same entry and the balance change it created, so there is less need to explain a bill after the fact.",
+        "bullets": [
+          "Meals, tickets, rides, and household purchases",
+          "A visible payer and participant list",
+          "Expense notes for useful context"
+        ]
+      },
+      {
+        "heading": "Keep the settlement separate from the payment",
+        "body": "SharedMoney is not a payment service. It helps a group agree on what is owed; members can settle with any method they already use and add the settlement to the ledger afterward.",
+        "bullets": [
+          "No payment details stored",
+          "Balances stay easy to review",
+          "A record remains after the group settles"
+        ]
+      }
     ],
     "faqs": [
-      {"question": "Can I split a bill unevenly?", "answer": "Yes. SharedMoney supports different participant shares, which is useful when a bill was not shared equally."},
-      {"question": "Do all participants need to pay through SharedMoney?", "answer": "No. The app tracks the shared record and balance; payment happens outside the app."},
-      {"question": "Is SharedMoney on the App Store?", "answer": "Yes. SharedMoney is live on the App Store for iPhone and on Google Play for Android. You can also use the web app at sharedmoney.app/app."}
+      {
+        "question": "Can I split a bill unevenly?",
+        "answer": "Yes. SharedMoney supports different participant shares, which is useful when a bill was not shared equally."
+      },
+      {
+        "question": "Do all participants need to pay through SharedMoney?",
+        "answer": "No. The app tracks the shared record and balance; payment happens outside the app."
+      },
+      {
+        "question": "Is SharedMoney on the App Store?",
+        "answer": "Yes. SharedMoney is live on the App Store for iPhone and on Google Play for Android. You can also use the web app at sharedmoney.app/app."
+      }
     ],
-    "related": ["split-bill-calculator", "group-expense-tracker", "roommate-expense-tracker"]
+    "related": [
+      "split-bill-calculator",
+      "group-expense-tracker",
+      "roommate-expense-tracker"
+    ]
   },
   {
     "id": "group-expense-tracker",
@@ -56,17 +139,50 @@
     "eyebrow": "Group expense tracker",
     "heading": "One group ledger everyone can read.",
     "body": "SharedMoney organizes group costs by member, currency, and activity so every person can see what changed, who paid, and what remains open.",
-    "proof": ["Member balances", "Expense activity", "Shared group history"],
+    "proof": [
+      "Member balances",
+      "Expense activity",
+      "Shared group history"
+    ],
     "sections": [
-      {"heading": "Make every shared cost reviewable", "body": "A group ledger gives people a common reference point. Instead of trying to reconstruct a month from chat messages, members can review the expenses and settlements where they were recorded.", "bullets": ["A running view of group activity", "Clear balances by member", "Useful for recurring and one-off plans"]},
-      {"heading": "Keep currencies honest", "body": "Converting every expense into one number can hide important details. SharedMoney keeps currency-specific balances separate so a group can decide how it wants to settle each one.", "bullets": ["No automatic exchange-rate assumption", "Separate currency balances", "A clearer record for travel groups"]}
+      {
+        "heading": "Make every shared cost reviewable",
+        "body": "A group ledger gives people a common reference point. Instead of trying to reconstruct a month from chat messages, members can review the expenses and settlements where they were recorded.",
+        "bullets": [
+          "A running view of group activity",
+          "Clear balances by member",
+          "Useful for recurring and one-off plans"
+        ]
+      },
+      {
+        "heading": "Keep currencies honest",
+        "body": "Converting every expense into one number can hide important details. SharedMoney keeps currency-specific balances separate so a group can decide how it wants to settle each one.",
+        "bullets": [
+          "No automatic exchange-rate assumption",
+          "Separate currency balances",
+          "A clearer record for travel groups"
+        ]
+      }
     ],
     "faqs": [
-      {"question": "Who can see a group expense?", "answer": "The group members can review the shared ledger, including its expenses, balances, and recorded settlements."},
-      {"question": "Is this only for families?", "answer": "No. It works for any small group that has shared costs, including friends, roommates, clubs, and travel groups."},
-      {"question": "Is SharedMoney on the App Store?", "answer": "Yes. SharedMoney is live on the App Store for iPhone and on Google Play for Android. You can also use the web app at sharedmoney.app/app."}
+      {
+        "question": "Who can see a group expense?",
+        "answer": "The group members can review the shared ledger, including its expenses, balances, and recorded settlements."
+      },
+      {
+        "question": "Is this only for families?",
+        "answer": "No. It works for any small group that has shared costs, including friends, roommates, clubs, and travel groups."
+      },
+      {
+        "question": "Is SharedMoney on the App Store?",
+        "answer": "Yes. SharedMoney is live on the App Store for iPhone and on Google Play for Android. You can also use the web app at sharedmoney.app/app."
+      }
     ],
-    "related": ["split-bills", "trip-expense-splitter", "settle-up-calculator"]
+    "related": [
+      "split-bills",
+      "trip-expense-splitter",
+      "settle-up-calculator"
+    ]
   },
   {
     "id": "trip-expense-splitter",
@@ -79,61 +195,156 @@
     "eyebrow": "Trip expense splitter",
     "heading": "Split the trip while the trip keeps moving.",
     "body": "Hotels, rides, meals, tickets, and local purchases stay in one travel ledger, even when different people pay at different points in the trip.",
-    "proof": ["Travel group balances", "Multiple currencies shown separately", "Fewer end-of-trip arguments"],
+    "proof": [
+      "Travel group balances",
+      "Multiple currencies shown separately",
+      "Fewer end-of-trip arguments"
+    ],
     "sections": [
-      {"heading": "Capture costs when they happen", "body": "Travel spending is easier to track before the details fade. Add a hotel, meal, taxi, ticket, or grocery run as it happens and select only the people who shared it.", "bullets": ["Changing payers are easy to record", "Exclude people who did not join a cost", "Keep a note with the purchase"]},
-      {"heading": "Do not force a fake exchange rate", "body": "Groups often spend in more than one currency. SharedMoney separates those balances, which makes the record more faithful and lets the group choose how to settle later.", "bullets": ["Currency-specific group balances", "No hidden conversion", "Useful for international travel"]}
+      {
+        "heading": "Capture costs when they happen",
+        "body": "Travel spending is easier to track before the details fade. Add a hotel, meal, taxi, ticket, or grocery run as it happens and select only the people who shared it.",
+        "bullets": [
+          "Changing payers are easy to record",
+          "Exclude people who did not join a cost",
+          "Keep a note with the purchase"
+        ]
+      },
+      {
+        "heading": "Do not force a fake exchange rate",
+        "body": "Groups often spend in more than one currency. SharedMoney separates those balances, which makes the record more faithful and lets the group choose how to settle later.",
+        "bullets": [
+          "Currency-specific group balances",
+          "No hidden conversion",
+          "Useful for international travel"
+        ]
+      }
     ],
     "faqs": [
-      {"question": "Can I use SharedMoney for a weekend trip?", "answer": "Yes. It is designed for short or long trips where multiple people cover shared meals, transport, stays, and activities."},
-      {"question": "What if only some people join an activity?", "answer": "Choose the people who shared that cost, rather than splitting it across the whole trip group."},
-      {"question": "Is SharedMoney on the App Store?", "answer": "Yes. SharedMoney is live on the App Store for iPhone and on Google Play for Android. You can also use the web app at sharedmoney.app/app."}
+      {
+        "question": "Can I use SharedMoney for a weekend trip?",
+        "answer": "Yes. It is designed for short or long trips where multiple people cover shared meals, transport, stays, and activities."
+      },
+      {
+        "question": "What if only some people join an activity?",
+        "answer": "Choose the people who shared that cost, rather than splitting it across the whole trip group."
+      },
+      {
+        "question": "Is SharedMoney on the App Store?",
+        "answer": "Yes. SharedMoney is live on the App Store for iPhone and on Google Play for Android. You can also use the web app at sharedmoney.app/app."
+      }
     ],
-    "related": ["split-bills", "split-bill-calculator", "settle-up-calculator"]
+    "related": [
+      "split-bills",
+      "split-bill-calculator",
+      "settle-up-calculator"
+    ]
   },
   {
     "id": "roommate-expense-tracker",
     "path": "/roommate-expense-tracker",
     "kind": "page",
     "region": "global",
-    "updated": "2026-08-08",
+    "updated": "2026-10-29",
     "title": "Roommate Expense Tracker for Rent and Utilities | SharedMoney",
     "description": "Track rent, utilities, groceries, subscriptions, and shared household costs with roommate balances that stay easy to review.",
     "eyebrow": "Roommate expenses",
     "heading": "Roommate costs, kept calm.",
+    "lead": "No daily limits on expenses, no ads, no bank link.",
     "body": "Rent, electricity, groceries, and household supplies can be tracked as they happen, so no one has to reconstruct the month later.",
-    "proof": ["Monthly shared costs", "Household member balances", "Settlement history"],
+    "proof": [
+      "Monthly shared costs",
+      "Household member balances",
+      "Settlement history"
+    ],
     "sections": [
-      {"heading": "A calmer monthly reset", "body": "Recurring home costs are easier to discuss when the record is complete. Use a shared group to capture the bills that matter and review balances before they turn into a memory test.", "bullets": ["Rent and utilities", "Groceries and shared supplies", "Subscriptions and occasional repairs"]},
-      {"heading": "Split costs the way the household agrees", "body": "Not every bill is a straight 50/50. SharedMoney lets the group record who joined each expense and how it was divided, leaving the agreement visible in the record.", "bullets": ["Equal or uneven splits", "A visible history of contributions", "Settlements recorded after paying outside the app"]}
+      {
+        "heading": "A calmer monthly reset",
+        "body": "Recurring home costs are easier to discuss when the record is complete. Use a shared group to capture the bills that matter and review balances before they turn into a memory test.",
+        "bullets": [
+          "Rent and utilities",
+          "Groceries and shared supplies",
+          "Subscriptions and occasional repairs"
+        ]
+      },
+      {
+        "heading": "Split costs the way the household agrees",
+        "body": "Not every bill is a straight 50/50. SharedMoney lets the group record who joined each expense and how it was divided, leaving the agreement visible in the record.",
+        "bullets": [
+          "Equal or uneven splits",
+          "A visible history of contributions",
+          "Settlements recorded after paying outside the app"
+        ]
+      }
     ],
     "faqs": [
-      {"question": "Can roommates use it for recurring bills?", "answer": "Yes. A household group can hold recurring bills alongside one-off costs such as supplies and repairs."},
-      {"question": "Does it collect rent or utility payments?", "answer": "No. SharedMoney tracks the ledger and balances, while payments stay with the method the household prefers."}
+      {
+        "question": "Can roommates use it for recurring bills?",
+        "answer": "Yes. A household group can hold recurring bills alongside one-off costs such as supplies and repairs."
+      },
+      {
+        "question": "Does it collect rent or utility payments?",
+        "answer": "No. SharedMoney tracks the ledger and balances, while payments stay with the method the household prefers."
+      }
     ],
-    "related": ["split-bills", "group-expense-tracker", "settle-up-calculator"]
+    "related": [
+      "split-bills",
+      "group-expense-tracker",
+      "settle-up-calculator"
+    ]
   },
   {
     "id": "splitwise-alternative",
     "path": "/splitwise-alternative",
     "kind": "page",
     "region": "global",
-    "updated": "2026-08-08",
+    "updated": "2026-10-29",
     "title": "Splitwise Alternative for Shared Expenses | SharedMoney",
     "description": "Looking for a Splitwise alternative? SharedMoney gives groups a simple shared ledger, clear balances, and payment-free settlement tracking.",
     "eyebrow": "Splitwise alternative",
     "heading": "A simple Splitwise alternative for clear group balances.",
+    "lead": "No daily limits on expenses, no ads, no bank link.",
     "body": "SharedMoney focuses on the shared record: who paid, who joined, what remains open, and when a balance was settled outside the app.",
-    "proof": ["Splitwise CSV import", "No payment instruments stored", "Free shared expense tracking"],
+    "proof": [
+      "Splitwise CSV import",
+      "Settle with cash, UPI or bank transfer",
+      "Free shared expense tracking"
+    ],
     "sections": [
-      {"heading": "Bring the ledger, not the payment account", "body": "For groups that want an expense record without making the app part of the payment flow, SharedMoney keeps the focus on the ledger. Members can use their own preferred way to settle.", "bullets": ["A shared view of expenses and balances", "Payment-free by design", "Settlements can be recorded when complete"]},
-      {"heading": "Move a previous group carefully", "body": "SharedMoney supports Splitwise CSV import for groups that want to bring their record over. Review the imported data with the group before relying on it for a final settlement.", "bullets": ["Import a CSV export", "Review entries and balances together", "Start new activity in a shared group"]}
+      {
+        "heading": "Bring the ledger, not the payment account",
+        "body": "For groups that want an expense record without making the app part of the payment flow, SharedMoney keeps the focus on the ledger. Members can use their own preferred way to settle.",
+        "bullets": [
+          "A shared view of expenses and balances",
+          "Payment-free by design",
+          "Settlements can be recorded when complete"
+        ]
+      },
+      {
+        "heading": "Move a previous group carefully",
+        "body": "SharedMoney supports Splitwise CSV import for groups that want to bring their record over. Review the imported data with the group before relying on it for a final settlement.",
+        "bullets": [
+          "Import a CSV export",
+          "Review entries and balances together",
+          "Start new activity in a shared group"
+        ]
+      }
     ],
     "faqs": [
-      {"question": "Can I import data from Splitwise?", "answer": "SharedMoney supports Splitwise CSV import. Imported group data should be reviewed with the group before it is used for a final settlement."},
-      {"question": "Does SharedMoney replace my payment app?", "answer": "No. It is an expense tracker and shared ledger; groups use their preferred payment method outside the app."}
+      {
+        "question": "Can I import data from Splitwise?",
+        "answer": "SharedMoney supports Splitwise CSV import. Imported group data should be reviewed with the group before it is used for a final settlement."
+      },
+      {
+        "question": "Does SharedMoney replace my payment app?",
+        "answer": "No. It is an expense tracker and shared ledger; groups use their preferred payment method outside the app."
+      }
     ],
-    "related": ["india-splitwise-alternative", "split-bills", "tools"]
+    "related": [
+      "india-splitwise-alternative",
+      "split-bills",
+      "tools"
+    ]
   },
   {
     "id": "india-splitwise-alternative",
@@ -146,16 +357,47 @@
     "eyebrow": "India groups",
     "heading": "Split expenses in India, then settle your way.",
     "body": "Track INR group expenses for trips, roommates, and dinner plans. When the balance is clear, settle in your preferred payment app and record it in SharedMoney.",
-    "proof": ["INR-friendly examples", "UPI can happen outside the app", "Trip and roommate use cases"],
+    "proof": [
+      "INR-friendly examples",
+      "UPI can happen outside the app",
+      "Trip and roommate use cases"
+    ],
     "sections": [
-      {"heading": "Keep the shared record in one place", "body": "Whether a group is splitting a cab, a weekend trip, flat expenses, or a dinner, SharedMoney creates a common ledger. It shows what was paid and what the group has agreed is owed.", "bullets": ["INR balances stay separate and readable", "Useful for friends, flatmates, and travel groups", "A running record rather than a one-time calculation"]},
-      {"heading": "Settle with the payment method you already use", "body": "SharedMoney does not process or store payment instruments. Once the group agrees on its balances, members can settle outside the app, including through their preferred UPI app, and record the settlement.", "bullets": ["No UPI or bank account connection", "The group chooses its settlement method", "Recorded settlements keep the history clear"]}
+      {
+        "heading": "Keep the shared record in one place",
+        "body": "Whether a group is splitting a cab, a weekend trip, flat expenses, or a dinner, SharedMoney creates a common ledger. It shows what was paid and what the group has agreed is owed.",
+        "bullets": [
+          "INR balances stay separate and readable",
+          "Useful for friends, flatmates, and travel groups",
+          "A running record rather than a one-time calculation"
+        ]
+      },
+      {
+        "heading": "Settle with the payment method you already use",
+        "body": "SharedMoney does not process or store payment instruments. Once the group agrees on its balances, members can settle outside the app, including through their preferred UPI app, and record the settlement.",
+        "bullets": [
+          "No UPI or bank account connection",
+          "The group chooses its settlement method",
+          "Recorded settlements keep the history clear"
+        ]
+      }
     ],
     "faqs": [
-      {"question": "Does SharedMoney make UPI payments?", "answer": "No. SharedMoney tracks shared expenses and balances. UPI payments happen in the payment app that group members choose."},
-      {"question": "Can it be used for flat expenses in India?", "answer": "Yes. Groups can use it to track rent-related costs, utilities, groceries, subscriptions, and other shared household spending."}
+      {
+        "question": "Does SharedMoney make UPI payments?",
+        "answer": "No. SharedMoney tracks shared expenses and balances. UPI payments happen in the payment app that group members choose."
+      },
+      {
+        "question": "Can it be used for flat expenses in India?",
+        "answer": "Yes. Groups can use it to track rent-related costs, utilities, groceries, subscriptions, and other shared household spending."
+      }
     ],
-    "related": ["splitwise-alternative", "trip-expense-splitter", "roommate-expense-tracker", "split-bill-calculator"]
+    "related": [
+      "splitwise-alternative",
+      "trip-expense-splitter",
+      "roommate-expense-tracker",
+      "split-bill-calculator"
+    ]
   },
   {
     "id": "tools",
@@ -168,16 +410,46 @@
     "eyebrow": "Free group expense tools",
     "heading": "Work out the numbers before you share them.",
     "body": "These focused tools help a group calculate a bill split or turn already-agreed net balances into a clear repayment plan. Calculator inputs remain in your browser.",
-    "proof": ["No sign-in required", "Values stay in your browser", "Built for clear group discussions"],
+    "proof": [
+      "No sign-in required",
+      "Values stay in your browser",
+      "Built for clear group discussions"
+    ],
     "sections": [
-      {"heading": "Split a bill with fees and a tip", "body": "Enter a subtotal, fixed fees, an optional tip, and the people sharing the cost. Use equal weights for a simple split or adjust a person’s weight when the group agreed on different shares.", "bullets": ["Exact cent-level rounding", "Two to twenty people", "Equal or weighted shares"]},
-      {"heading": "Turn balances into a repayment plan", "body": "If your group already knows each person’s net balance, enter the amounts to see one simple settlement plan. The tool requires the balances to add to zero and does not claim to find the globally minimum number of payments.", "bullets": ["Enter positive and negative balances", "One currency at a time", "A transparent, greedy repayment plan"]}
+      {
+        "heading": "Split a bill with fees and a tip",
+        "body": "Enter a subtotal, fixed fees, an optional tip, and the people sharing the cost. Use equal weights for a simple split or adjust a person’s weight when the group agreed on different shares.",
+        "bullets": [
+          "Exact cent-level rounding",
+          "Two to twenty people",
+          "Equal or weighted shares"
+        ]
+      },
+      {
+        "heading": "Turn balances into a repayment plan",
+        "body": "If your group already knows each person’s net balance, enter the amounts to see one simple settlement plan. The tool requires the balances to add to zero and does not claim to find the globally minimum number of payments.",
+        "bullets": [
+          "Enter positive and negative balances",
+          "One currency at a time",
+          "A transparent, greedy repayment plan"
+        ]
+      }
     ],
     "faqs": [
-      {"question": "Are calculator values sent to SharedMoney?", "answer": "No. The calculators work in your browser and do not send bill amounts, names, or balances to analytics."},
-      {"question": "Do I need an account to use the tools?", "answer": "No. They are free to use without signing in. You can open SharedMoney if you want to track expenses over time."}
+      {
+        "question": "Are calculator values sent to SharedMoney?",
+        "answer": "No. The calculators work in your browser and do not send bill amounts, names, or balances to analytics."
+      },
+      {
+        "question": "Do I need an account to use the tools?",
+        "answer": "No. They are free to use without signing in. You can open SharedMoney if you want to track expenses over time."
+      }
     ],
-    "related": ["split-bill-calculator", "settle-up-calculator", "split-bills"]
+    "related": [
+      "split-bill-calculator",
+      "settle-up-calculator",
+      "split-bills"
+    ]
   },
   {
     "id": "split-bill-calculator",
@@ -191,16 +463,46 @@
     "eyebrow": "Free split bill calculator",
     "heading": "Split a bill fairly, down to the last cent.",
     "body": "Add the subtotal, fixed fees, optional tip, currency, and the people sharing the bill. Choose equal weights or adjust weights for an uneven split; your values stay in this browser.",
-    "proof": ["Tax, fees, and optional tip", "Equal or weighted shares", "No sign-in or data upload"],
+    "proof": [
+      "Tax, fees, and optional tip",
+      "Equal or weighted shares",
+      "No sign-in or data upload"
+    ],
     "sections": [
-      {"heading": "How this split bill calculator works", "body": "The calculator adds the subtotal, fixed fees, and tip. It then divides the resulting total by each person’s relative weight. Any unavoidable cent remainder is allocated deterministically so the individual shares always add up to the total.", "bullets": ["Use 1 for each person to split equally", "Use relative weights such as 1, 2, and 3 for an uneven split", "The total shown includes fees and tip"]},
-      {"heading": "Use a shared ledger when the bill is only one of many", "body": "A calculator is useful for one bill. For an ongoing trip, home, or group plan, SharedMoney lets the group record each expense and settlement in a shared ledger.", "bullets": ["Track who paid", "Choose only the people who shared each expense", "Keep balances visible over time"]}
+      {
+        "heading": "How this split bill calculator works",
+        "body": "The calculator adds the subtotal, fixed fees, and tip. It then divides the resulting total by each person’s relative weight. Any unavoidable cent remainder is allocated deterministically so the individual shares always add up to the total.",
+        "bullets": [
+          "Use 1 for each person to split equally",
+          "Use relative weights such as 1, 2, and 3 for an uneven split",
+          "The total shown includes fees and tip"
+        ]
+      },
+      {
+        "heading": "Use a shared ledger when the bill is only one of many",
+        "body": "A calculator is useful for one bill. For an ongoing trip, home, or group plan, SharedMoney lets the group record each expense and settlement in a shared ledger.",
+        "bullets": [
+          "Track who paid",
+          "Choose only the people who shared each expense",
+          "Keep balances visible over time"
+        ]
+      }
     ],
     "faqs": [
-      {"question": "How is a rounding remainder handled?", "answer": "The calculator allocates unavoidable minor-unit remainders deterministically, so every share adds up exactly to the final bill total."},
-      {"question": "Can I use a percentage instead of weights?", "answer": "Yes. Enter each agreed percentage as a relative weight, as long as all weights are positive. For example, 50 and 50 create an even split."}
+      {
+        "question": "How is a rounding remainder handled?",
+        "answer": "The calculator allocates unavoidable minor-unit remainders deterministically, so every share adds up exactly to the final bill total."
+      },
+      {
+        "question": "Can I use a percentage instead of weights?",
+        "answer": "Yes. Enter each agreed percentage as a relative weight, as long as all weights are positive. For example, 50 and 50 create an even split."
+      }
     ],
-    "related": ["settle-up-calculator", "split-bills", "trip-expense-splitter"]
+    "related": [
+      "settle-up-calculator",
+      "split-bills",
+      "trip-expense-splitter"
+    ]
   },
   {
     "id": "settle-up-calculator",
@@ -214,15 +516,45 @@
     "eyebrow": "Free settle up calculator",
     "heading": "Turn group balances into a clear way to settle up.",
     "body": "Enter each person’s already-agreed net balance in one currency: positive means they should receive money, negative means they should pay. The calculator creates a simple repayment plan in your browser.",
-    "proof": ["One currency at a time", "Balances must add to zero", "Simple and transparent repayment plan"],
+    "proof": [
+      "One currency at a time",
+      "Balances must add to zero",
+      "Simple and transparent repayment plan"
+    ],
     "sections": [
-      {"heading": "Read the signs correctly", "body": "Use a positive amount for someone who should receive money and a negative amount for someone who should pay. The set of balances must total zero because every amount owed by one person is owed to someone else.", "bullets": ["Positive: should receive", "Negative: should pay", "Zero: already settled"]},
-      {"heading": "A practical plan, not a mathematical claim", "body": "The calculator repeatedly matches the largest remaining payer with the largest remaining recipient. This is easy to inspect and produces a valid plan, but it is not presented as a proof of the globally minimum number of payments.", "bullets": ["Results are deterministic", "Balances remain in one currency", "Payments still happen outside SharedMoney"]}
+      {
+        "heading": "Read the signs correctly",
+        "body": "Use a positive amount for someone who should receive money and a negative amount for someone who should pay. The set of balances must total zero because every amount owed by one person is owed to someone else.",
+        "bullets": [
+          "Positive: should receive",
+          "Negative: should pay",
+          "Zero: already settled"
+        ]
+      },
+      {
+        "heading": "A practical plan, not a mathematical claim",
+        "body": "The calculator repeatedly matches the largest remaining payer with the largest remaining recipient. This is easy to inspect and produces a valid plan, but it is not presented as a proof of the globally minimum number of payments.",
+        "bullets": [
+          "Results are deterministic",
+          "Balances remain in one currency",
+          "Payments still happen outside SharedMoney"
+        ]
+      }
     ],
     "faqs": [
-      {"question": "Why must my balances add to zero?", "answer": "A settlement plan is only possible when the total amount people should receive equals the total amount people should pay."},
-      {"question": "Does this calculator send payments?", "answer": "No. It creates a repayment suggestion only. Group members use their preferred payment method outside the calculator."}
+      {
+        "question": "Why must my balances add to zero?",
+        "answer": "A settlement plan is only possible when the total amount people should receive equals the total amount people should pay."
+      },
+      {
+        "question": "Does this calculator send payments?",
+        "answer": "No. It creates a repayment suggestion only. Group members use their preferred payment method outside the calculator."
+      }
     ],
-    "related": ["split-bill-calculator", "group-expense-tracker", "roommate-expense-tracker"]
+    "related": [
+      "split-bill-calculator",
+      "group-expense-tracker",
+      "roommate-expense-tracker"
+    ]
   }
 ]

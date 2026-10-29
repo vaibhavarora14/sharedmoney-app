@@ -31,7 +31,9 @@ function ToolDirectory({ page }: { page: SeoPage }) {
               <span>{tool.eyebrow}</span>
               <strong>{tool.heading}</strong>
               <p>{tool.body}</p>
-              <small>Open calculator</small>
+              <small>
+                Open calculator <span aria-hidden="true">→</span>
+              </small>
             </a>
           ))}
         </div>
@@ -78,8 +80,10 @@ function App() {
   const isTool = seoPage.kind === "tool";
   const isToolDirectory = seoPage.kind === "tools";
 
+  const toolsSurface = isTool || isToolDirectory;
+
   return (
-    <div className="landing-page">
+    <div className={`landing-page${toolsSurface ? " tools-surface" : ""}`}>
       <Header primaryDestination={primaryDestination} />
 
       <main id="main-content">
@@ -95,7 +99,11 @@ function App() {
             <TrustSection />
           </>
         ) : (
-          <PageHero page={seoPage} primaryDestination={primaryDestination} />
+          <PageHero
+            page={seoPage}
+            primaryDestination={primaryDestination}
+            secondaryDestinations={secondaryDestinations}
+          />
         )}
 
         {isTool ? (

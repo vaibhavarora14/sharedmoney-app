@@ -39,11 +39,12 @@ function ctaMarkup(page) {
   const webHref = `${appUrl}?utm_source=organic&utm_medium=seo&utm_campaign=${escapeHtml(page.id)}`;
   const ctaAttrs = (platform) =>
     `class="cta" data-seo-cta data-platform="${platform}" data-placement="ssr_fallback"`;
+  const badgeAttrs = (platform) =>
+    `class="store-badge store-badge-${platform}" data-seo-cta data-platform="${platform}" data-placement="ssr_fallback"`;
 
   return [
+    `<p class="store-badges"><a ${badgeAttrs("android")} href="${playStoreUrl}"><img src="/badges/google-play-badge.svg" alt="Get it on Google Play" width="239" height="71" /></a><a ${badgeAttrs("ios")} href="${appStoreUrl}"><img src="/badges/app-store-badge.svg" alt="Download on the App Store" width="120" height="40" /></a></p>`,
     `<p><a ${ctaAttrs("web")} href="${webHref}">Open the SharedMoney web app</a></p>`,
-    `<p><a ${ctaAttrs("android")} href="${playStoreUrl}">Get it on Google Play</a></p>`,
-    `<p><a ${ctaAttrs("ios")} href="${appStoreUrl}">Download on the App Store</a></p>`,
   ].join("");
 }
 
@@ -63,7 +64,8 @@ function fallbackMarkup(page) {
     .join("");
   const related = linkedPages(page).map((relatedPage) => `<li>${pageLink(relatedPage)}</li>`).join("");
 
-  return `<main id="main-content"><article class="seo-source"><header><p>${escapeHtml(page.eyebrow)}</p><h1>${escapeHtml(page.heading)}</h1><p>${escapeHtml(page.body)}</p><ul>${proofItems}</ul>${ctaMarkup(page)}</header>${sections}<section><h2>Common questions</h2>${faqs}</section><nav aria-label="Related SharedMoney pages"><h2>Explore SharedMoney</h2><ul>${related}</ul></nav><footer><a href="/privacy">Privacy Policy</a><a href="/delete-account">Delete Account</a><a href="mailto:support@sharedmoney.app">Contact support</a></footer></article></main>`;
+  const lead = page.lead ? `<p>${escapeHtml(page.lead)}</p>` : "";
+  return `<main id="main-content"><article class="seo-source"><header><p>${escapeHtml(page.eyebrow)}</p><h1>${escapeHtml(page.heading)}</h1>${lead}<p>${escapeHtml(page.body)}</p><ul>${proofItems}</ul>${ctaMarkup(page)}</header>${sections}<section><h2>Common questions</h2>${faqs}</section><nav aria-label="Related SharedMoney pages"><h2>Explore SharedMoney</h2><ul>${related}</ul></nav><footer><a href="/privacy">Privacy Policy</a><a href="/delete-account">Delete Account</a><a href="mailto:support@sharedmoney.app">Contact support</a></footer></article></main>`;
 }
 
 function structuredData(page) {
@@ -108,6 +110,17 @@ function structuredData(page) {
           operatingSystem: "iOS, Android, Web",
           offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
           description: page.description,
+        },
+        {
+          "@type": "FAQPage",
+          mainEntity: page.faqs.map((faq) => ({
+            "@type": "Question",
+            name: faq.question,
+            acceptedAnswer: {
+              "@type": "Answer",
+              text: faq.answer,
+            },
+          })),
         },
       ],
     };

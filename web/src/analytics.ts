@@ -114,10 +114,14 @@ export function trackPageView(page: SeoPage) {
 }
 
 export function trackCtaClick(destination: PlatformDestination, placement: string) {
+  const pathname =
+    typeof window !== "undefined" ? window.location.pathname.replace(/\/+$/, "") || "/" : "";
+
   capture("seo cta clicked", {
     platform: destination.platform,
     placement,
     device: detectDevice(),
+    page_path: pathname,
   });
 }
 

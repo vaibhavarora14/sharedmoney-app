@@ -188,7 +188,7 @@ export const useCaseScenarios: Record<UseCaseKey, SettlementScenario> = {
     kicker: "Weekly Dinner Club",
     title: "Good food. Clear balances.",
     summary:
-      "The host can change every week. SharedMoney keeps every receipt, split, and balance visible to the whole group.",
+      "The host can change every week. SharedMoney keeps every expense, split and balance visible to the whole group.",
     tone: "green",
     members: [
       {
