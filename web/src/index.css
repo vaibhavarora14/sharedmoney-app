@@ -2441,18 +2441,6 @@ html.dark .hero-product-shot img,
   }
 }
 
-/* At ≤375px, icon-only Get app so theme + menu stay on-screen. */
-@media (max-width: 23.4375rem) {
-  .header-actions .cta {
-    width: 2.75rem;
-    padding: 0;
-  }
-
-  .header-actions .cta-copy {
-    display: none;
-  }
-}
-
 @media (max-width: 22.5rem) {
   .hero-title-block h1 {
     font-size: 2.25rem;
@@ -3512,4 +3500,20 @@ html.dark .hero-product-shot,
 
 .route-hero-compact .route-hero-copy {
   max-width: 48rem;
+}
+
+/* Header Get app → icon-only by 400px (covers 360/375/390). px avoids rem root drift. */
+@media (max-width: 400px) {
+  .site-header .header-actions > .cta.cta-secondary,
+  .site-header .header-actions > .cta {
+    width: 2.75rem;
+    min-width: 2.75rem;
+    max-width: 2.75rem;
+    padding: 0;
+    gap: 0;
+  }
+
+  .site-header .header-actions > .cta .cta-copy {
+    display: none;
+  }
 }
