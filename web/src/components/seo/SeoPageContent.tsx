@@ -4,6 +4,7 @@ import type { PlatformDestination } from "../../landingContent";
 import { relatedPages, type SeoPage } from "../../seoPages";
 import { HeroAppCard } from "../landing/HeroAppCard";
 import { PlatformCta } from "../landing/PlatformCta";
+import { StoreBadges } from "../landing/StoreBadges";
 
 export function PageHero({
   page,
@@ -14,23 +15,18 @@ export function PageHero({
   primaryDestination: PlatformDestination;
   secondaryDestinations?: PlatformDestination[];
 }) {
+  const webDestination = secondaryDestinations.find((destination) => destination.platform === "web");
+
   const storeCta = (
     <div className="route-hero-actions">
-      <PlatformCta
-        destination={primaryDestination}
-        placement={`route_${page.id}`}
-        appearance="primary"
-      />
-      {secondaryDestinations.length > 0 ? (
+      <StoreBadges placement={`route_${page.id}`} preferPlatform={primaryDestination.platform} />
+      {webDestination ? (
         <div className="route-hero-secondary-actions">
-          {secondaryDestinations.map((destination) => (
-            <PlatformCta
-              key={destination.platform}
-              destination={destination}
-              placement={`route_${page.id}_secondary`}
-              appearance="text"
-            />
-          ))}
+          <PlatformCta
+            destination={webDestination}
+            placement={`route_${page.id}_secondary`}
+            appearance="text"
+          />
         </div>
       ) : null}
     </div>

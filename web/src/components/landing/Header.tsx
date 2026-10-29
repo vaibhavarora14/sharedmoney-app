@@ -79,12 +79,7 @@ export function Header({
         </nav>
 
         <div className="header-actions">
-          <PlatformCta
-            destination={primaryDestination}
-            placement="header"
-            appearance="secondary"
-            compactLabel="Get app"
-          />
+          <PlatformCta destination={primaryDestination} placement="header" appearance="secondary" />
           <button
             className="icon-button theme-button"
             type="button"

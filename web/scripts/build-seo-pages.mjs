@@ -39,11 +39,12 @@ function ctaMarkup(page) {
   const webHref = `${appUrl}?utm_source=organic&utm_medium=seo&utm_campaign=${escapeHtml(page.id)}`;
   const ctaAttrs = (platform) =>
     `class="cta" data-seo-cta data-platform="${platform}" data-placement="ssr_fallback"`;
+  const badgeAttrs = (platform) =>
+    `class="store-badge store-badge-${platform}" data-seo-cta data-platform="${platform}" data-placement="ssr_fallback"`;
 
   return [
+    `<p class="store-badges"><a ${badgeAttrs("android")} href="${playStoreUrl}"><img src="/badges/google-play-badge.svg" alt="Get it on Google Play" width="239" height="71" /></a><a ${badgeAttrs("ios")} href="${appStoreUrl}"><img src="/badges/app-store-badge.svg" alt="Download on the App Store" width="120" height="40" /></a></p>`,
     `<p><a ${ctaAttrs("web")} href="${webHref}">Open the SharedMoney web app</a></p>`,
-    `<p><a ${ctaAttrs("android")} href="${playStoreUrl}">Get it on Google Play</a></p>`,
-    `<p><a ${ctaAttrs("ios")} href="${appStoreUrl}">Download on the App Store</a></p>`,
   ].join("");
 }
 

@@ -577,41 +577,29 @@ html.dark .hero-trust-row span {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-3);
+  gap: 12px;
 }
 
-.store-badge-play {
+.store-badge {
   display: inline-flex;
+  flex: 0 0 auto;
   line-height: 0;
-  border-radius: var(--radius-sm, 4px);
-  transition: opacity 160ms ease, transform 160ms ease;
+  border-radius: 0;
+  text-decoration: none;
 }
 
-.store-badge-play:hover,
-.store-badge-play:focus-visible {
-  opacity: 0.92;
-  transform: translateY(-1px);
-}
-
-.store-badge-play img {
+.store-badge img {
   display: block;
   width: auto;
-  height: 3.25rem;
+  height: 48px;
+  /* Official assets already include brand clear space; do not stretch or recolor. */
+  max-width: none;
+  object-fit: contain;
 }
 
-.store-badge-ios {
-  color: var(--color-text-subtle);
-  font-size: 0.9375rem;
-  line-height: 1.35;
-  text-decoration: underline;
-  text-decoration-color: color-mix(in srgb, var(--color-text-subtle) 45%, transparent);
-  text-underline-offset: 0.18em;
-}
-
-.store-badge-ios:hover,
-.store-badge-ios:focus-visible {
-  color: var(--color-text);
-  text-decoration-color: currentColor;
+.store-badge:focus-visible {
+  outline: 3px solid var(--sm-focus);
+  outline-offset: 3px;
 }
 
 .hero-product-shot {
@@ -2335,11 +2323,11 @@ html.dark .hero-product-shot img,
   .store-badges {
     flex-direction: column;
     align-items: flex-start;
-    gap: var(--space-2);
+    gap: 10px;
   }
 
-  .store-badge-play img {
-    height: 3rem;
+  .store-badge img {
+    height: 44px;
   }
 
   .pulse-column,
@@ -2710,7 +2698,7 @@ p {
   margin-top: 28px;
   display: flex;
   align-items: center;
-  gap: 8px 22px;
+  gap: 12px 18px;
   flex-wrap: wrap;
 }
 
@@ -2925,11 +2913,7 @@ p {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 8px;
-}
-
-.route-hero-actions > .cta-primary {
-  width: 100%;
+  gap: 12px;
 }
 
 .route-hero-secondary-actions {
@@ -3375,8 +3359,15 @@ p {
 
 .install-actions {
   display: grid;
-  gap: 8px;
+  gap: 12px;
   justify-items: start;
+}
+
+.calculator-store-ctas {
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+  margin-top: 8px;
 }
 
 .install-actions .cta-secondary {
@@ -3423,10 +3414,6 @@ p {
   font-size: var(--sm-fs-meta);
 }
 
-.store-badge-ios {
-  color: var(--sm-ink-1);
-  text-decoration-color: var(--sm-line);
-}
 
 @media (min-width: 48rem) {
   .route-hero-actions > .cta-primary {

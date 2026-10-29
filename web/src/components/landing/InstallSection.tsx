@@ -1,6 +1,7 @@
 import type { PlatformDestination } from "../../landingContent";
 import { BrandMark } from "./BrandMark";
 import { PlatformCta } from "./PlatformCta";
+import { StoreBadges } from "./StoreBadges";
 
 export function InstallSection({
   primaryDestination,
@@ -9,6 +10,8 @@ export function InstallSection({
   primaryDestination: PlatformDestination;
   secondaryDestinations: PlatformDestination[];
 }) {
+  const webDestination = secondaryDestinations.find((destination) => destination.platform === "web");
+
   return (
     <section id="download" className="install-section">
       <div className="container install-shell">
@@ -23,21 +26,16 @@ export function InstallSection({
           </div>
         </div>
         <div className="install-actions">
-          <PlatformCta
-            destination={primaryDestination}
-            placement="download_primary"
-            appearance="inverse"
-          />
-          <div className="install-secondary-actions">
-            {secondaryDestinations.map((destination) => (
+          <StoreBadges placement="download" preferPlatform={primaryDestination.platform} />
+          {webDestination ? (
+            <div className="install-secondary-actions">
               <PlatformCta
-                key={destination.platform}
-                destination={destination}
+                destination={webDestination}
                 placement="download_secondary"
                 appearance="text"
               />
-            ))}
-          </div>
+            </div>
+          ) : null}
         </div>
       </div>
     </section>

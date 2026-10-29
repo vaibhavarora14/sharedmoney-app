@@ -1,6 +1,6 @@
 import { useRef, useState, type FormEvent } from "react";
 import { trackToolCompleted, trackToolStarted } from "../../analytics";
-import type { PlatformDestination } from "../../landingContent";
+import { platformDestinations, type PlatformDestination } from "../../landingContent";
 import type { SeoPage } from "../../seoPages";
 import {
   calculateBillSplit,
@@ -10,6 +10,24 @@ import {
 } from "../../utils/calculators";
 import { CURRENCY_CODES } from "../../utils/isoCurrencies";
 import { PlatformCta } from "../landing/PlatformCta";
+import { StoreBadges } from "../landing/StoreBadges";
+
+const webDestination = platformDestinations.find((destination) => destination.platform === "web")!;
+
+function CalculatorStoreCtas({
+  primaryDestination,
+  placement,
+}: {
+  primaryDestination: PlatformDestination;
+  placement: string;
+}) {
+  return (
+    <div className="calculator-store-ctas">
+      <StoreBadges placement={placement} preferPlatform={primaryDestination.platform} />
+      <PlatformCta destination={webDestination} placement={`${placement}_web`} appearance="text" />
+    </div>
+  );
+}
 
 const currencies = [...CURRENCY_CODES];
 
@@ -139,7 +157,7 @@ function BillSplitCalculator({ primaryDestination }: { primaryDestination: Platf
             {result.shares.map((share) => <li key={share.id}><span>{share.name}</span><strong>{formatMoney(share.amountMinor, result.currency)}</strong></li>)}
           </ul>
           <p className="calculator-result-note">Need to track more than one bill? Start a shared ledger in SharedMoney.</p>
-          <PlatformCta destination={primaryDestination} placement="split_bill_result" appearance="secondary" />
+          <CalculatorStoreCtas primaryDestination={primaryDestination} placement="split_bill_result" />
         </output>
       ) : null}
     </form>
@@ -235,7 +253,7 @@ function SettleUpCalculator({ primaryDestination }: { primaryDestination: Platfo
             {result.transfers.length === 0 ? <li><span>Everyone is already settled.</span></li> : result.transfers.map((transfer, index) => <li key={`${transfer.from}-${transfer.to}-${index}`}><span><strong>{transfer.from}</strong> pays <strong>{transfer.to}</strong></span><strong>{formatMoney(transfer.amountMinor, result.currency)}</strong></li>)}
           </ul>
           <p className="calculator-result-note">This is a clear, greedy repayment plan—not a claim that it uses the fewest possible payments.</p>
-          <PlatformCta destination={primaryDestination} placement="settle_up_result" appearance="secondary" />
+          <CalculatorStoreCtas primaryDestination={primaryDestination} placement="settle_up_result" />
         </output>
       ) : null}
     </form>
