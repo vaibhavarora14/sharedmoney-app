@@ -1,8 +1,20 @@
-import { Monitor } from "lucide-react";
+import { Apple, Monitor, Smartphone } from "lucide-react";
 import { trackCtaClick } from "../../analytics";
-import type { PlatformDestination } from "../../landingContent";
-import { StoreBadgeLink } from "./StoreBadges";
+import type { Platform, PlatformDestination } from "../../landingContent";
 
+function PlatformIcon({ platform }: { platform: Platform }) {
+  if (platform === "ios") {
+    return <Apple size={18} aria-hidden />;
+  }
+
+  if (platform === "web") {
+    return <Monitor size={18} aria-hidden />;
+  }
+
+  return <Smartphone size={18} aria-hidden />;
+}
+
+/** Text CTA for store or web destinations. Official store badges use StoreBadges instead. */
 export function PlatformCta({
   destination,
   placement,
@@ -16,10 +28,6 @@ export function PlatformCta({
   compactLabel?: string;
   showStatus?: boolean;
 }) {
-  if (destination.platform === "android" || destination.platform === "ios") {
-    return <StoreBadgeLink destination={destination} placement={placement} />;
-  }
-
   return (
     <a
       href={destination.href}
@@ -29,7 +37,7 @@ export function PlatformCta({
       aria-label={destination.ariaLabel}
       onClick={() => trackCtaClick(destination, placement)}
     >
-      <Monitor size={18} aria-hidden />
+      <PlatformIcon platform={destination.platform} />
       <span className="cta-copy">
         <span className="cta-label">{compactLabel ?? destination.label}</span>
         {showStatus ? <span className="cta-status">{destination.status}</span> : null}
