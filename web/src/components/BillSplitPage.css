@@ -18,7 +18,7 @@
 .bill-split-total { display: grid; gap: .4rem; }
 .bill-split-total strong { color: var(--color-ink); font-size: clamp(1.8rem, 6vw, 2.5rem); overflow-wrap: anywhere; }
 .bill-split-people { padding: 0; margin: 0; list-style: none; }
-.bill-split-people li { display: grid; gap: .75rem; padding: 1rem 0; border-top: 1px solid var(--color-border); }
+.bill-split-people li { display: grid; gap: .75rem; padding: 1rem 0; border-top: 1px solid var(--sm-divider); }
 .bill-split-people li > div { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
 .bill-split-people strong { overflow-wrap: anywhere; }
 .bill-split-people button { justify-self: start; min-height: 2.75rem; white-space: normal; }
@@ -35,7 +35,7 @@
 }
 .bill-split-fields { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: .75rem; }
 .bill-split-editor-people { list-style: none; padding: 0; margin: 0; display: grid; gap: 1rem; }
-.bill-split-editor-people li { display: grid; gap: .75rem; padding-block: 1rem; border-top: 1px solid var(--color-border); }
+.bill-split-editor-people li { display: grid; gap: .75rem; padding-block: 1rem; border-top: 1px solid var(--sm-divider); }
 .bill-split-editor-people .text-button { justify-self: start; }
 .bill-split-form button:disabled { opacity: .65; cursor: default; }
 .bill-split-unavailable { display: grid; gap: 1rem; }
