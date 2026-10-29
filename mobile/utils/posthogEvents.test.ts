@@ -32,3 +32,7 @@ Deno.test("group details ready latency event name is stable", () => {
 Deno.test("groups home loaded latency event name is stable", () => {
   assertEquals(ANALYTICS_EVENTS.GROUPS_HOME_LOADED, "groups_home_loaded");
 });
+
+Deno.test("review prompt requested event name is stable", () => {
+  assertEquals(ANALYTICS_EVENTS.REVIEW_PROMPT_REQUESTED, "review_prompt_requested");
+});

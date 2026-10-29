@@ -25,7 +25,8 @@
  * `group_unarchived`, `group_hidden_from_lists`, `group_updated`,
  * `group_list_scroll` (sampled FlatList perf), `group_list_page_loaded`,
  * `group_details_ready` (open latency; props: group_id, duration_ms),
- * `groups_home_loaded` (home list ready; props: duration_ms, group_count).
+ * `groups_home_loaded` (home list ready; props: duration_ms, group_count),
+ * `review_prompt_requested` (native in-app review API invoked).
  */
 export const ANALYTICS_EVENTS = {
   AUTH_SUCCEEDED: "auth_succeeded",
@@ -50,6 +51,8 @@ export const ANALYTICS_EVENTS = {
   GROUP_DETAILS_READY: "group_details_ready",
   /** Groups home list ready (after cold/warm paint). */
   GROUPS_HOME_LOADED: "groups_home_loaded",
+  /** Native StoreReview.requestReview invoked (OS may still throttle UI). */
+  REVIEW_PROMPT_REQUESTED: "review_prompt_requested",
 } as const;
 
 export type AnalyticsEventName =
