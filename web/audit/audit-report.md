@@ -1,7 +1,9 @@
 # SharedMoney marketing site visual audit
 
 **Scope:** `https://sharedmoney.app` marketing routes (web code in `web/`), not the Expo `/app` product.  
-**Mode:** Audit + proposal only. Branch `cursor/site-revamp-audit`. No implementation PR.  
+**Mode:** Audit + proposal finished. Palette implementation is **blocked** until Design forwards a direction.  
+**Audit branch:** `cursor/site-revamp-audit` (docs only).  
+**Ship branch (when unblocked):** `cursor/site-revamp` as **one** draft PR that folds in #432 + #422 + the chosen visual system. Title must **not** contain `preview` (avoids Vercel preview deploy).  
 **Date:** 2026-10-29  
 **Method:** Playwright Chromium at 375×667, 390×844, 1440×900; light + dark; axe-core WCAG 2.2 AA tags; relative-luminance contrast (WCAG 2).
 
@@ -19,9 +21,67 @@ Vaibhav's read that "colors are not contrasting well" is mostly about **structur
 4. **Berry coral as text fails AA** (`#c95872` on white = **4.10:1**).
 5. Body ink (`#17202a`) and muted (`#526074`) on canvas/surface mostly **pass** AA. The site does not feel low-contrast because paragraphs fail; it feels low-contrast because **edges and accents** do.
 
-**PR #432** (in flight, `cursor/seo-no-limits-line`) sets `.route-hero-body` to `--color-text-subtle` `#526074` / `rgb(82,96,116)` on the SEO hero gradient. Against gradient stops that pair **passes AA** (see table). It is still a hierarchy demotion vs today's ink-on-gradient (~14:1).
+**PR #432** (in flight, `cursor/seo-no-limits-line` @ `4f28719`) sets `.route-hero-body` to `--color-text-subtle` `#526074` / `rgb(82,96,116)` on the SEO hero gradient. Against gradient stops that pair **passes AA** (see table). It is still a hierarchy demotion vs today's ink-on-gradient (~14:1).
 
-**Proposed primary direction:** *Sharper Pocket* (Electric Pocket DNA, deeper borders, AAA-capable muted, brand blue that clears wash). Optional alternate: *Soft Ledger*.
+**Proposed primary direction:** *Sharper Pocket* (Electric Pocket DNA, deeper borders, AAA-capable muted, brand blue that clears wash). Optional alternate: *Soft Ledger*. **Do not apply either palette until Design picks a direction.**
+
+**Ship shape:** the full sharedmoney.app revamp is **one change** on `cursor/site-revamp` (draft PR, no `preview` in the name). Fold draft PRs **#432** and **#422** into that branch; they will not merge on their own. See [Folding / ship plan](#folding--ship-plan).
+
+---
+
+## Folding / ship plan
+
+Vaibhav: the whole marketing revamp ships as **one** change. Hold palette code until Design's direction is forwarded. When unblocked:
+
+### Target
+
+| Item | Value |
+|------|--------|
+| Branch | `cursor/site-revamp` (not `…-preview…`) |
+| PR | **Draft** only; title/body must not include the word `preview` so Vercel does not deploy a preview |
+| Base | `main` |
+| Contents | #432 product/SEO UX + #422 home/dinner copy + approved visual-token revamp + any follow-up contrast fixes |
+| Close | Supersede / close #432 and #422 once the combined draft exists (or leave open until the one PR lands; do not merge them separately) |
+
+### Inputs to fold (pinned heads)
+
+**1. PR #432** — `cursor/seo-no-limits-line` @ **`4f28719`**  
+https://github.com/vaibhavarora14/sharedmoney-app/pull/432
+
+Include:
+
+- SEO hero **lead**: `No daily limits on expenses, no ads, no bank link.` on roommate + Splitwise pages
+- `.route-hero-lead` (ink) + `.route-hero-body` (text-subtle) hierarchy
+- Compact **primary CTA**: full width below 768px, auto/intrinsic width from 768px up; **iOS + web** as text links under the primary
+- One-line Splitwise proof cards (uniform string proofs, including settle line)
+- `page_path` on analytics event `seo cta clicked`
+- Related PageHero / App wiring for secondary destinations; SEO SSR/build/test updates on that branch
+
+**2. PR #422** — `cursor/web-copy-receipt-hero-cdae` @ **`78e71ea`**  
+https://github.com/vaibhavarora14/sharedmoney-app/pull/422
+
+Include (web only; skip version-bump noise unless required):
+
+- Home `seo-content.json` `home.body`: `Record who paid and who owes for trips, rent and dinners. No daily limits, no ads.`
+- Dinner scenario summary in `landingContent.ts`: `receipt` → `expense`, and drop the Oxford comma in that sentence
+
+### Merge order (when building `cursor/site-revamp`)
+
+1. Branch from latest `main`.
+2. Bring in **#432** first (`4f28719`): larger surface (components, CSS, analytics, SEO content).
+3. Bring in **#422** (`78e71ea`) web copy on top.
+4. Resolve the only real content overlap: `web/src/seo-content.json`.
+   - Keep #422 **home.body**.
+   - Keep #432 **lead / proof / roommate + splitwise** fields and any schema additions.
+   - Do not reintroduce title+body proof objects; #432 head intentionally flattened Splitwise proofs to one-liners.
+5. Apply Design-approved tokens (palette, type, borders, section/card treatment) as the final layer. Re-check PR#432 body-on-gradient ratios after token changes (today: 5.60 / 6.06 on live stops; aim AAA muted if Design agrees).
+6. Open **one draft** PR from `cursor/site-revamp`. No separate merges of #432/#422.
+
+### Explicit non-goals until Design replies
+
+- No new palette commits on `main` or on a ship branch beyond folding plan docs.
+- No Vercel preview-oriented branch naming.
+- Audit branch `cursor/site-revamp-audit` stays docs/artifacts only.
 
 ---
 
