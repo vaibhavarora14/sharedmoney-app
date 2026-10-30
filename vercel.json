@@ -61,6 +61,16 @@
       "source": "/help/",
       "destination": "/support",
       "permanent": true
+    },
+    {
+      "source": "/faq",
+      "destination": "/#faq",
+      "permanent": true
+    },
+    {
+      "source": "/faq/",
+      "destination": "/#faq",
+      "permanent": true
     }
   ],
   "headers": [
