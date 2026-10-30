@@ -13,6 +13,7 @@ import { WorkflowSection } from "./components/landing/WorkflowSection";
 import { getPrimaryDestination, getSecondaryDestinations } from "./landingContent";
 import { pageByPath, relatedPages, normalizeSeoPath, type SeoPage } from "./seoPages";
 import { detectDevice } from "./utils/deviceDetection";
+import { scrollToHashTarget } from "./utils/hashScroll";
 import { BillSplitPage } from "./components/BillSplitPage";
 import { BillSplitStartPage } from "./components/BillSplitStartPage";
 import { billSplitRoute } from "./billSplitApi";
@@ -52,6 +53,15 @@ function App() {
   const secondaryDestinations = getSecondaryDestinations(primaryDestination.platform);
   const seoPage = seoPath ? pageByPath.get(seoPath) : undefined;
   const billToken = typeof window === "undefined" ? undefined : billSplitRoute(window.location.pathname);
+
+  // Client-rendered targets (e.g. #faq) don't exist when the browser first applies
+  // the URL fragment, so jump to it once after the first render.
+  const didInitialHashScroll = useRef(false);
+  useEffect(() => {
+    if (didInitialHashScroll.current || billToken !== undefined) return;
+    didInitialHashScroll.current = true;
+    scrollToHashTarget(window.location.hash, document);
+  }, [billToken]);
 
   useEffect(() => {
     if (!seoPage || lastTrackedPath.current === seoPage.path) {
