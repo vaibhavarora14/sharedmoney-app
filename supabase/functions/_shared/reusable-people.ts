@@ -50,6 +50,17 @@ export function reusableDisplayName(person: ReusablePersonInput): string {
   return email.split("@")[0] || email;
 }
 
+/**
+ * Name to give a person reused from the directory. Must accept everyone the
+ * directory lists, so it shares the directory's email fallback.
+ */
+export function resolveReuseSourceName(
+  name: string | null | undefined,
+  email: string | null | undefined,
+): string {
+  return reusableDisplayName({ id: "", full_name: name ?? "", email });
+}
+
 function identityKeys(person: ReusablePersonInput): string[] {
   const keys: string[] = [];
   if (person.user_id) keys.push(`user:${person.user_id}`);
