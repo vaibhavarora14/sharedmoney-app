@@ -12,6 +12,7 @@ import {
   buildReusablePeopleDirectory,
   isReusableParticipantType,
   REUSABLE_PARTICIPANT_TYPES,
+  resolveReuseSourceName,
   type ReusablePerson,
 } from "../_shared/reusable-people.ts";
 import {
@@ -414,8 +415,22 @@ Deno.serve(async (req: Request) => {
           const sourceProfile = source.user_id
             ? profileMap.get(source.user_id)
             : null;
+          // Resolve the name the same way the "add from existing" directory
+          // does: participant name, then profile name, then email local part.
+          // Otherwise people the picker offers (e.g. linked accounts with a
+          // blank cached name) are rejected here. See Sentry REACT-NATIVE-22.
+          const knownName = (source.full_name || "").trim() ||
+            (sourceProfile?.full_name || "").trim();
+          const sourceEmail = source.email ||
+            (!knownName && source.user_id
+              ? (await fetchUserEmails(
+                [source.user_id],
+                user.id,
+                user.email ?? null,
+              )).get(source.user_id) ?? null
+              : null);
           const fullName = normalizeName(
-            source.full_name || sourceProfile?.full_name,
+            resolveReuseSourceName(knownName, sourceEmail),
           );
 
           if (!fullName) {

@@ -1,6 +1,7 @@
 import {
   buildReusablePeopleDirectory,
   isReusableParticipantType,
+  resolveReuseSourceName,
 } from "./reusable-people.ts";
 
 function assertEquals(actual: unknown, expected: unknown, message?: string) {
@@ -209,4 +210,27 @@ Deno.test("prefers the richer row when merging a linked user and an email-only c
     full_name: "Priya",
     email: "priya@example.com",
   }]);
+});
+
+Deno.test("reuse accepts every person the directory lists (REACT-NATIVE-22)", () => {
+  const inputs = [
+    { id: "p-named", full_name: "Ayaan", email: "ayaan@example.com" },
+    // Linked account with a blank cached name: listed via email local part.
+    { id: "p-blank", user_id: "u-blank", full_name: "", email: "Meera.K@Example.com" },
+    { id: "p-space", full_name: "   ", email: "ravi@example.com" },
+  ];
+  const listed = buildReusablePeopleDirectory(inputs);
+  assertEquals(listed.length, 3);
+  for (const person of listed) {
+    const source = inputs.find((input) => input.id === person.id)!;
+    const name = resolveReuseSourceName(source.full_name.trim(), source.email);
+    assertEquals(name, person.full_name, `reuse name for ${person.id}`);
+  }
+});
+
+Deno.test("reuse name prefers a real name and still rejects nameless, emailless people", () => {
+  assertEquals(resolveReuseSourceName("Priya", "priya@example.com"), "Priya");
+  assertEquals(resolveReuseSourceName("", "meera@example.com"), "meera");
+  assertEquals(resolveReuseSourceName("", null), "");
+  assertEquals(resolveReuseSourceName(null, undefined), "");
 });
