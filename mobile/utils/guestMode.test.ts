@@ -6,6 +6,7 @@ import {
   guestCleanupVisible,
   guestCollisionName,
   guestEntryVisible,
+  shouldRequestGuestCaptcha,
   guestEventProps,
   guestSignInCopy,
   guestUpgradePath,
@@ -15,6 +16,13 @@ import {
   readFlagOverride,
   stripShareLinks,
 } from "./guestMode.ts";
+
+Deno.test("guest captcha is requested only on web when a site key exists", () => {
+  assertEquals(shouldRequestGuestCaptcha(undefined, "web"), false);
+  assertEquals(shouldRequestGuestCaptcha("  ", "web"), false);
+  assertEquals(shouldRequestGuestCaptcha("site-key", "ios"), false);
+  assertEquals(shouldRequestGuestCaptcha("site-key", "web"), true);
+});
 
 Deno.test("guest entry and cleanup flags default off", () => {
   assertEquals(readFlagOverride(undefined), null);

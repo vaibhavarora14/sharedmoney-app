@@ -31,6 +31,7 @@ import {
   shouldCaptureSocialAuthFailure,
 } from "../utils/authFunnelEvents";
 import { captureAnalyticsEvent, captureAuthFailed, syncAnalyticsAuth } from "../utils/posthogAnalytics";
+import { anonymousCaptchaToken } from "../utils/guestCaptcha";
 import { ANALYTICS_EVENTS } from "../utils/posthogEvents";
 import { isWebAuthShellActive } from "../utils/webAuthShell";
 import { forgetWebProfileLabel } from "../utils/webProfileShell";
@@ -480,7 +481,10 @@ const [loading, setLoading] = useState<boolean>(() => !isWebAuthShellActive());
    */
   const signInAnonymously = useCallback(async () => {
     try {
-      const { error } = await supabase.auth.signInAnonymously();
+      const captchaToken = await anonymousCaptchaToken();
+      const { error } = await supabase.auth.signInAnonymously(
+        captchaToken ? { options: { captchaToken } } : undefined,
+      );
       if (error) {
         return { error: mapAuthError(error, "signIn") };
       }

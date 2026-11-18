@@ -250,6 +250,11 @@ export function guestEntryVisible(input: {
   return input.remoteEnabled === true;
 }
 
+/** Web anonymous sign-in sends a Turnstile token only when a site key is configured. */
+export function shouldRequestGuestCaptcha(siteKey: string | undefined, platform: string): boolean {
+  return platform === "web" && Boolean(siteKey?.trim());
+}
+
 export function readFlagOverride(
   raw: string | undefined,
 ): boolean | null {
