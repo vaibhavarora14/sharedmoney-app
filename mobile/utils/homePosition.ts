@@ -74,6 +74,61 @@ function splitLine(rows: Balance[]): string {
   return "They don’t combine";
 }
 
+/**
+ * Viewer total across every group the balances response returned, including
+ * hidden direct ledgers. One currency stays one row. Two currencies are not added.
+ */
+export function viewerOverallBalances(
+  groupBalances: ReadonlyArray<{
+    balances: ReadonlyArray<{ user_id?: string; amount: number; currency: string }>;
+  }>,
+  userId?: string,
+): Balance[] {
+  const totals = new Map<string, number>();
+  for (const group of groupBalances) {
+    for (const row of group.balances) {
+      if (userId && row.user_id !== userId) continue;
+      const currency = row.currency.trim().toUpperCase();
+      if (!currency || Math.abs(row.amount) < MATERIAL) continue;
+      totals.set(currency, (totals.get(currency) ?? 0) + row.amount);
+    }
+  }
+  return [...totals.entries()].map(([currency, amount]) => ({
+    user_id: userId ?? "",
+    currency,
+    amount: Math.round(amount * 100) / 100,
+  }));
+}
+
+/** Settle hero is the sum of the person rows on screen, direct people included. */
+export function settleHeroFromPeople(
+  people: ReadonlyArray<{ netsByCurrency: Record<string, number> }>,
+): HomePosition {
+  const totals = new Map<string, number>();
+  let peopleWithNet = 0;
+  for (const person of people) {
+    const material = Object.entries(person.netsByCurrency).filter(([, amount]) => Math.abs(amount) >= MATERIAL);
+    if (material.length === 0) continue;
+    peopleWithNet += 1;
+    for (const [currency, amount] of material) {
+      const code = currency.trim().toUpperCase();
+      if (!code) continue;
+      totals.set(code, (totals.get(code) ?? 0) + amount);
+    }
+  }
+  return homePosition({
+    hasBalances: true,
+    overallBalances: [...totals.entries()].map(([currency, amount]) => ({
+      user_id: "",
+      currency,
+      amount: Math.round(amount * 100) / 100,
+    })),
+    groupsWithBalance: peopleWithNet,
+    activeGroupCount: peopleWithNet,
+    peopleCount: peopleWithNet,
+  });
+}
+
 export function homePosition(input: {
   hasBalances: boolean;
   overallBalances: Balance[];
@@ -81,6 +136,8 @@ export function homePosition(input: {
   activeGroupCount: number;
   /** Direct people already included in overall_balances. Never summed here. */
   directPeople?: { count: number; name?: string };
+  /** Settle tab counts people, not groups. */
+  peopleCount?: number;
 }): HomePosition {
   if (!input.hasBalances) return { kind: "unknown" };
 
@@ -95,7 +152,9 @@ export function homePosition(input: {
     const mutedCount = Math.abs(amount) >= MATERIAL
       ? input.groupsWithBalance
       : input.activeGroupCount;
-    const mutedLine = homeMutedLine(mutedCount, input.directPeople);
+    const mutedLine = input.peopleCount && input.peopleCount > 0
+      ? (input.peopleCount === 1 ? "Across 1 person" : `Across ${input.peopleCount} people`)
+      : homeMutedLine(mutedCount, input.directPeople);
     if (amount > MATERIAL) {
       return {
         kind: "amount",

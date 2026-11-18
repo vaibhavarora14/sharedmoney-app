@@ -1,5 +1,6 @@
 import DateTimePicker from "@react-native-community/datetimepicker";
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import {
   Modal,
   Platform,
@@ -9,6 +10,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ActivityIndicator, Text, useTheme } from "react-native-paper";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../contexts/AuthContext";
@@ -18,6 +20,7 @@ import { usePeopleSettlements } from "../hooks/usePeopleSettlements";
 import { useCreateSettlement, useCreateSettlements, useDeleteSettlement } from "../hooks/useSettlements";
 import { useCreateTransaction, useDeleteTransaction } from "../hooks/useTransactions";
 import { createOrGetDirectGroup } from "../utils/directGroup";
+import { getCurrencySymbol } from "../utils/currency";
 import { filterCurrencies } from "../utils/isoCurrencies";
 import { captureIdentifiedAnalyticsEvent } from "../utils/posthogAnalytics";
 import { ANALYTICS_EVENTS } from "../utils/posthogEvents";
@@ -186,6 +189,29 @@ function settlementFromResponse(value: unknown): { id: string; group_id?: string
   };
 }
 
+const AVATAR_LIGHT = [
+  { backgroundColor: "#DFF6EF", color: "#075E51" },
+  { backgroundColor: "#F8E2E8", color: "#842A43" },
+  { backgroundColor: "#DCE6FF", color: "#123A99" },
+  { backgroundColor: "#FDEBD3", color: "#5A3A10" },
+  { backgroundColor: "#E8E1F7", color: "#3B2F63" },
+];
+const AVATAR_DARK = [
+  { backgroundColor: "#075E51", color: "#D8FBF3" },
+  { backgroundColor: "#642338", color: "#FFE3EA" },
+  { backgroundColor: "#183D98", color: "#E8EEFF" },
+  { backgroundColor: "#5A3A10", color: "#FFE9C7" },
+  { backgroundColor: "#3B2F63", color: "#ECE5FF" },
+];
+
+function avatarColors(name: string, dark: boolean): { backgroundColor: string; color: string } {
+  const palette = dark ? AVATAR_DARK : AVATAR_LIGHT;
+  const key = name.trim().toLowerCase();
+  let hash = 0;
+  for (let i = 0; i < key.length; i += 1) hash = (hash + key.charCodeAt(i) * (i + 1)) % palette.length;
+  return palette[hash] ?? palette[0];
+}
+
 function initials(name: string): string {
   const trimmed = name.trim();
   if (!trimmed) return "?";
@@ -215,6 +241,7 @@ export const QuickSettleSheet: React.FC<QuickSettleSheetProps> = ({
   preview,
 }) => {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const { user, signInWithGoogle, signInWithApple } = useAuth();
   const queryClient = useQueryClient();
   const profile = useProfile();
@@ -245,7 +272,9 @@ export const QuickSettleSheet: React.FC<QuickSettleSheetProps> = ({
   const [newEmail, setNewEmail] = useState("");
   const [newPhone, setNewPhone] = useState("");
   const [mode, setMode] = useState<QuickSettleMode>("payment");
-  const [direction, setDirection] = useState<QuickSettleDirection | null>(preview === "form" || preview === "success" ? "you_paid" : null);
+  const [direction, setDirection] = useState<QuickSettleDirection | null>(
+    preview === "success" || preview === "guest" ? "you_paid" : null,
+  );
   const [amountText, setAmountText] = useState(preview === "form" || preview === "success" ? "500" : "");
   const [note, setNote] = useState(preview === "form" || preview === "success" ? "Movie tickets" : "");
   const [date, setDate] = useState(localIsoDate());
@@ -590,13 +619,14 @@ export const QuickSettleSheet: React.FC<QuickSettleSheetProps> = ({
     <Modal visible={visible} transparent animationType="slide" onRequestClose={close}>
       <View style={styles.scrim}>
         <Pressable style={styles.scrimTap} onPress={close} accessibilityLabel="Close settle" />
-        <View style={[styles.sheet, { backgroundColor: surface }]}>
+        <View style={[styles.sheet, { backgroundColor: surface, paddingBottom: 28 + insets.bottom }]}>
           <View style={[styles.handle, { backgroundColor: theme.colors.outline }]} />
           <ScrollView keyboardShouldPersistTaps="handled" bounces={false}>
             {step === "people" ? (
               <View>
                 <Text style={[styles.title, { color: ink }]}>Settle up with</Text>
                 <View style={[styles.search, { backgroundColor: theme.colors.surfaceVariant }]}>
+                  <MaterialCommunityIcons name="magnify" size={20} color={muted} />
                   <TextInput
                     value={query}
                     onChangeText={setQuery}
@@ -619,8 +649,8 @@ export const QuickSettleSheet: React.FC<QuickSettleSheetProps> = ({
                       onPress={() => chooseExisting(person)}
                       testID={`quick-settle-person-${person.key}`}
                     >
-                      <View style={[styles.avatar, { backgroundColor: theme.colors.primaryContainer }]}>
-                        <Text style={{ color: theme.colors.onPrimaryContainer, fontWeight: "700" }}>{initials(person.displayName)}</Text>
+                      <View style={[styles.avatar, avatarColors(person.displayName, theme.dark)]}>
+                        <Text style={{ color: avatarColors(person.displayName, theme.dark).color, fontWeight: "700" }}>{initials(person.displayName)}</Text>
                       </View>
                       <View style={styles.personText}>
                         <Text style={[styles.personName, { color: ink }]}>{person.displayName}</Text>
@@ -703,8 +733,8 @@ export const QuickSettleSheet: React.FC<QuickSettleSheetProps> = ({
                   <Pressable onPress={() => setStep("people")} accessibilityLabel="Back">
                     <Text style={{ color: ink, fontSize: 20 }}>←</Text>
                   </Pressable>
-                  <View style={[styles.avatar, { backgroundColor: theme.colors.secondaryContainer }]}>
-                    <Text style={{ fontWeight: "700", color: theme.colors.onSecondaryContainer }}>{initials(displayName)}</Text>
+                  <View style={[styles.avatar, avatarColors(displayName, theme.dark)]}>
+                    <Text style={{ fontWeight: "700", color: avatarColors(displayName, theme.dark).color }}>{initials(displayName)}</Text>
                   </View>
                   <Text style={[styles.personName, { color: ink }]}>{displayName}</Text>
                 </View>
@@ -759,8 +789,8 @@ export const QuickSettleSheet: React.FC<QuickSettleSheetProps> = ({
                   <Pressable onPress={() => setStep(chosen?.person && offer ? "offer" : "people")} accessibilityLabel="Back">
                     <Text style={{ color: ink, fontSize: 20 }}>←</Text>
                   </Pressable>
-                  <View style={[styles.avatar, { backgroundColor: theme.colors.primaryContainer }]}>
-                    <Text style={{ fontWeight: "700", color: theme.colors.onPrimaryContainer }}>{initials(displayName)}</Text>
+                  <View style={[styles.avatar, avatarColors(displayName, theme.dark)]}>
+                    <Text style={{ fontWeight: "700", color: avatarColors(displayName, theme.dark).color }}>{initials(displayName)}</Text>
                   </View>
                   <Text style={[styles.personName, { color: ink }]}>{displayName}</Text>
                   {chosen?.isNew ? (
@@ -799,18 +829,20 @@ export const QuickSettleSheet: React.FC<QuickSettleSheetProps> = ({
                   >
                     <Text style={{ fontWeight: "700", color: muted }}>{currency || "Currency"}</Text>
                   </Pressable>
-                  <Text style={[styles.bigAmount, { color: ink }]}>
-                    {currency ? formatShareCurrency(0, currency).replace(/[0-9.,\s]/g, "") : ""}
-                  </Text>
-                  <TextInput
-                    value={amountText}
-                    onChangeText={setAmountText}
-                    keyboardType="decimal-pad"
-                    placeholder="0"
-                    placeholderTextColor={muted}
-                    style={[styles.bigAmount, styles.amountInput, { color: ink }]}
-                    testID="quick-settle-amount"
-                  />
+                  <View style={styles.amountCluster}>
+                    <Text style={[styles.bigAmount, { color: ink }]}>
+                      {currency ? getCurrencySymbol(currency) : ""}
+                    </Text>
+                    <TextInput
+                      value={amountText}
+                      onChangeText={setAmountText}
+                      keyboardType="decimal-pad"
+                      placeholder="0"
+                      placeholderTextColor={muted}
+                      style={[styles.bigAmount, styles.amountInput, { color: ink }]}
+                      testID="quick-settle-amount"
+                    />
+                  </View>
                 </View>
                 <Text style={[styles.label, { color: muted }]}>Note</Text>
                 <TextInput
@@ -923,16 +955,20 @@ export const QuickSettleSheet: React.FC<QuickSettleSheetProps> = ({
                 <Text style={{ color: muted, marginTop: 6, marginBottom: 18 }}>
                   Links need an account. Your record is saved.
                 </Text>
-                <Pressable style={[styles.filled, { backgroundColor: theme.colors.primary }]} onPress={() => void signInWithGoogle()}>
+                <Pressable style={[styles.filled, styles.authBtn, { backgroundColor: theme.colors.primary }]} onPress={() => void signInWithGoogle()}>
+                  <MaterialCommunityIcons name="google" size={20} color={theme.colors.onPrimary} />
                   <Text style={{ color: theme.colors.onPrimary, fontWeight: "600" }}>Continue with Google</Text>
                 </Pressable>
-                <Pressable style={[styles.outline, { borderColor: theme.colors.outline, marginTop: 12 }]} onPress={() => void signInWithApple()}>
+                <Pressable style={[styles.outline, styles.authBtn, { borderColor: theme.colors.outline, marginTop: 12 }]} onPress={() => void signInWithApple()}>
+                  <MaterialCommunityIcons name="apple" size={20} color={theme.colors.primary} />
                   <Text style={{ color: theme.colors.primary, fontWeight: "600" }}>Continue with Apple</Text>
                 </Pressable>
-                <Pressable style={[styles.outline, { borderColor: theme.colors.outline, marginTop: 12 }]} onPress={() => onContinueSignIn?.("email")}>
+                <Pressable style={[styles.outline, styles.authBtn, { borderColor: theme.colors.outline, marginTop: 12 }]} onPress={() => onContinueSignIn?.("email")}>
+                  <MaterialCommunityIcons name="email-outline" size={20} color={theme.colors.primary} />
                   <Text style={{ color: theme.colors.primary, fontWeight: "600" }}>Continue with email</Text>
                 </Pressable>
-                <Pressable style={[styles.outline, { borderColor: theme.colors.outline, marginTop: 12 }]} onPress={() => onContinueSignIn?.("whatsapp")}>
+                <Pressable style={[styles.outline, styles.authBtn, { borderColor: theme.colors.outline, marginTop: 12 }]} onPress={() => onContinueSignIn?.("whatsapp")}>
+                  <MaterialCommunityIcons name="whatsapp" size={20} color={theme.colors.primary} />
                   <Text style={{ color: theme.colors.primary, fontWeight: "600" }}>Continue with WhatsApp</Text>
                 </Pressable>
                 <Pressable onPress={() => void shareText()} testID="quick-settle-share-text">
@@ -979,11 +1015,11 @@ export const QuickSettleSheet: React.FC<QuickSettleSheetProps> = ({
 const styles = StyleSheet.create({
   scrim: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(17,23,29,0.32)" },
   scrimTap: { flex: 1 },
-  sheet: { borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 20, paddingBottom: 28, maxHeight: "88%" },
+  sheet: { borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 20, maxHeight: "88%" },
   handle: { width: 32, height: 4, borderRadius: 2, alignSelf: "center", marginTop: 8, marginBottom: 14, opacity: 0.5 },
   title: { fontSize: 20, fontWeight: "700", letterSpacing: -0.2 },
-  search: { height: 48, borderRadius: 24, paddingHorizontal: 16, justifyContent: "center", marginTop: 14, marginBottom: 4 },
-  searchInput: { fontSize: 16, padding: 0 },
+  search: { height: 48, borderRadius: 24, paddingHorizontal: 16, alignItems: "center", flexDirection: "row", gap: 10, marginTop: 14, marginBottom: 4 },
+  searchInput: { fontSize: 16, padding: 0, flex: 1 },
   person: { minHeight: 64, flexDirection: "row", alignItems: "center", gap: 12, borderBottomWidth: StyleSheet.hairlineWidth },
   personText: { flex: 1 },
   personName: { fontSize: 16, fontWeight: "600" },
@@ -997,18 +1033,20 @@ const styles = StyleSheet.create({
   offerTitle: { fontWeight: "700", fontSize: 16, marginBottom: 6 },
   offerLine: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 8, borderTopWidth: StyleSheet.hairlineWidth },
   filled: { height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center" },
+  authBtn: { flexDirection: "row", gap: 10 },
   outline: { height: 48, borderRadius: 24, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   ghost: { textAlign: "center", fontWeight: "600", fontSize: 15, paddingVertical: 12 },
   segment: { flexDirection: "row", borderWidth: 1, borderRadius: 22, overflow: "hidden", minHeight: 44, marginBottom: 18 },
   segmentItem: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 8, paddingVertical: 8 },
-  amountRow: { flexDirection: "row", alignItems: "center", gap: 8, borderBottomWidth: 2, marginBottom: 18, paddingBottom: 8 },
-  currency: { height: 32, borderRadius: 8, paddingHorizontal: 10, justifyContent: "center" },
+  amountRow: { flexDirection: "row", alignItems: "center", gap: 12, borderBottomWidth: 2, marginBottom: 18, paddingBottom: 8 },
+  amountCluster: { flex: 1, flexDirection: "row", alignItems: "center" },
+  currency: { minHeight: 44, borderRadius: 8, paddingHorizontal: 12, justifyContent: "center" },
   bigAmount: { fontSize: 40, fontWeight: "700", letterSpacing: -0.8 },
-  amountInput: { flex: 1, minWidth: 80, padding: 0 },
+  amountInput: { flex: 1, minWidth: 40, padding: 0, margin: 0 },
   label: { fontSize: 13, fontWeight: "600", marginBottom: 6 },
   field: { height: 52, borderWidth: 1, borderRadius: 8, paddingHorizontal: 14, fontSize: 16, marginBottom: 16 },
   dateRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 18 },
-  dateChip: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 14, height: 36, justifyContent: "center" },
+  dateChip: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 14, minHeight: 44, justifyContent: "center" },
   ok: { alignItems: "center", marginBottom: 18 },
   okIcon: { width: 52, height: 52, borderRadius: 26, alignItems: "center", justifyContent: "center", marginBottom: 12 },
   currencyRow: { minHeight: 44, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },

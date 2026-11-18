@@ -37,7 +37,7 @@ import { rememberAllBalances } from "../utils/groupOpenCache";
 import { partitionGroupsBySection } from "../utils/groupListSections";
 import { recordSentryListCounts } from "../utils/sentryTelemetry";
 import { groupListBalanceWords } from "../utils/balanceRowLabels";
-import { countGroupsWithViewerBalance, homePosition, type HomePosition } from "../utils/homePosition";
+import { countGroupsWithViewerBalance, homePosition, viewerOverallBalances, type HomePosition } from "../utils/homePosition";
 import { groupRecencyLine } from "../utils/groupRecency";
 import { groupsListStatusLine } from "../utils/groupsListStatus";
 import { isBenignConnectivityError } from "../utils/networkErrors";
@@ -368,7 +368,13 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
 
   const position = homePosition({
     hasBalances: balancesReady,
-    overallBalances: balancesData?.overall_balances ?? [],
+    overallBalances: (() => {
+      const fromGroups = viewerOverallBalances(
+        balancesData?.group_balances ?? [],
+        user?.id,
+      );
+      return fromGroups.length > 0 ? fromGroups : (balancesData?.overall_balances ?? []);
+    })(),
     groupsWithBalance: countGroupsWithViewerBalance(
       balancesData?.group_balances ?? [],
       activeGroups.map((group) => group.id),
@@ -624,7 +630,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                 onPress={() => openQuickSettle("home_empty")}
                 testID="home-empty-settle"
                 style={{ marginTop: 12 }}
-                contentStyle={{ minHeight: 40 }}
+                contentStyle={{ minHeight: 44 }}
               >
                 Settle up with someone
               </Button>
@@ -645,7 +651,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                 onPress={() => openQuickSettle("home_header")}
                 testID="home-settle-pill"
                 style={styles.settlePill}
-                contentStyle={{ minHeight: 40 }}
+                contentStyle={{ minHeight: 44 }}
                 labelStyle={{ fontWeight: "700" }}
               >
                 Settle up with someone
