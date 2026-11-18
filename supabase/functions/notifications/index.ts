@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { verifyAuth } from '../_shared/auth.ts';
+import { guestSignInRequiredResponse } from '../_shared/guest.ts';
 import { lastSeenForPushRegistration, persistLastSeenApp } from '../_shared/last-seen-app.ts';
 import {
   buildNotificationCursorFilter,
@@ -77,7 +78,11 @@ Deno.serve(async (req: Request) => {
       return createErrorResponse(413, size.error || 'Request body too large', 'VALIDATION_ERROR', undefined, req);
     }
 
-    const { user, supabase } = await verifyAuth(req);
+    const authResult = await verifyAuth(req);
+    const { user, supabase } = authResult;
+    if (authResult.isAnonymous && req.method === 'PUT') {
+      return guestSignInRequiredResponse(req);
+    }
     const url = new URL(req.url);
     const featureEnabled = await transactionNotificationsEnabled(user.id, user.email);
 

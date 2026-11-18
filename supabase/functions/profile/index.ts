@@ -1,5 +1,6 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { verifyAuth } from '../_shared/auth.ts';
+import { guestSignInRequiredResponse } from '../_shared/guest.ts';
 import { SUPABASE_SERVICE_ROLE_KEY, SUPABASE_URL } from '../_shared/env.ts';
 import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
 import { buildTermsAcceptanceUpdate } from '../_shared/profile.ts';
@@ -340,6 +341,15 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
       if (updates.avatar_url !== undefined) {
         sanitizedUpdates.avatar_url = updates.avatar_url;
+      }
+
+      if (authResult.isAnonymous && (
+        updates.phone !== undefined
+        || updates.country_code !== undefined
+        || updates.upi_id !== undefined
+        || typeof updates.whatsapp_reminders_opt_in === 'boolean'
+      )) {
+        return guestSignInRequiredResponse(req);
       }
 
       if (updates.phone !== undefined) {

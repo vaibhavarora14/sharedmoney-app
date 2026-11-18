@@ -357,15 +357,18 @@ export function authSucceededProperties(input: {
   authProvider: string;
   platform: string;
   isNewUser: boolean;
+  fromGuest?: boolean;
 }): {
   auth_provider: string;
   platform: string;
   is_new_user: boolean;
+  from_guest?: boolean;
 } {
   return {
     auth_provider: input.authProvider || "unknown",
     platform: input.platform,
     is_new_user: input.isNewUser,
+    ...(input.fromGuest ? { from_guest: true } : {}),
   };
 }
 

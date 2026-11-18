@@ -20,6 +20,8 @@ export interface Profile {
   upi_id?: string | null;
   /** Owner-only opt-in for the monthly WhatsApp summary (#419). */
   whatsapp_reminders_opt_in?: boolean;
+  /** Set for anonymous users. Viewing the app does not change it. */
+  last_guest_activity_at?: string | null;
   created_at: string;
   updated_at: string;
 }

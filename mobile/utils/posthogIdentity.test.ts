@@ -52,7 +52,7 @@ Deno.test("analyticsPersonPropertiesKey changes when email is added", () => {
   assertEquals(analyticsPersonPropertiesKey(undefined), "");
   assertEquals(
     analyticsPersonPropertiesKey({ email: "a@b.com" }),
-    "email=a@b.com|name=",
+    "email=a@b.com|name=|guest=",
   );
   assertEquals(
     analyticsPersonPropertiesKey({ email: "a@b.com" }) ===

@@ -105,6 +105,18 @@ export const ANALYTICS_EVENTS = {
   QUICK_SETTLE_UNDONE: "quick_settle_undone",
   /** Plain-text share in v1. kind becomes link when #325 ships. */
   QUICK_SETTLE_LINK_SHARED: "quick_settle_link_shared",
+  /** Anonymous session created. Props: platform. */
+  GUEST_STARTED: "guest_started",
+  /** Sign-in sheet opened. Props: trigger, action. No names. */
+  GUEST_SIGNIN_PROMPT_SHOWN: "guest_signin_prompt_shown",
+  /** Guest chose a sign-in method. Props: method. */
+  GUEST_SIGNIN_STARTED: "guest_signin_started",
+  /** Guest became a permanent account. Props: method, path (link | merge). */
+  GUEST_CONVERTED: "guest_converted",
+  /** Conflict merge failed. Props: reason_code. No messages or ids. */
+  GUEST_MERGE_FAILED: "guest_merge_failed",
+  /** Server purge deleted an inactive guest. Not emitted while cleanup is off. */
+  GUEST_EXPIRED: "guest_expired",
 } as const;
 
 export type AnalyticsEventName =

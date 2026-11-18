@@ -33,6 +33,9 @@ import {
 } from "../components/WhatsAppReminderToggle";
 import { WHATSAPP_REMINDER_SAVED_HIDE_MS } from "../utils/whatsappReminderToggle";
 import { useAuth } from "../contexts/AuthContext";
+import { requestGuestSignIn } from "../utils/guestGate";
+import { guestSignInCopy, isGuestUser } from "../utils/guestMode";
+import { deleteOwnGuestData } from "../utils/guestUpgrade";
 import {
   ThemePreference,
   useThemePreference,
@@ -127,6 +130,7 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
     isTransactionNotificationsEnabled(notifications.data);
   const profileFieldsLocked = loading || !profile;
   const { signOut, user } = useAuth();
+  const isGuest = isGuestUser(user);
   const deleteAccount = useDeleteAccount();
 
   useEffect(() => {
@@ -438,6 +442,22 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
             style={[styles.formCard, { backgroundColor: theme.colors.surface }]}
             elevation={2}
           >
+            {isGuest ? (
+              <View testID="guest-profile-note" style={{ marginBottom: 16 }}>
+                <Text variant="titleMedium" style={{ fontWeight: "700" }}>{fullName || "Your name"}</Text>
+                <Text style={{ color: theme.colors.onSurfaceVariant, marginBottom: 12 }}>Not signed in</Text>
+                <View style={{ borderWidth: 1, borderColor: theme.colors.outlineVariant, borderRadius: 12, padding: 16 }}>
+                  <Text style={{ fontWeight: "700", marginBottom: 6 }}>Saved on this phone only</Text>
+                  <Text style={{ color: theme.colors.onSurfaceVariant, marginBottom: 14 }}>
+                    Uninstalling or clearing the app loses access to your data. Sign in to keep it.
+                  </Text>
+                  <Button mode="contained" onPress={() => requestGuestSignIn(guestSignInCopy("profile"))} testID="guest-profile-sign-in">
+                    Sign in
+                  </Button>
+                </View>
+              </View>
+            ) : null}
+            {!isGuest ? (<>
             <TextInput
               label="Email"
               value={user?.email || ""}
@@ -548,6 +568,7 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
               </Text>
             )}
 
+            </>) : null}
             <View style={styles.appearanceSection}>
               <View style={styles.appearanceHeader}>
                 <View>
@@ -640,6 +661,7 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
               </Button>
             ) : null}
 
+            {!isGuest ? (<>
             <Pressable
               testID="profile-one-time-bills"
               accessibilityRole="button"
@@ -750,7 +772,9 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
                 />
               </View>
             ) : null}
+            </>) : null}
 
+            {!isGuest ? (
             <Button
               mode="contained"
               onPress={handleComplete}
@@ -761,6 +785,7 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
             >
               Save Changes
             </Button>
+            ) : null}
           </Surface>
 
           <Surface
@@ -927,7 +952,9 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
                   variant="bodySmall"
                   style={{ color: theme.colors.onSurfaceVariant }}
                 >
-                  Permanently delete your SharedMoney account and data.
+                  {isGuest
+                    ? "Permanently delete the groups and expenses on this phone."
+                    : "Permanently delete your SharedMoney account and data."}
                 </Text>
               </View>
             </View>
@@ -936,7 +963,28 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
               accessibilityLabel="Delete your SharedMoney account"
               accessibilityHint="Permanently closes your account and removes personal data"
               disabled={deleteAccount.isPending || loading}
-              onPress={handleDeleteAccount}
+              onPress={() => {
+                if (!isGuest) {
+                  handleDeleteAccount();
+                  return;
+                }
+                Alert.alert(
+                  "Delete guest data?",
+                  "This permanently deletes the groups and expenses saved on this phone.",
+                  [
+                    { text: "Cancel", style: "cancel" },
+                    {
+                      text: "Delete guest data",
+                      style: "destructive",
+                      onPress: () => {
+                        void deleteOwnGuestData().finally(() => {
+                          void signOut();
+                        });
+                      },
+                    },
+                  ],
+                );
+              }}
               style={[
                 styles.supportButton,
                 {
@@ -950,7 +998,9 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
                 variant="labelLarge"
                 style={{ color: theme.colors.error, fontWeight: "700" }}
               >
-                {deleteAccount.isPending ? "Deleting account..." : "Delete Account"}
+                {isGuest
+                  ? "Delete guest data"
+                  : deleteAccount.isPending ? "Deleting account..." : "Delete Account"}
               </Text>
               <Icon
                 source="delete-outline"

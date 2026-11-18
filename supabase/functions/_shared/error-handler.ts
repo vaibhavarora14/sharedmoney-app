@@ -1,4 +1,5 @@
 import { getCorsHeaders } from './cors.ts';
+import { guestDatabaseError } from './guest-rules.ts';
 import { log } from './logger.ts';
 
 /**
@@ -122,9 +123,18 @@ export function createErrorResponse(
  * Handles errors and returns standardized error response
  * Logs sanitized error information
  */
+function guestGateResponse(message: string, req?: Request): Response | null {
+  const mapped = guestDatabaseError(message);
+  if (!mapped) return null;
+  return createErrorResponse(mapped.status, mapped.error, mapped.code, undefined, req);
+}
+
 export function handleError(error: unknown, context?: string, req?: Request): Response {
   // Determine error type and create appropriate response
   if (error instanceof Error) {
+    const guestResponse = guestGateResponse(error.message, req);
+    if (guestResponse) return guestResponse;
+
     const message = error.message.toLowerCase();
     
     // Authentication errors
@@ -162,6 +172,8 @@ export function handleError(error: unknown, context?: string, req?: Request): Re
 
   // Unknown / non-Error (e.g. PostgREST error objects)
   const stringified = stringifyUnknownError(error);
+  const guestResponse = guestGateResponse(stringified, req);
+  if (guestResponse) return guestResponse;
 
   log.error('Unknown error in handler', context || 'unknown', {
     error: stringified,

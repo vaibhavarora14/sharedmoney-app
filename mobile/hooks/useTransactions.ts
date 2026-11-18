@@ -15,6 +15,7 @@ import {
 } from "../utils/groupSplit";
 import { countActiveGroupMembers } from "../utils/inAppReviewEligibility";
 import { maybeRequestInAppReviewAfterExpense } from "../utils/inAppReviewPrompt";
+import { guestEventProps } from "../utils/guestMode";
 import { captureIdentifiedAnalyticsEvent } from "../utils/posthogAnalytics";
 import { ANALYTICS_EVENTS } from "../utils/posthogEvents";
 import {
@@ -424,6 +425,7 @@ export function useCreateTransaction(onSuccess?: () => void) {
         split_count: extractSplitAmongParticipantIds(variables).length,
         ...(groupId ? { group_id: groupId } : {}),
         ...variables.analytics,
+        ...guestEventProps(user),
       });
       onSuccess?.();
       // After save UI settles (dismiss/navigate via onSuccess), maybe ask for
