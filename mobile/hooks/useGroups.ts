@@ -29,7 +29,7 @@ function writeGroupsCache(userId: string, groups: Group[]): void {
 }
 
 export async function fetchGroups(): Promise<Group[]> {
-  const response = await fetchWithAuth("/groups");
+  const response = await fetchWithAuth("/groups?include_direct=1");
   if (!response.ok) {
     throw new Error(`Failed to fetch groups: ${response.status}`);
   }

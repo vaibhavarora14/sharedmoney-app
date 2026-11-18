@@ -47,3 +47,11 @@ Deno.test("groups home loaded latency event name is stable", () => {
 Deno.test("review prompt requested event name is stable", () => {
   assertEquals(ANALYTICS_EVENTS.REVIEW_PROMPT_REQUESTED, "review_prompt_requested");
 });
+
+Deno.test("quick settle events stay free of amounts and names", () => {
+  assertEquals(ANALYTICS_EVENTS.QUICK_SETTLE_OPENED, "quick_settle_opened");
+  assertEquals(ANALYTICS_EVENTS.QUICK_SETTLE_RECORDED, "quick_settle_recorded");
+  assertEquals(ANALYTICS_EVENTS.QUICK_SETTLE_GROUP_DEBTS_OFFERED, "quick_settle_group_debts_offered");
+  assertEquals(ANALYTICS_EVENTS.QUICK_SETTLE_UNDONE, "quick_settle_undone");
+  assertEquals(ANALYTICS_EVENTS.QUICK_SETTLE_LINK_SHARED, "quick_settle_link_shared");
+});

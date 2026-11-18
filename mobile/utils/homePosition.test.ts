@@ -1,6 +1,8 @@
 import { assertEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
 import type { Balance } from "../types.ts";
-import { homePosition } from "./homePosition.ts";
+import { homePosition, settleHeroFromPeople, viewerOverallBalances } from "./homePosition.ts";
+import { buildDirectHomeRows } from "./quickSettle.ts";
+import { formatShareCurrency } from "./settleShareMessage.ts";
 
 function row(amount: number, currency: string): Balance {
   return { user_id: "me", amount, currency };
@@ -34,6 +36,84 @@ Deno.test("owe uses the single overall_balances amount", () => {
     numberText: "₹1,050",
     mutedLine: "Across 1 group",
   });
+});
+
+Deno.test("the hero equals the sum of the rows, including a direct balance", () => {
+  const groupBalances = [
+    { group_id: "goa", group_name: "Goa trip", group_kind: "standard" as const, balances: [{ user_id: "me", amount: 2400, currency: "INR" }] },
+    { group_id: "flat", group_name: "Flat 4B", group_kind: "standard" as const, balances: [{ user_id: "me", amount: -1050, currency: "INR" }] },
+    { group_id: "office", group_name: "Office lunch", group_kind: "standard" as const, balances: [{ user_id: "me", amount: 2860, currency: "INR" }] },
+    { group_id: "kabir", group_name: "Kabir", group_kind: "direct" as const, balances: [{ user_id: "me", amount: 500, currency: "INR" }] },
+  ];
+  const overall = viewerOverallBalances(groupBalances, "me");
+  const directRows = buildDirectHomeRows({
+    groups: groupBalances.map((group) => ({
+      id: group.group_id,
+      name: group.group_id === "kabir" ? "Kabir" : group.group_id,
+      kind: group.group_kind,
+      created_by: "me",
+      created_at: "2026-11-18T00:00:00.000Z",
+      updated_at: "2026-11-18T00:00:00.000Z",
+      user_status: "active" as const,
+    })),
+    groupBalances,
+    userId: "me",
+    now: new Date("2026-11-18T04:00:00.000Z"),
+  });
+  const rowSum = groupBalances
+    .filter((group) => group.group_kind !== "direct")
+    .reduce((sum, group) => sum + group.balances[0].amount, 0)
+    + directRows.reduce((sum, row) => sum + (row.amount ?? 0), 0);
+  assertEquals(overall[0]?.amount, rowSum);
+  assertEquals(overall[0]?.amount, 4710);
+  const home = homePosition({
+    hasBalances: true,
+    overallBalances: overall,
+    groupsWithBalance: 3,
+    activeGroupCount: 3,
+    directPeople: { count: 1, name: "Kabir" },
+  });
+  assertEquals(home, {
+    kind: "amount",
+    label: "You're owed",
+    numberText: "₹4,710",
+    mutedLine: "Across 3 groups and Kabir",
+  });
+
+  const people = [
+    { netsByCurrency: { INR: 2860 } },
+    { netsByCurrency: { INR: 1250 } },
+    { netsByCurrency: { INR: 800 } },
+    { netsByCurrency: { INR: 500 } },
+    { netsByCurrency: { INR: -700 } },
+  ];
+  const settle = settleHeroFromPeople(people);
+  const peopleSum = people.reduce((sum, person) => sum + person.netsByCurrency.INR, 0);
+  assertEquals(settle.kind === "amount" ? settle.numberText : "", formatShareCurrency(peopleSum, "INR"));
+  assertEquals(settle, {
+    kind: "amount",
+    label: "You're owed",
+    numberText: "₹4,710",
+    mutedLine: "Across 5 people",
+  });
+});
+
+Deno.test("one direct person is named beside the group count", () => {
+  assertEquals(
+    homePosition({
+      hasBalances: true,
+      overallBalances: [{ user_id: "me", amount: 4710, currency: "INR" }],
+      groupsWithBalance: 3,
+      activeGroupCount: 4,
+      directPeople: { count: 1, name: "Kabir" },
+    }),
+    {
+      kind: "amount",
+      label: "You're owed",
+      numberText: "₹4,710",
+      mutedLine: "Across 3 groups and Kabir",
+    },
+  );
 });
 
 Deno.test("even when overall_balances is empty does not invent a currency", () => {

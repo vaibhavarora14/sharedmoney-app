@@ -14,6 +14,10 @@ import { useAuth } from "../contexts/AuthContext";
 import { usePeopleSettlements, type PersonSettlementView } from "../hooks/usePeopleSettlements";
 import { useCreateSettlement, useCreateSettlements } from "../hooks/useSettlements";
 import { useGroups } from "../hooks/useGroups";
+import { HomePositionView } from "./GroupsListScreen";
+import { settleHeroFromPeople } from "../utils/homePosition";
+import { directRecentTitle } from "../utils/quickSettle";
+import { directActivitySubtitle } from "../utils/groupRecency";
 import { Group } from "../types";
 import { getDefaultCurrency } from "../utils/currency";
 import { showErrorAlert } from "../utils/errorHandling";
@@ -127,6 +131,9 @@ export const AllSettlementsScreen: React.FC<AllSettlementsScreenProps> = ({
   const [selectedPerson, setSelectedPerson] = useState<PersonSettlementView | null>(null);
 
   const people = preview ? previewPeople() : live.people;
+  const position = people.length > 0
+    ? settleHeroFromPeople(people)
+    : { kind: "unknown" as const };
   const summary = preview ? settlementSummary(people) : live.summary;
   const isLoading = preview ? false : live.isLoading;
 
@@ -177,7 +184,7 @@ export const AllSettlementsScreen: React.FC<AllSettlementsScreenProps> = ({
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Appbar.Header style={{ backgroundColor: theme.colors.background }}>
-        <Appbar.Content title="Settlements" titleStyle={{ fontWeight: "bold" }} />
+        <Appbar.Content title="Settle" titleStyle={{ fontWeight: "bold" }} />
       </Appbar.Header>
 
       {isLoading ? (
@@ -193,6 +200,9 @@ export const AllSettlementsScreen: React.FC<AllSettlementsScreenProps> = ({
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
+          {!preview && position.kind !== "unknown" ? (
+            <HomePositionView position={position} />
+          ) : null}
           <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 16 }}>
             The same person is grouped across every leftover payment. One
             action records a settlement in each group so you only exchange the
@@ -273,6 +283,38 @@ export const AllSettlementsScreen: React.FC<AllSettlementsScreenProps> = ({
               />
             </>
           )}
+
+          {!preview && groups.some((group) => group.kind === "direct" && group.last_activity) ? (
+            <View style={{ marginTop: 8 }}>
+              <Text style={{ fontSize: 12, fontWeight: "700", letterSpacing: 0.6, color: theme.colors.onSurfaceVariant, marginBottom: 4 }}>
+                RECENT
+              </Text>
+              {groups.filter((group) => group.kind === "direct" && group.last_activity).map((group) => {
+                const activity = group.last_activity as NonNullable<typeof group.last_activity>;
+                const initial = (group.name.trim()[0] || "?").toUpperCase();
+                return (
+                  <View key={group.id} style={{ minHeight: 64, flexDirection: "row", alignItems: "center", gap: 12 }} testID={`direct-recent-${group.id}`}>
+                    <View style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: theme.dark ? "#3B2F63" : "#E8E1F7" }}>
+                      <Text style={{ fontWeight: "700", color: theme.dark ? "#ECE5FF" : "#3B2F63" }}>{initial}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                        <Text style={{ fontWeight: "600", color: theme.colors.onSurface }}>
+                          {directRecentTitle(group.name, activity)}
+                        </Text>
+                        <Text style={{ fontSize: 11, fontWeight: "700", letterSpacing: 0.4, textTransform: "uppercase", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, overflow: "hidden", backgroundColor: theme.colors.surfaceVariant, color: theme.colors.onSurfaceVariant }}>
+                          Direct
+                        </Text>
+                      </View>
+                      <Text style={{ color: theme.colors.onSurfaceVariant, fontSize: 13 }}>
+                        {directActivitySubtitle(activity, new Date())}
+                      </Text>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          ) : null}
 
           {live.error && !preview ? (
             <Button mode="contained" onPress={() => void live.refetch()} style={{ marginTop: 16 }}>

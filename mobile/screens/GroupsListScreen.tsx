@@ -37,7 +37,7 @@ import { rememberAllBalances } from "../utils/groupOpenCache";
 import { partitionGroupsBySection } from "../utils/groupListSections";
 import { recordSentryListCounts } from "../utils/sentryTelemetry";
 import { groupListBalanceWords } from "../utils/balanceRowLabels";
-import { countGroupsWithViewerBalance, homePosition, type HomePosition } from "../utils/homePosition";
+import { countGroupsWithViewerBalance, homePosition, viewerOverallBalances, type HomePosition } from "../utils/homePosition";
 import { groupRecencyLine } from "../utils/groupRecency";
 import { groupsListStatusLine } from "../utils/groupsListStatus";
 import { isBenignConnectivityError } from "../utils/networkErrors";
@@ -48,6 +48,8 @@ import {
   type OneTimeBillsHomeSummary,
   type RecentBillSplit,
 } from "../utils/recentBillSplits";
+import { QuickSettleSheet, type QuickSettleSource } from "../components/QuickSettleSheet";
+import { buildDirectHomeRows, directPeopleForHome } from "../utils/quickSettle";
 import { CreateGroupScreen } from "./CreateGroupScreen";
 import { SplitBillScreen } from "./SplitBillScreen";
 
@@ -178,6 +180,8 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
   homeSawInitialLoading,
 }) => {
   const [showCreateGroup, setShowCreateGroup] = useState<boolean>(false);
+  const [quickSettleOpen, setQuickSettleOpen] = useState(false);
+  const [quickSettleSource, setQuickSettleSource] = useState<QuickSettleSource>("home_header");
   const [showSplitBill, setShowSplitBill] = useState(false);
   const [splitBillToken, setSplitBillToken] = useState<string | undefined>();
   const [recentBills, setRecentBills] = useState<RecentBillSplit[]>([]);
@@ -336,12 +340,24 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
     hasError: !!error && !sessionExpired,
   });
 
+  const standardGroups = groups.filter((group) => group.kind !== "direct");
   const { activeGroups, archivedGroups, formerGroups } =
-    partitionGroupsBySection(groups);
+    partitionGroupsBySection(standardGroups);
+  const directRows = buildDirectHomeRows({
+    groups,
+    groupBalances: balancesData?.group_balances ?? [],
+    userId: user?.id,
+  });
   const hasAnyVisibleGroups =
     activeGroups.length > 0 ||
     archivedGroups.length > 0 ||
-    formerGroups.length > 0;
+    formerGroups.length > 0 ||
+    directRows.length > 0;
+
+  const openQuickSettle = (source: QuickSettleSource) => {
+    setQuickSettleSource(source);
+    setQuickSettleOpen(true);
+  };
 
   useEffect(() => {
     if (loading) return;
@@ -352,13 +368,20 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
 
   const position = homePosition({
     hasBalances: balancesReady,
-    overallBalances: balancesData?.overall_balances ?? [],
+    overallBalances: (() => {
+      const fromGroups = viewerOverallBalances(
+        balancesData?.group_balances ?? [],
+        user?.id,
+      );
+      return fromGroups.length > 0 ? fromGroups : (balancesData?.overall_balances ?? []);
+    })(),
     groupsWithBalance: countGroupsWithViewerBalance(
       balancesData?.group_balances ?? [],
       activeGroups.map((group) => group.id),
       user?.id,
     ),
     activeGroupCount: activeGroups.length,
+    directPeople: directPeopleForHome(directRows),
   });
 
   useEffect(() => {
@@ -602,6 +625,15 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
               >
                 Create a group
               </Button>
+              <Button
+                mode="contained-tonal"
+                onPress={() => openQuickSettle("home_empty")}
+                testID="home-empty-settle"
+                style={{ marginTop: 12 }}
+                contentStyle={{ minHeight: 44 }}
+              >
+                Settle up with someone
+              </Button>
               <Text
                 onPress={() => openSplitBill()}
                 testID="home-empty-one-time-split"
@@ -614,8 +646,62 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
           ) : (
             <>
               <HomePositionView position={position} />
+              <Button
+                mode="contained-tonal"
+                onPress={() => openQuickSettle("home_header")}
+                testID="home-settle-pill"
+                style={styles.settlePill}
+                contentStyle={{ minHeight: 44 }}
+                labelStyle={{ fontWeight: "700" }}
+              >
+                Settle up with someone
+              </Button>
 
               {activeGroups.map((group) => renderGroupItem(group))}
+
+              {directRows.map((row) => {
+                const words = row.tone === "mixed" || row.amount == null || !row.currency
+                  ? "Mixed"
+                  : groupListBalanceWords(
+                    row.tone === "owe" ? -Math.abs(row.amount) : row.amount,
+                    formatShareCurrency(Math.abs(row.amount), row.currency),
+                  );
+                const group = row.kind === "person"
+                  ? groups.find((item) => item.id === row.groupIds[0])
+                  : undefined;
+                const amountColor = row.tone === "owed"
+                  ? theme.colors.tertiary
+                  : row.tone === "owe"
+                    ? theme.colors.error
+                    : theme.colors.onSurfaceVariant;
+                return (
+                  <TouchableOpacity
+                    key={row.kind === "grouped" ? "direct-grouped" : row.groupIds[0]}
+                    testID={row.kind === "grouped" ? "direct-grouped-row" : `direct-row-${row.groupIds[0]}`}
+                    style={styles.groupTouchable}
+                    onPress={() => {
+                      if (group) handleGroupPress(group);
+                      else openQuickSettle("home_header");
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${row.title}${row.subtitle ? `, ${row.subtitle}` : ""}, ${words}`}
+                  >
+                    <View style={styles.groupMainContent}>
+                      <View style={styles.groupInfo}>
+                        <Text variant="titleMedium" style={[styles.groupName, { color: theme.colors.onSurface }]} numberOfLines={1}>
+                          {row.title}
+                        </Text>
+                        {row.subtitle ? (
+                          <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                            {row.subtitle}
+                          </Text>
+                        ) : null}
+                      </View>
+                      <Text variant="bodyMedium" style={{ color: amountColor, fontWeight: "700" }}>{words}</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
 
               {oneTimeSummary ? (
                 <TouchableOpacity
@@ -753,6 +839,15 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
         }}
         onDismiss={() => setShowCreateGroup(false)}
       />
+      <QuickSettleSheet
+        visible={quickSettleOpen}
+        source={quickSettleSource}
+        onDismiss={() => setQuickSettleOpen(false)}
+        onViewGroup={(groupId) => {
+          const group = groups.find((item) => item.id === groupId);
+          if (group) handleGroupPress(group);
+        }}
+      />
     </View>
   );
 };
@@ -849,6 +944,12 @@ const styles = StyleSheet.create({
     paddingVertical: 64,
     alignItems: "center",
     justifyContent: "center",
+  },
+  settlePill: {
+    alignSelf: "flex-start",
+    marginTop: 14,
+    marginBottom: 6,
+    borderRadius: 20,
   },
   emptyCreateGroup: {
     alignSelf: "stretch",

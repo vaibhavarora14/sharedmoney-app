@@ -9,6 +9,10 @@ export interface GroupLastActivity {
   action: GroupRecencyAction;
   subject: string | null;
   at: string;
+  /** Settlement note or expense title, when the row has one. */
+  detail?: string;
+  /** True when the viewer is the payer on a settlement. */
+  viewerPaid?: boolean;
 }
 
 export interface HistoryActivityRow {
@@ -121,12 +125,19 @@ export function lastActivityByGroup(
     const snapshot = asRecord(row.snapshot);
     const changes = asRecord(row.changes);
     let subject: string | null = null;
+    let detail: string | undefined;
+    let viewerPaid: boolean | undefined;
     if (action === "settled") {
       const other = otherParty(row, snapshot, changes);
       if (other) {
         subject = other === viewerId ? "you" : firstName(names.get(other), false);
         if (subject === "Someone") subject = null;
       }
+      const settlement = asRecord(changes?.settlement);
+      const notes = stringField(snapshot, "notes") ?? stringField(settlement, "notes");
+      if (notes) detail = notes;
+      const fromUser = partyId(snapshot, changes, "from_user_id");
+      if (fromUser) viewerPaid = fromUser === viewerId;
     } else {
       subject = expenseTitle(snapshot, changes);
     }
@@ -135,6 +146,8 @@ export function lastActivityByGroup(
       action,
       subject,
       at: isoTimestamp(row.changed_at),
+      ...(detail ? { detail } : {}),
+      ...(viewerPaid !== undefined ? { viewerPaid } : {}),
     });
   }
   return byGroup;

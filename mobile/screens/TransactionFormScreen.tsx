@@ -199,7 +199,9 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     [allGroups, pickedGroupId],
   );
   const selectableGroups = useMemo(
-    () => (allGroups || []).filter((group) => group.user_status !== "left" && !group.archived_at),
+    () => (allGroups || []).filter((group) => (
+      group.user_status !== "left" && !group.archived_at && group.kind !== "direct"
+    )),
     [allGroups],
   );
 

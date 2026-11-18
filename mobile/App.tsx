@@ -111,6 +111,10 @@ import {
   readGroupsPhase3Shot,
 } from "./screens/GroupsPhase3PreviewScreen";
 import {
+  QuickSettlePreviewScreen,
+  readQuickSettleShot,
+} from "./screens/QuickSettlePreviewScreen";
+import {
   DefaultSplitPreviewScreen,
   readDefaultSplitShot,
 } from "./screens/DefaultSplitPreviewScreen";
@@ -1451,6 +1455,16 @@ function AppContent() {
         <HomePolishPreviewScreen />
         <StatusBar style="dark" />
       </>
+    );
+  }
+
+  if (__DEV__ && previewParam === "quick-settle") {
+    const href = Platform.OS === "web" && typeof window !== "undefined" ? window.location.href : "";
+    return (
+      <QuickSettlePreviewScreen
+        shot={readQuickSettleShot(href)}
+        dark={/[?&]theme=dark/.test(href)}
+      />
     );
   }
 

@@ -26,6 +26,7 @@ interface Balance {
 interface GroupBalance {
   group_id: string;
   group_name: string;
+  group_kind?: 'standard' | 'direct';
   balances: Balance[];
 }
 
@@ -38,6 +39,7 @@ interface BalancesResponse {
 interface Group {
   id: string;
   name: string;
+  kind?: string | null;
 }
 
 interface TransactionSplit {
@@ -532,7 +534,7 @@ Deno.serve(async (req: Request) => {
           .maybeSingle(),
         supabase
           .from('groups')
-          .select('id, name')
+          .select('id, name, kind')
           .eq('id', groupId)
           .maybeSingle(),
       ]);
@@ -569,6 +571,7 @@ Deno.serve(async (req: Request) => {
       const groupBalances: GroupBalance[] = [{
         group_id: groupId,
         group_name: groupName,
+        group_kind: groupResult.data?.kind === 'direct' ? 'direct' : 'standard',
         balances,
       }];
 
@@ -660,10 +663,10 @@ Deno.serve(async (req: Request) => {
 
     const { data: groups } = await supabase
       .from('groups')
-      .select('id, name')
+      .select('id, name, kind')
       .in('id', targetGroupIds);
 
-    const groupMap = new Map((groups || []).map((g: Group) => [g.id, g.name]));
+    const groupMap = new Map((groups || []).map((g: Group) => [g.id, g]));
 
     const balancePromises = targetGroupIds.map(async (gId: string) => {
       try {
@@ -673,16 +676,20 @@ Deno.serve(async (req: Request) => {
           currentUserId,
           currentUserEmail ?? null
         );
-        const groupName = groupMap.get(gId) || 'Unknown Group';
+        const group = groupMap.get(gId);
+        const groupName = group?.name || 'Unknown Group';
         return {
           group_id: gId,
           group_name: groupName,
+          group_kind: group?.kind === 'direct' ? 'direct' as const : 'standard' as const,
           balances,
         };
       } catch (_error) {
+        const group = groupMap.get(gId);
         return {
           group_id: gId,
-          group_name: groupMap.get(gId) || 'Unknown Group',
+          group_name: group?.name || 'Unknown Group',
+          group_kind: group?.kind === 'direct' ? 'direct' as const : 'standard' as const,
           balances: [] as Balance[],
         };
       }

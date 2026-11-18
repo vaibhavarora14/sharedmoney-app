@@ -51,6 +51,7 @@ Deno.test("a settlement by the viewer names the other person", () => {
     action: "settled",
     subject: "Dev",
     at: "2026-11-13T02:00:00.000Z",
+    viewerPaid: true,
   });
 });
 

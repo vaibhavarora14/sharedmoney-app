@@ -7,7 +7,9 @@
  * Activation sequence (signed-in users only; distinct_id = Supabase auth user id):
  * 1. `auth_succeeded` — after `$identify` on a new auth identity
  * 2. `group_created` OR `group_joined` — creator vs invitee path
- * 3. `expense_created` — expense create (NOT `expense_added`)
+ * 3. `expense_created` — expense create (NOT `expense_added`).
+ *    A quick-settle debt is an expense, so it fires this event with
+ *    `group_kind=direct` and `source=quick_settle`. A quick-settle payment does not.
  * 4. `settlement_recorded` — settlement create
  *
  * Do not invent `signup_completed`; auth_succeeded is the identity signal.
@@ -94,6 +96,15 @@ export const ANALYTICS_EVENTS = {
   UPI_ID_SAVED: "upi_id_saved",
   /** Native StoreReview.requestReview invoked (OS may still throttle UI). */
   REVIEW_PROMPT_REQUESTED: "review_prompt_requested",
+  /** Home settle sheet opened. source: home_header | home_empty */
+  QUICK_SETTLE_OPENED: "quick_settle_opened",
+  /** A direct payment or debt was saved. Amounts are never included. */
+  QUICK_SETTLE_RECORDED: "quick_settle_recorded",
+  /** Existing group balances were offered before a direct record. */
+  QUICK_SETTLE_GROUP_DEBTS_OFFERED: "quick_settle_group_debts_offered",
+  QUICK_SETTLE_UNDONE: "quick_settle_undone",
+  /** Plain-text share in v1. kind becomes link when #325 ships. */
+  QUICK_SETTLE_LINK_SHARED: "quick_settle_link_shared",
 } as const;
 
 export type AnalyticsEventName =
