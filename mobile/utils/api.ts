@@ -7,6 +7,8 @@ import {
   type UnauthorizedPolicy,
 } from "./authenticatedFetchPolicy";
 import { formatNetworkErrorMessage } from "./networkErrors";
+import { requestGuestSignIn } from "./guestGate";
+import { guestSignInCopy, type GuestSignInAction } from "./guestMode";
 
 const TOKEN_REFRESH_BUFFER_SECONDS = 60;
 const DEFAULT_FETCH_TIMEOUT_MS = 15000;
@@ -193,6 +195,22 @@ export async function fetchWithAuth(
       }
     } catch {
       // Ignore
+    }
+
+    if (
+      errorData?.code === "GUEST_SIGNIN_REQUIRED"
+      || errorData?.code === "GUEST_GROUP_CAP"
+      || errorData?.code === "GUEST_EXPENSE_CAP"
+    ) {
+      const action: GuestSignInAction = errorData.code === "GUEST_GROUP_CAP"
+        ? "cap_groups"
+        : errorData.code === "GUEST_EXPENSE_CAP"
+          ? "cap_expenses"
+          : "share_link";
+      requestGuestSignIn(guestSignInCopy(action));
+      const guestError = new Error(errorData.error || "Sign in to continue");
+      (guestError as { code?: string }).code = errorData.code;
+      throw guestError;
     }
 
     const rawErrorMessage =

@@ -48,6 +48,8 @@ import {
   TransactionsEmptyState,
 } from "../components/TransactionsSection";
 import { useAuth } from "../contexts/AuthContext";
+import { requestGuestSignIn } from "../utils/guestGate";
+import { guestSignInCopy, isGuestUser, stripShareLinks } from "../utils/guestMode";
 import { useProfile } from "../hooks/useProfile";
 import { SCREEN_TRANSITION_MS } from "../constants/layout";
 import { useActivity } from "../hooks/useActivity";
@@ -345,7 +347,8 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   // Real-time synchronization: listen for remote transactions/settlements
   useRealtimeGroupSync(initialGroup.id);
 
-  const { session, signOut } = useAuth();
+  const { session, signOut, user } = useAuth();
+  const guest = isGuestUser(user);
   const queryClient = useQueryClient();
   const seededGroupRef = React.useRef<string | null>(null);
   if (session?.user?.id && seededGroupRef.current !== initialGroup.id) {
@@ -1443,6 +1446,11 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const handleRemindBalance = (balance: Balance) => {
     if (!isActiveMember || balancesError) return;
     if (!(balance.amount > 0)) return;
+    if (guest) {
+      const person = participantForBalance(balance);
+      requestGuestSignIn(guestSignInCopy("remind", person?.full_name || balance.full_name || "them"));
+      return;
+    }
     const message = buildRemindMessageForBalance(balance);
     void openSettleRemind({
       message,
@@ -1455,6 +1463,11 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const handleRemindShareAnotherWay = (balance: Balance) => {
     if (!isActiveMember || balancesError) return;
     if (!(balance.amount > 0)) return;
+    if (guest) {
+      const person = participantForBalance(balance);
+      requestGuestSignIn(guestSignInCopy("remind", person?.full_name || balance.full_name || "them"));
+      return;
+    }
     const message = buildRemindMessageForBalance(balance);
     void openSettleRemind({
       message,
@@ -1492,7 +1505,9 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
 
   const handleShareSummary = () => {
     if (!shareSummary?.message || !isActiveMember || balancesError) return;
-    void shareSettleDraft(shareSummary.message).catch((error) => {
+    const message = guest ? stripShareLinks(shareSummary.message) : shareSummary.message;
+    if (!message) return;
+    void shareSettleDraft(message).catch((error) => {
       showErrorAlert(error, signOut, "Could not share settle summary");
     });
   };
@@ -1892,6 +1907,10 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   };
 
   const handleInviteParticipant = async (participant: Participant) => {
+    if (guest) {
+      requestGuestSignIn(guestSignInCopy("invite", participant.full_name || "them"));
+      return;
+    }
     try {
       setWorkingParticipantId(participant.id);
       const result = await inviteParticipant.mutate({
@@ -1908,6 +1927,10 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   };
 
   const handleConnectParticipant = async (participant: Participant) => {
+    if (guest) {
+      requestGuestSignIn(guestSignInCopy("invite", participant.full_name || "them"));
+      return;
+    }
     try {
       setWorkingParticipantId(participant.id);
       await connectParticipant.mutate({
@@ -2010,6 +2033,10 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   }
 
   const handleExport = (kind: "csv" | "pdf") => {
+    if (guest) {
+      requestGuestSignIn(guestSignInCopy("export", group.name));
+      return;
+    }
     if (exportBusy) return;
     setExportBusy(kind);
     void (async () => {

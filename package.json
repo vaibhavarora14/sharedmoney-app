@@ -16,7 +16,8 @@
     "test": "npm run test:all",
     "test:all": "npm run test:web && npm run test:mobile && npm run test:deno",
     "test:web": "npm run test --workspace=web",
-    "test:mobile": "npm run test:android-push-config --workspace=mobile && npm run test:sentry-build-config --workspace=mobile && npm run test:expo-public-config --workspace=mobile && npm run test:web-join-rewrite --workspace=mobile && npm run test:icon-imports --workspace=mobile",
+    "test:mobile": "npm run test:android-push-config --workspace=mobile && npm run test:sentry-build-config --workspace=mobile && npm run test:expo-public-config --workspace=mobile && npm run test:web-join-rewrite --workspace=mobile && npm run test:icon-imports --workspace=mobile && npm run test:guest",
+    "test:guest": "node --test supabase/tests/guest_mode.test.cjs",
     "test:deno": "deno test --allow-env tests/ supabase/functions/",
     "typecheck": "npm run typecheck:mobile && npm run typecheck:web",
     "typecheck:mobile": "npx tsc --noEmit -p mobile/tsconfig.json",
@@ -29,6 +30,7 @@
     "undici": "6.28.1"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.3.14",
     "imagemin": "^9.0.1",
     "imagemin-pngquant": "^10.0.0",
     "patch-package": "^8.0.1",

@@ -1,4 +1,5 @@
 import { verifyAuth } from "../_shared/auth.ts";
+import { guestSignInRequiredResponse } from "../_shared/guest.ts";
 import { SUPABASE_SERVICE_ROLE_KEY } from "../_shared/env.ts";
 import { createErrorResponse, handleError } from "../_shared/error-handler.ts";
 import {
@@ -308,6 +309,9 @@ Deno.serve(async (req: Request) => {
     const actionParticipantId = action === "invite" || action === "connect"
       ? pathParts[pathParts.length - 2]
       : null;
+    if ((action === "invite" || action === "connect") && authResult.isAnonymous) {
+      return guestSignInRequiredResponse(req);
+    }
     const httpMethod = req.method;
 
     if (httpMethod !== "GET") {

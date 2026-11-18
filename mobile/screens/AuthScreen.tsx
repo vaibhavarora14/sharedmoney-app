@@ -25,6 +25,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { CountryCodePicker } from "../components/CountryCodePicker";
 import { isAuthDesktopWebViewport } from "../constants/layout";
 import { useAuth } from "../contexts/AuthContext";
+import { useGuestFlags } from "../hooks/useGuestFlags";
 import {
   CountryCode,
   countryCodes,
@@ -238,8 +239,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   const otpInputRef = useRef<any>(null);
   const otpSubmitLockRef = useRef(false);
   const lastAuthScreenViewKey = useRef<string | null>(null);
-  const { signIn, signUp, signInWithGoogle, signInWithApple, signInWithWhatsAppOtp } =
+  const { signIn, signUp, signInWithGoogle, signInWithApple, signInWithWhatsAppOtp, signInAnonymously } =
     useAuth();
+  const { entryEnabled: guestEntryEnabled } = useGuestFlags();
   const theme = useTheme();
   const { width } = useWindowDimensions();
   const isDesktopWeb = isAuthDesktopWebViewport(Platform.OS, width);
@@ -787,6 +789,23 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         ) : null}
       </View>
 
+      {guestEntryEnabled ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Try it without an account"
+          onPress={() => {
+            void signInAnonymously();
+          }}
+          disabled={formDisabled}
+          testID="guest-try-without-account"
+          style={styles.guestEntry}
+        >
+          <Text style={{ color: theme.colors.primary, fontWeight: "600", textAlign: "center" }}>
+            Try it without an account
+          </Text>
+        </Pressable>
+      ) : null}
+
       {renderAccountToggle()}
     </View>
   );
@@ -1321,6 +1340,13 @@ const styles = StyleSheet.create({
     gap: 12,
     marginTop: 30,
     width: "100%",
+  },
+  guestEntry: {
+    marginTop: 20,
+    minHeight: 44,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 12,
   },
   methodButton: {
     width: "100%",

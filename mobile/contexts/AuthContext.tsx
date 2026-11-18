@@ -30,7 +30,9 @@ import {
   isNewAuthUser,
   shouldCaptureSocialAuthFailure,
 } from "../utils/authFunnelEvents";
-import { captureAuthFailed, syncAnalyticsAuth } from "../utils/posthogAnalytics";
+import { captureAnalyticsEvent, captureAuthFailed, syncAnalyticsAuth } from "../utils/posthogAnalytics";
+import { anonymousCaptchaToken } from "../utils/guestCaptcha";
+import { ANALYTICS_EVENTS } from "../utils/posthogEvents";
 import { isWebAuthShellActive } from "../utils/webAuthShell";
 import { forgetWebProfileLabel } from "../utils/webProfileShell";
 import { resolveAuthDisplayName } from "../utils/posthogIdentity";
@@ -277,6 +279,8 @@ interface AuthContextType {
     phoneE164: string,
     code: string,
   ) => Promise<{ error: Error | null }>;
+  /** Starts a Supabase anonymous session. The guest_mode flag gates the button. */
+  signInAnonymously: () => Promise<{ error: Error | null }>;
   /** Signs out the current user */
   signOut: () => void | Promise<void>;
 }
@@ -350,6 +354,7 @@ const [loading, setLoading] = useState<boolean>(() => !isWebAuthShellActive());
         lastSignInAt: user?.last_sign_in_at,
         now: Date.now(),
       }),
+      is_guest: user?.is_anonymous === true,
     });
   }, []);
 
@@ -474,6 +479,25 @@ const [loading, setLoading] = useState<boolean>(() => !isWebAuthShellActive());
    * @param password - User's password
    * @returns Promise resolving to an object with error property (null if successful)
    */
+  const signInAnonymously = useCallback(async () => {
+    try {
+      const captchaToken = await anonymousCaptchaToken();
+      const { error } = await supabase.auth.signInAnonymously(
+        captchaToken ? { options: { captchaToken } } : undefined,
+      );
+      if (error) {
+        return { error: mapAuthError(error, "signIn") };
+      }
+      captureAnalyticsEvent(ANALYTICS_EVENTS.GUEST_STARTED, { platform: Platform.OS });
+      return { error: null };
+    } catch (err) {
+      logError(err, { context: "signInAnonymously" });
+      return {
+        error: err instanceof Error ? err : new Error("Could not start a guest session"),
+      };
+    }
+  }, []);
+
   const signUp = useCallback(async (email: string, password: string) => {
     try {
       const { data, error } = await supabase.auth.signUp({
@@ -956,6 +980,7 @@ const [loading, setLoading] = useState<boolean>(() => !isWebAuthShellActive());
       signInWithGoogle,
       signInWithApple,
       signInWithWhatsAppOtp,
+      signInAnonymously,
       signOut,
     }),
     [
@@ -967,6 +992,7 @@ const [loading, setLoading] = useState<boolean>(() => !isWebAuthShellActive());
       signInWithGoogle,
       signInWithApple,
       signInWithWhatsAppOtp,
+      signInAnonymously,
       signOut,
     ]
   );

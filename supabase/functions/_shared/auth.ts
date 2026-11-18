@@ -1,5 +1,6 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './env.ts';
+import { sessionIsAnonymous } from './guest.ts';
 import { recordLastSeenAppFromRequest } from './last-seen-app.ts';
 import { log } from './logger.ts';
 
@@ -12,7 +13,11 @@ export interface UserInfo {
  * Verifies the user's authentication token and returns user info
  * Throws an error if authentication fails
  */
-export async function verifyAuth(request: Request): Promise<{ user: UserInfo; supabase: any }> {
+export async function verifyAuth(request: Request): Promise<{
+  user: UserInfo;
+  supabase: any;
+  isAnonymous: boolean;
+}> {
 
   // Get authorization header
   const authHeader = request.headers.get('authorization') || request.headers.get('Authorization');
@@ -50,6 +55,10 @@ export async function verifyAuth(request: Request): Promise<{ user: UserInfo; su
       email: user.email || null,
     },
     supabase,
+    isAnonymous: sessionIsAnonymous(
+      user as { is_anonymous?: boolean },
+      authHeader,
+    ),
   };
 }
 

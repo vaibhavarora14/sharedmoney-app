@@ -6,6 +6,7 @@ import { Settlement, SettlementsResponse } from "../types";
 import { fetchWithAuth } from "../utils/api";
 import type { SettlementCreateInput } from "../utils/peopleSettlements";
 import { recordSettlementBatch } from "../utils/settlementBatch";
+import { guestEventProps } from "../utils/guestMode";
 import { captureIdentifiedAnalyticsEvent } from "../utils/posthogAnalytics";
 import { ANALYTICS_EVENTS } from "../utils/posthogEvents";
 import { queryKeys } from "./queryKeys";
@@ -113,6 +114,7 @@ export function useCreateSettlements(onSuccess?: () => void) {
           settlement_count: settlements.length,
           currency: settlements[0]?.currency,
           multi_group: groupIds.length > 1,
+          ...guestEventProps(user),
         },
       );
       onSuccess?.();
@@ -188,6 +190,7 @@ export function useCreateSettlement(onSuccess?: () => void) {
           multi_group: false,
           group_id: variables.group_id,
           ...variables.analytics,
+          ...guestEventProps(user),
         },
       );
       onSuccess?.();

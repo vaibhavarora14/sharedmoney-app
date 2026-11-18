@@ -231,6 +231,13 @@ export function identifyAnalyticsUser(
   suppressCaptureForSeedUser = false;
 }
 
+/** Points the guest distinct id at the permanent account after a conflict merge. */
+export function aliasAnalyticsUser(previousUserId: string): void {
+  if (!client || !previousUserId || isSeedAuthUserId(previousUserId)) return;
+  const alias = (client as { alias?: (alias: string) => void }).alias;
+  if (typeof alias === "function") alias.call(client, previousUserId);
+}
+
 export function resetAnalyticsUser(): void {
   if (!client) return;
   client.reset();
@@ -249,6 +256,7 @@ export function syncAnalyticsAuth(
     email?: string;
     name?: string;
     is_new_user?: boolean;
+    is_guest?: boolean;
   },
 ): void {
   if (!client) return;
@@ -269,8 +277,10 @@ export function syncAnalyticsAuth(
     identifyAnalyticsUser(userId, {
       email: properties?.email,
       name: properties?.name,
+      is_guest: properties?.is_guest,
     });
-    if (isNewIdentity) {
+    // Anonymous guests are not real sign-ins. guest_started covers them.
+    if (isNewIdentity && properties?.is_guest !== true) {
       captureAnalyticsEvent(
         ANALYTICS_EVENTS.AUTH_SUCCEEDED,
         authSucceededProperties({

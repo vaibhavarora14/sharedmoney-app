@@ -36,6 +36,8 @@ import {
   resolveDevPreview,
   type DevPreviewKind,
 } from "./utils/devPreview";
+import { requestGuestSignIn } from "./utils/guestGate";
+import { guestSignInCopy, isGuestUser } from "./utils/guestMode";
 import { ExpenseFormOverlay } from "./components/ExpenseFormOverlay";
 import { ForceUpdateModal } from "./components/ForceUpdateModal";
 import { BannerNotice, InAppBanner } from "./components/InAppBanner";
@@ -129,7 +131,10 @@ import { CurrencyMergePreviewScreen } from "./screens/CurrencyMergePreviewScreen
 import { HomePolishPreviewScreen } from "./screens/HomePolishPreviewScreen";
 import { ProfileBootSkeleton, ProfileSetupScreen } from "./screens/ProfileSetupScreen";
 import { SplitwiseImportScreen } from "./screens/SplitwiseImportScreen";
+import { GuestSessionHost } from "./components/guest/GuestSessionHost";
 import { TermsAcceptanceScreen } from "./screens/TermsAcceptanceScreen";
+import { GuestNameScreen } from "./screens/GuestNameScreen";
+import { GuestModePreviewScreen } from "./screens/GuestModePreviewScreen";
 import { TodayRefinedPreviewScreen } from "./screens/TodayRefinedPreviewScreen";
 import { TransactionFormScreen } from "./screens/TransactionFormScreen";
 import {
@@ -534,6 +539,12 @@ function AppContent() {
     setStatsContext(null);
     setCurrentRoute("groups");
 
+    if (user?.is_anonymous) {
+      redeemingTokenRef.current = null;
+      requestGuestSignIn(guestSignInCopy("join"));
+      return;
+    }
+
     try {
       const result = await redeemGroupInviteLinkRPC(token);
       groupsListRefetchRef.current?.();
@@ -571,7 +582,7 @@ function AppContent() {
       await AsyncStorage.removeItem(PENDING_INVITE_TOKEN_KEY).catch(() => {});
       clearJoinPathFromWebUrl();
     }
-  }, [resolveAnalyticsUserId]);
+  }, [resolveAnalyticsUserId, user?.is_anonymous]);
 
   const openGroupDeepLink = React.useCallback(async (
     groupId: string,
@@ -1468,6 +1479,16 @@ function AppContent() {
     );
   }
 
+  if (
+    previewParam === "guest-mode"
+    && (__DEV__ || process.env.EXPO_PUBLIC_GUEST_MODE === "true")
+  ) {
+    const frame = Platform.OS === "web" && typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("frame")
+      : null;
+    return <GuestModePreviewScreen frame={frame} />;
+  }
+
   if (__DEV__ && previewParam === "groups-phase3") {
     return (
       <GroupsPhase3PreviewScreen
@@ -1686,6 +1707,19 @@ function AppContent() {
         </Button>
         <StatusBar style={theme.dark ? "light" : "dark"} />
       </View>
+    );
+  }
+
+  if (
+    isGuestUser(user)
+    && profile
+    && (!profile.full_name?.trim() || needsTermsAcceptance(profile))
+  ) {
+    return (
+      <>
+        <GuestNameScreen />
+        <StatusBar style={theme.dark ? "light" : "dark"} />
+      </>
     );
   }
 
@@ -2140,6 +2174,7 @@ function ThemedAppShell() {
           <UpgradeProvider>
             <AuthProvider>
               <SentryScreenLoadProbe />
+              <GuestSessionHost />
               <AppFrame />
             </AuthProvider>
           </UpgradeProvider>

@@ -9,9 +9,17 @@ import {
   Text,
   useTheme,
 } from "react-native-paper";
+import {
+  GuestCleanupBanner,
+  GuestDeviceLine,
+  GuestSaveChip,
+  GuestSnackbar,
+} from "../components/guest/GuestChrome";
 import { GroupBalanceBadge } from "../components/GroupBalanceBadge";
 import { NotificationBell } from "../components/NotificationBell";
 import { useAuth } from "../contexts/AuthContext";
+import { useGuestFlags } from "../hooks/useGuestFlags";
+import { useProfile } from "../hooks/useProfile";
 import { useBalances } from "../hooks/useBalances";
 import { useGroups } from "../hooks/useGroups";
 import {
@@ -20,12 +28,15 @@ import {
   useUpdateNotificationPreference,
 } from "../hooks/useNotifications";
 import { enablePushNotifications } from "../services/pushNotifications";
+import { supabase } from "../supabase";
 import { Group } from "../types";
 import { showErrorAlert } from "../utils/errorHandling";
 import {
   getUserFriendlyErrorMessage,
   isSessionExpiredError,
 } from "../utils/errorMessages";
+import { requestGuestSignIn } from "../utils/guestGate";
+import { guestCleanupBanner, guestSignInCopy, isGuestUser, keepDataCounts } from "../utils/guestMode";
 import { isTransactionNotificationsEnabled } from "../utils/featureFlags";
 import { shouldShowNotificationPrimer } from "../utils/notificationPermission";
 import { logError } from "../utils/logger";
@@ -194,6 +205,10 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
   const expandedText = fontScale > 1;
   const queryClient = useQueryClient();
   const { signOut, user } = useAuth();
+  const isGuest = isGuestUser(user);
+  const { cleanupEnabled } = useGuestFlags();
+  const guestProfile = useProfile();
+  const [guestDeviceSnack, setGuestDeviceSnack] = useState(false);
   const notifications = useNotifications();
   const notificationsEnabled =
     isTransactionNotificationsEnabled(notifications.data);
@@ -357,6 +372,33 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
   const openQuickSettle = (source: QuickSettleSource) => {
     setQuickSettleSource(source);
     setQuickSettleOpen(true);
+  };
+
+  useEffect(() => {
+    if (!isGuest || !user?.id || !hasAnyVisibleGroups) return;
+    const key = `guest-device-warning-shown:${user.id}`;
+    void AsyncStorage.getItem(key).then((seen) => {
+      if (seen) return;
+      setGuestDeviceSnack(true);
+      void AsyncStorage.setItem(key, "1");
+    });
+  }, [hasAnyVisibleGroups, isGuest, user?.id]);
+  const guestActivity = guestProfile.data?.last_guest_activity_at;
+  const cleanupBanner = isGuest && cleanupEnabled && guestActivity
+    ? guestCleanupBanner(new Date(guestActivity), new Date())
+    : null;
+  const openGuestSave = () => {
+    void (async () => {
+      let expenses = 0;
+      if (user?.id) {
+        const result = await supabase
+          .from("transactions")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user.id);
+        expenses = result.count ?? 0;
+      }
+      requestGuestSignIn(guestSignInCopy("chip", keepDataCounts(activeGroups.length, expenses)));
+    })();
   };
 
   useEffect(() => {
@@ -548,7 +590,8 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
           title="Groups"
           titleStyle={{ fontWeight: "bold" }}
         />
-        {notificationsEnabled ? (
+        {isGuest ? <GuestSaveChip onPress={openGuestSave} /> : null}
+        {notificationsEnabled && !isGuest ? (
           <NotificationBell
             unreadCount={notifications.data?.unread_count ?? 0}
             onPress={onNotificationsPress}
@@ -603,6 +646,13 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
+          {cleanupBanner?.show ? (
+            <GuestCleanupBanner
+              title={cleanupBanner.title}
+              body={cleanupBanner.body}
+              onSignIn={() => requestGuestSignIn(guestSignInCopy("cleanup_banner"))}
+            />
+          ) : null}
           {!hasAnyVisibleGroups && !listStatus ? (
             <View style={styles.emptyContainer} testID="groups-empty-state">
               <Text
@@ -627,6 +677,8 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
               </Button>
               <Button
                 mode="contained-tonal"
+                buttonColor={theme.colors.primaryContainer}
+                textColor={theme.colors.onPrimaryContainer}
                 onPress={() => openQuickSettle("home_empty")}
                 testID="home-empty-settle"
                 style={{ marginTop: 12 }}
@@ -642,12 +694,15 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
               >
                 Split one bill
               </Text>
+              {isGuest ? <GuestDeviceLine /> : null}
             </View>
           ) : (
             <>
               <HomePositionView position={position} />
               <Button
                 mode="contained-tonal"
+                buttonColor={theme.colors.primaryContainer}
+                textColor={theme.colors.onPrimaryContainer}
                 onPress={() => openQuickSettle("home_header")}
                 testID="home-settle-pill"
                 style={styles.settlePill}
@@ -820,6 +875,13 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
           <View testID="home-list-clearance" style={{ height: 32 }} />
         </ScrollView>
       )}
+      {guestDeviceSnack ? (
+        <GuestSnackbar
+          message="Saved on this phone only"
+          actionLabel="Sign in"
+          onAction={openGuestSave}
+        />
+      ) : null}
 
       {showSplitBill ? (
         <SplitBillScreen

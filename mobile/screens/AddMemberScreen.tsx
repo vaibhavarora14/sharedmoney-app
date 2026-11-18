@@ -26,6 +26,8 @@ import { WEB_MAX_WIDTH } from "../constants/layout";
 import { useKeyboardOverlap } from "../hooks/useKeyboardOverlap";
 import { CountryCodePicker } from "../components/CountryCodePicker";
 import { useAuth } from "../contexts/AuthContext";
+import { requestGuestSignIn } from "../utils/guestGate";
+import { guestSignInCopy, isGuestUser } from "../utils/guestMode";
 import { useCreateGroupShareLink } from "../hooks/useGroupInvitations";
 import { useExistingPeople } from "../hooks/useParticipants";
 import { useProfile } from "../hooks/useProfile";
@@ -237,6 +239,10 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
   };
 
   const handleShareLink = async () => {
+    if (isGuestUser(user)) {
+      requestGuestSignIn(guestSignInCopy("share_link", groupName));
+      return;
+    }
     setLoading(true);
     try {
       const url = await generateInviteLink();
@@ -338,6 +344,11 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
       ? normalizePhoneToE164(trimmedPhone, selectedCountry.code)
       : null;
     setPhoneError(null);
+
+    if (isGuestUser(user) && (trimmedEmail || normalizedPhone)) {
+      requestGuestSignIn(guestSignInCopy("invite", trimmedName));
+      return;
+    }
 
     setLoading(true);
     try {

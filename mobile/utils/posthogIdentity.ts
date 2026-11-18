@@ -14,6 +14,8 @@ export const SEED_AUTH_USER_IDS = new Set([
 export type AnalyticsPersonProperties = {
   email?: string;
   name?: string;
+  /** True while the Supabase user is anonymous. False after they link or merge. */
+  is_guest?: boolean;
 };
 
 /**
@@ -36,16 +38,20 @@ export function buildAnalyticsPersonProperties(
   const name = input.name?.trim();
   if (email) props.email = email;
   if (name) props.name = name;
+  if (input.is_guest === true || input.is_guest === false) {
+    props.is_guest = input.is_guest;
+  }
 
   return Object.keys(props).length > 0 ? props : undefined;
 }
 
 /** Stable key so we re-identify when email/name appear after the first call. */
 export function analyticsPersonPropertiesKey(
-  props?: Record<string, string> | null,
+  props?: AnalyticsPersonProperties | null,
 ): string {
   if (!props) return "";
-  return `email=${props.email ?? ""}|name=${props.name ?? ""}`;
+  const guest = props.is_guest === true ? "1" : props.is_guest === false ? "0" : "";
+  return `email=${props.email ?? ""}|name=${props.name ?? ""}|guest=${guest}`;
 }
 
 /**

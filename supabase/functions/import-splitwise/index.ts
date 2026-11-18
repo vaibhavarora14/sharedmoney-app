@@ -1,4 +1,5 @@
 import { verifyAuth } from '../_shared/auth.ts';
+import { guestSignInRequiredResponse } from '../_shared/guest.ts';
 import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
 import { log } from '../_shared/logger.ts';
 import { createEmptyResponse, createSuccessResponse } from '../_shared/response.ts';
@@ -195,6 +196,9 @@ Deno.serve(async (req: Request) => {
     }
 
     const { user, supabase } = authResult;
+    if (authResult.isAnonymous) {
+      return guestSignInRequiredResponse(req);
+    }
 
     if (!body) {
       return createErrorResponse(400, 'Request body is required', 'VALIDATION_ERROR', undefined, req);

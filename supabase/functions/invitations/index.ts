@@ -1,4 +1,5 @@
 import { verifyAuth } from '../_shared/auth.ts';
+import { guestSignInRequiredResponse } from '../_shared/guest.ts';
 import { SUPABASE_SERVICE_ROLE_KEY } from '../_shared/env.ts';
 import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
 import { buildInvitationInsert, normalizeInviteIdentity, resolveInviteAction } from '../_shared/invite-identity.ts';
@@ -62,6 +63,9 @@ Deno.serve(async (req: Request) => {
 
     const { user: currentUser, supabase } = authResult;
     const httpMethod = req.method;
+    if (authResult.isAnonymous && httpMethod !== 'GET') {
+      return guestSignInRequiredResponse(req);
+    }
     const url = new URL(req.url);
     const parsedPath = parsePath(url.pathname);
     const invitationId = parsedPath.resource === 'invitations' ? parsedPath.id : null;

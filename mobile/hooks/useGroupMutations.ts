@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../contexts/AuthContext";
 import { Group, GroupWithMembers } from "../types";
 import { fetchWithAuth } from "../utils/api";
+import { guestEventProps } from "../utils/guestMode";
 import {
   captureAnalyticsEvent,
   captureIdentifiedAnalyticsEvent,
@@ -49,6 +50,7 @@ export function useCreateGroup(onSuccess?: () => void) {
       captureIdentifiedAnalyticsEvent(user?.id, ANALYTICS_EVENTS.GROUP_CREATED, {
         has_description: Boolean(variables.description),
         ...(result?.id ? { group_id: result.id } : {}),
+        ...guestEventProps(user),
       });
       onSuccess?.();
     },
