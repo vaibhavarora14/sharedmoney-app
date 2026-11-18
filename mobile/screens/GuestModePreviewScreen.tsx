@@ -58,16 +58,46 @@ function HomeShell({
   );
 }
 
-function GroupRows() {
+function SettlePill({ centered = false }: { centered?: boolean }) {
+  const theme = useTheme();
+  return (
+    <View
+      style={{
+        alignSelf: centered ? "center" : "flex-start",
+        backgroundColor: theme.colors.primaryContainer,
+        borderRadius: 20,
+        paddingHorizontal: 16,
+        minHeight: 44,
+        justifyContent: "center",
+        marginTop: centered ? 12 : 14,
+        marginBottom: centered ? 0 : 8,
+      }}
+    >
+      <Text style={{ fontWeight: "700", color: theme.colors.onPrimaryContainer }}>
+        Settle up with someone
+      </Text>
+    </View>
+  );
+}
+
+function PositionBlock() {
   const theme = useTheme();
   return (
     <View>
       <Text style={{ color: theme.colors.onSurfaceVariant }}>You're owed</Text>
-      <Text style={{ fontSize: 40, fontWeight: "700" }}>₹1,850</Text>
-      <Text style={{ color: theme.colors.onSurfaceVariant, marginBottom: 12 }}>Across 2 groups</Text>
-      <Text style={{ fontWeight: "700" }}>Goa trip</Text>
+      <Text style={{ fontSize: 40, fontWeight: "700", color: theme.colors.onSurface }}>₹1,850</Text>
+      <Text style={{ color: theme.colors.onSurfaceVariant }}>Across 2 groups</Text>
+    </View>
+  );
+}
+
+function GroupRows() {
+  const theme = useTheme();
+  return (
+    <View>
+      <Text style={{ fontWeight: "700", color: theme.colors.onSurface }}>Goa trip</Text>
       <Text style={{ color: "#0B6B58", marginBottom: 12 }}>You're owed ₹2,400</Text>
-      <Text style={{ fontWeight: "700" }}>Flat 4B</Text>
+      <Text style={{ fontWeight: "700", color: theme.colors.onSurface }}>Flat 4B</Text>
       <Text style={{ color: "#8E2A45" }}>You owe ₹550</Text>
     </View>
   );
@@ -149,17 +179,14 @@ export function GuestModePreviewScreen({ frame }: { frame: string | null }) {
               Create a group for shared expenses.
             </Text>
             <Button mode="contained">Create a group</Button>
-            <Button mode="contained-tonal" style={{ marginTop: 12 }} contentStyle={{ minHeight: 44 }}>
-              Settle up with someone
-            </Button>
+            <SettlePill centered />
             <Text style={{ marginTop: 16, color: theme.colors.onSurfaceVariant }}>Split one bill</Text>
             <GuestDeviceLine />
           </View>
         ) : (
           <>
-            <Button mode="contained-tonal" style={{ alignSelf: "flex-start", marginBottom: 16 }} contentStyle={{ minHeight: 44 }}>
-              Settle up with someone
-            </Button>
+            <PositionBlock />
+            <SettlePill />
             <GroupRows />
           </>
         )}

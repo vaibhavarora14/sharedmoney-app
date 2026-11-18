@@ -677,6 +677,8 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
               </Button>
               <Button
                 mode="contained-tonal"
+                buttonColor={theme.colors.primaryContainer}
+                textColor={theme.colors.onPrimaryContainer}
                 onPress={() => openQuickSettle("home_empty")}
                 testID="home-empty-settle"
                 style={{ marginTop: 12 }}
@@ -699,6 +701,8 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
               <HomePositionView position={position} />
               <Button
                 mode="contained-tonal"
+                buttonColor={theme.colors.primaryContainer}
+                textColor={theme.colors.onPrimaryContainer}
                 onPress={() => openQuickSettle("home_header")}
                 testID="home-settle-pill"
                 style={styles.settlePill}

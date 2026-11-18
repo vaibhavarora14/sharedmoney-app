@@ -19,7 +19,7 @@ export function GuestSaveChip({ onPress }: { onPress: () => void }) {
       testID="guest-save-chip"
       style={[styles.chip, { borderColor: theme.colors.outlineVariant }]}
     >
-      <View style={[styles.dot, { backgroundColor: theme.colors.outline }]} />
+      <View style={[styles.dot, { backgroundColor: theme.colors.primary }]} />
       <Text style={{ color: theme.colors.onSurface, fontSize: 13, fontWeight: "600" }}>
         Save your data
       </Text>
@@ -49,8 +49,8 @@ export function GuestSnackbar({
   onAction?: () => void;
 }) {
   const theme = useTheme();
-  const background = theme.dark ? "#E6ECF3" : "#2A3440";
-  const foreground = theme.dark ? "#17202A" : "#F2F5FA";
+  const background = theme.dark ? theme.colors.surface : "#2A3440";
+  const foreground = theme.dark ? theme.colors.onSurface : "#F2F5FA";
   return (
     <View
       testID="guest-snackbar"
@@ -59,7 +59,7 @@ export function GuestSnackbar({
       <Text style={{ color: foreground, flex: 1, fontSize: 14 }}>{message}</Text>
       {actionLabel && onAction ? (
         <Pressable accessibilityRole="button" onPress={onAction} style={styles.hit}>
-          <Text style={{ color: theme.dark ? "#1F5EFF" : "#9DBBFF", fontWeight: "700" }}>
+          <Text style={{ color: theme.dark ? theme.colors.primary : "#9DBBFF", fontWeight: "700" }}>
             {actionLabel}
           </Text>
         </Pressable>
