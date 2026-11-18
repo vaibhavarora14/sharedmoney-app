@@ -80,6 +80,7 @@ export function GuestNameScreen({
           onPress={() => { void continueOn(); }}
           loading={updateProfileLoading}
           disabled={updateProfileLoading || trimmed.length < 1}
+          contentStyle={styles.buttonHit}
           testID="guest-name-continue"
         >
           Continue
@@ -95,4 +96,5 @@ const styles = StyleSheet.create({
   body: { paddingHorizontal: 16, paddingTop: 12 },
   title: { fontWeight: "700", marginBottom: 24 },
   terms: { fontSize: 13, lineHeight: 18, marginTop: 4, marginBottom: 20 },
+  buttonHit: { minHeight: 48 },
 });

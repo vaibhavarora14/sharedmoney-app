@@ -1343,6 +1343,9 @@ const styles = StyleSheet.create({
   },
   guestEntry: {
     marginTop: 20,
+    minHeight: 44,
+    justifyContent: "center",
+    alignItems: "center",
     paddingVertical: 12,
   },
   methodButton: {

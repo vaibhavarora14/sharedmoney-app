@@ -451,7 +451,7 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
                   <Text style={{ color: theme.colors.onSurfaceVariant, marginBottom: 14 }}>
                     Uninstalling or clearing the app loses access to your data. Sign in to keep it.
                   </Text>
-                  <Button mode="contained" onPress={() => requestGuestSignIn(guestSignInCopy("profile"))} testID="guest-profile-sign-in">
+                  <Button mode="contained" onPress={() => requestGuestSignIn(guestSignInCopy("profile"))} contentStyle={{ minHeight: 48 }} testID="guest-profile-sign-in">
                     Sign in
                   </Button>
                 </View>
@@ -1305,6 +1305,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
+    minHeight: 44,
   },
   supportButtonDisabled: {
     opacity: 0.6,

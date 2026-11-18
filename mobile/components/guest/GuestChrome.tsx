@@ -7,6 +7,7 @@ import {
   View,
 } from "react-native";
 import { Button, Text, useTheme } from "react-native-paper";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export function GuestSaveChip({ onPress }: { onPress: () => void }) {
   const theme = useTheme();
@@ -57,7 +58,7 @@ export function GuestSnackbar({
     >
       <Text style={{ color: foreground, flex: 1, fontSize: 14 }}>{message}</Text>
       {actionLabel && onAction ? (
-        <Pressable accessibilityRole="button" onPress={onAction}>
+        <Pressable accessibilityRole="button" onPress={onAction} style={styles.hit}>
           <Text style={{ color: theme.dark ? "#1F5EFF" : "#9DBBFF", fontWeight: "700" }}>
             {actionLabel}
           </Text>
@@ -85,7 +86,7 @@ export function GuestCleanupBanner({
         <Text style={{ color: ink, fontWeight: "700", fontSize: 14 }}>{title}</Text>
         <Text style={{ color: ink, fontSize: 13, marginTop: 2 }}>{body}</Text>
       </View>
-      <Pressable accessibilityRole="button" onPress={onSignIn}>
+      <Pressable accessibilityRole="button" onPress={onSignIn} style={styles.hit}>
         <Text style={{ color: theme.colors.primary, fontWeight: "600" }}>Sign in</Text>
       </Pressable>
     </View>
@@ -113,19 +114,19 @@ export function GuestAuthMethodStack({
 }: GuestAuthMethods) {
   return (
     <View style={{ gap: 12 }}>
-      <Button mode="contained" icon="google" onPress={onGoogle} disabled={busy} testID="guest-continue-google">
+      <Button mode="contained" icon="google" onPress={onGoogle} disabled={busy} contentStyle={styles.buttonHit} testID="guest-continue-google">
         Continue with Google
       </Button>
       {appleAvailable ? (
-        <Button mode="outlined" onPress={onApple} disabled={busy} testID="guest-continue-apple">
+        <Button mode="outlined" icon="apple" onPress={onApple} disabled={busy} contentStyle={styles.buttonHit} testID="guest-continue-apple">
           Continue with Apple
         </Button>
       ) : null}
-      <Button mode="outlined" icon="email" onPress={onEmail} disabled={busy} testID="guest-continue-email">
+      <Button mode="outlined" icon="email" onPress={onEmail} disabled={busy} contentStyle={styles.buttonHit} testID="guest-continue-email">
         Continue with email
       </Button>
       {whatsAppAvailable ? (
-        <Button mode="outlined" icon="whatsapp" onPress={onWhatsApp} disabled={busy} testID="guest-continue-whatsapp">
+        <Button mode="outlined" icon="whatsapp" onPress={onWhatsApp} disabled={busy} contentStyle={styles.buttonHit} testID="guest-continue-whatsapp">
           Continue with WhatsApp
         </Button>
       ) : null}
@@ -147,10 +148,11 @@ export function GuestSignInSheet({
   methods: GuestAuthMethods;
 }) {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.scrim} onPress={onClose} accessibilityLabel="Dismiss sign in" />
-      <View style={[styles.sheet, { backgroundColor: theme.colors.surface }]} testID="guest-signin-sheet">
+      <View style={[styles.sheet, { backgroundColor: theme.colors.surface, paddingBottom: 28 + insets.bottom }]} testID="guest-signin-sheet">
         <View style={[styles.handle, { backgroundColor: theme.colors.outline }]} />
         <Text variant="titleLarge" style={{ fontWeight: "700", marginBottom: 6 }}>{title}</Text>
         <Text style={{ color: theme.colors.onSurfaceVariant, marginBottom: 18 }}>{body}</Text>
@@ -186,10 +188,11 @@ export function GuestMergeSheet({
   onRetry: () => void;
 }) {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={() => undefined}>
       <View style={styles.scrim} />
-      <View style={[styles.sheet, { backgroundColor: theme.colors.surface }]} testID="guest-merge-sheet">
+      <View style={[styles.sheet, { backgroundColor: theme.colors.surface, paddingBottom: 28 + insets.bottom }]} testID="guest-merge-sheet">
         <View style={[styles.handle, { backgroundColor: theme.colors.outline }]} />
         <Text variant="titleLarge" style={{ fontWeight: "700", marginBottom: 6 }}>
           {failed ? "We couldn't move your guest data" : "You already have an account"}
@@ -218,6 +221,7 @@ export function GuestMergeSheet({
           onPress={failed ? onRetry : onBringIn}
           loading={busy}
           disabled={busy}
+          contentStyle={styles.buttonHit}
           testID="guest-bring-it-in"
         >
           {failed ? "Try again" : "Bring it in"}
@@ -239,7 +243,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    height: 32,
+    minHeight: 44,
     paddingHorizontal: 12,
     borderRadius: 16,
     borderWidth: 1,
@@ -281,6 +285,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 8,
     paddingBottom: 28,
+  },
+  hit: {
+    minHeight: 44,
+    minWidth: 44,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 8,
+  },
+  buttonHit: {
+    minHeight: 48,
   },
   handle: {
     width: 32,
