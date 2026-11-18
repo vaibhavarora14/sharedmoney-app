@@ -32,7 +32,7 @@ import { requireMinVersion } from '../_shared/version-check.ts';
  */
 
 const GROUP_COLUMNS =
-  'id, name, description, created_by, created_at, updated_at, settlement_currency, unify_balances, default_split_mode, default_split_weights';
+  'id, name, description, created_by, created_at, updated_at, settlement_currency, unify_balances, default_split_mode, default_split_weights, kind';
 
 interface Group {
   id: string;
@@ -145,8 +145,10 @@ Deno.serve(async (req: Request) => {
 
     // Handle GET /groups - List groups for the current user (hidden excluded)
     if (httpMethod === 'GET' && !groupId) {
-      // Get groups and include the user's membership status / visibility
-      const { data: groups, error } = await supabase
+      // Direct ledgers stay out of the groups list and search unless Home asks
+      // for them. Group details by id still work, so "View with Kabir" can open one.
+      const includeDirect = url.searchParams.get('include_direct') === '1';
+      let groupsQuery = supabase
         .from('groups')
         .select(`
           id, 
@@ -155,6 +157,7 @@ Deno.serve(async (req: Request) => {
           created_by, 
           created_at, 
           updated_at,
+          kind,
           settlement_currency,
           unify_balances,
           default_split_mode,
@@ -163,6 +166,10 @@ Deno.serve(async (req: Request) => {
         `)
         .eq('group_members.user_id', user.id)
         .order('created_at', { ascending: false });
+      if (!includeDirect) {
+        groupsQuery = groupsQuery.neq('kind', 'direct');
+      }
+      const { data: groups, error } = await groupsQuery;
 
       if (error) {
         return handleError(error, 'fetching groups', req);

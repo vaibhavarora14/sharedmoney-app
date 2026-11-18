@@ -16,6 +16,7 @@ import { groupSettingsFromGroup, resolveRateBook } from "./rateBook";
 export type GroupSettlementContext = {
   groupId: string;
   groupName: string;
+  kind?: "standard" | "direct";
   balances: Balance[];
   unifyEnabled: boolean;
   settlementCurrency: string;
@@ -26,6 +27,7 @@ export type GroupSettlementContext = {
 export type GroupSettlementLine = {
   groupId: string;
   groupName: string;
+  kind?: "standard" | "direct";
   amount: number;
   currency: string;
   direction: "pay" | "receive";
@@ -212,6 +214,7 @@ export function buildGroupSettlementLines(
     lines.push({
       groupId: group.groupId,
       groupName: group.groupName,
+      kind: group.kind === "direct" ? "direct" : "standard",
       amount: edge.amount,
       currency: edge.currency,
       direction,
@@ -393,9 +396,13 @@ export function groupContextsFromBalances(options: {
     const customRates = options.groupCustomRates?.[groupBalance.group_id]
       ?? settings.customRates
       ?? {};
+    const kind = groupBalance.group_kind === "direct" || group?.kind === "direct"
+      ? "direct"
+      : "standard";
     return [{
       groupId: groupBalance.group_id,
       groupName: groupBalance.group_name || group?.name || "Group",
+      kind,
       balances: groupBalance.balances,
       unifyEnabled: settings.enabled === true,
       settlementCurrency: settings.settlementCurrency || fallback,

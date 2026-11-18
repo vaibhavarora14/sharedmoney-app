@@ -62,6 +62,8 @@ export interface GroupLastActivity {
   subject: string | null;
   /** ISO timestamp. The list formats the relative time from this. */
   at: string;
+  detail?: string;
+  viewerPaid?: boolean;
 }
 
 export interface Group {
@@ -84,6 +86,8 @@ export interface Group {
   default_split_mode?: "equal" | "weights";
   /** Participant id to share count. Used only when default_split_mode is weights. */
   default_split_weights?: Record<string, number>;
+  /** standard groups are listed. direct is a hidden 1:1 ledger. */
+  kind?: "standard" | "direct";
   /**
    * Present only on a fresh GET /groups. Null means the fetch found no
    * activity. Omitted on the disk cache so recency is not painted from disk.
@@ -147,6 +151,7 @@ export interface Balance {
 export interface GroupBalance {
   group_id: string;
   group_name: string;
+  group_kind?: "standard" | "direct";
   balances: Balance[];
 }
 

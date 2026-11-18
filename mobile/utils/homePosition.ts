@@ -52,6 +52,21 @@ function acrossLine(count: number): string {
   return n === 1 ? "Across 1 group" : `Across ${n} groups`;
 }
 
+export function homeMutedLine(
+  groupCount: number,
+  direct?: { count: number; name?: string },
+): string {
+  const people = direct?.count ?? 0;
+  if (people <= 0) return acrossLine(groupCount);
+  if (groupCount <= 0) {
+    if (people === 1 && direct?.name) return `With ${direct.name}`;
+    return people === 1 ? "Across 1 person" : `Across ${people} people`;
+  }
+  const base = acrossLine(groupCount);
+  if (people === 1 && direct?.name) return `${base} and ${direct.name}`;
+  return `${base} and ${people} people`;
+}
+
 function splitLine(rows: Balance[]): string {
   const first = rows[0]?.currency?.toUpperCase() ?? "";
   const second = rows.find((row) => row.currency.toUpperCase() !== first);
@@ -64,6 +79,8 @@ export function homePosition(input: {
   overallBalances: Balance[];
   groupsWithBalance: number;
   activeGroupCount: number;
+  /** Direct people already included in overall_balances. Never summed here. */
+  directPeople?: { count: number; name?: string };
 }): HomePosition {
   if (!input.hasBalances) return { kind: "unknown" };
 
@@ -78,12 +95,13 @@ export function homePosition(input: {
     const mutedCount = Math.abs(amount) >= MATERIAL
       ? input.groupsWithBalance
       : input.activeGroupCount;
+    const mutedLine = homeMutedLine(mutedCount, input.directPeople);
     if (amount > MATERIAL) {
       return {
         kind: "amount",
         label: "You're owed",
         numberText: formatShareCurrency(amount, row.currency),
-        mutedLine: acrossLine(mutedCount),
+        mutedLine,
       };
     }
     if (amount < -MATERIAL) {
@@ -91,20 +109,20 @@ export function homePosition(input: {
         kind: "amount",
         label: "You owe",
         numberText: formatShareCurrency(Math.abs(amount), row.currency),
-        mutedLine: acrossLine(mutedCount),
+        mutedLine,
       };
     }
     return {
       kind: "amount",
       label: "You're even",
       numberText: formatShareCurrency(0, row.currency),
-      mutedLine: acrossLine(input.activeGroupCount),
+      mutedLine: homeMutedLine(input.activeGroupCount, input.directPeople),
     };
   }
 
   return {
     kind: "amount",
     label: "You're even",
-    mutedLine: acrossLine(input.activeGroupCount),
+    mutedLine: homeMutedLine(input.activeGroupCount, input.directPeople),
   };
 }

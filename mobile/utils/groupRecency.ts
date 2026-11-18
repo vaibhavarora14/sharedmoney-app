@@ -10,6 +10,10 @@ export interface GroupLastActivity {
   subject: string | null;
   /** ISO timestamp. The row formats the relative time from this. */
   at: string;
+  /** Settlement note or expense title, when the row has one. */
+  detail?: string;
+  /** True when the viewer is the payer on a settlement. */
+  viewerPaid?: boolean;
 }
 
 export function groupsWithoutRecency<T extends { last_activity?: unknown }>(
@@ -60,6 +64,20 @@ export function formatGroupRecencyLine(activity: GroupLastActivity, now: Date): 
       return _never;
     }
   }
+}
+
+/** Note and relative time for a Direct row. Falls back to the group recency line. */
+export function directActivitySubtitle(
+  activity: GroupLastActivity | null | undefined,
+  now: Date,
+): string | null {
+  if (!activity) return null;
+  const when = formatRelative(activity.at, now);
+  const note = activity.detail?.trim()
+    || (activity.action !== "settled" ? activity.subject?.trim() : "")
+    || "";
+  if (note) return `${note} · ${when}`;
+  return formatGroupRecencyLine(activity, now);
 }
 
 export function groupRecencyLine(

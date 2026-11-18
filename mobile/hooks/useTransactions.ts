@@ -271,7 +271,11 @@ interface BaseTransactionInput extends Omit<Transaction, "created_at" | "user_id
   group_id: string;
 }
 
-type CreateTransactionInput = Omit<BaseTransactionInput, "id">;
+type CreateTransactionInput = Omit<BaseTransactionInput, "id"> & {
+  client_request_id?: string;
+  /** Stripped before the request. Debts from quick settle set source and group_kind. */
+  analytics?: Record<string, string | number | boolean>;
+};
 type UpdateTransactionInput = BaseTransactionInput;
 
 // Mutation hooks
@@ -292,9 +296,10 @@ export function useCreateTransaction(onSuccess?: () => void) {
     }
   >({
     mutationFn: async (transactionData) => {
+      const { analytics: _analytics, ...payload } = transactionData;
       const response = await fetchWithAuth("/transactions", {
         method: "POST",
-        body: JSON.stringify(transactionData),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
@@ -325,8 +330,9 @@ export function useCreateTransaction(onSuccess?: () => void) {
       );
 
       const optimisticId = Date.now();
+      const { analytics: _ignoredAnalytics, ...optimisticSource } = variables;
       const optimisticEntry: Transaction = {
-        ...(variables as Transaction),
+        ...(optimisticSource as Transaction),
         id: optimisticId,
         created_at: new Date().toISOString(),
       };
@@ -417,6 +423,7 @@ export function useCreateTransaction(onSuccess?: () => void) {
         currency: variables.currency,
         split_count: extractSplitAmongParticipantIds(variables).length,
         ...(groupId ? { group_id: groupId } : {}),
+        ...variables.analytics,
       });
       onSuccess?.();
       // After save UI settles (dismiss/navigate via onSuccess), maybe ask for

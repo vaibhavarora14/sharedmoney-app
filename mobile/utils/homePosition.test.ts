@@ -36,6 +36,24 @@ Deno.test("owe uses the single overall_balances amount", () => {
   });
 });
 
+Deno.test("a direct person is named on the muted line and is not added into the total", () => {
+  assertEquals(
+    homePosition({
+      hasBalances: true,
+      overallBalances: [{ user_id: "me", amount: 4710, currency: "INR" }],
+      groupsWithBalance: 3,
+      activeGroupCount: 4,
+      directPeople: { count: 1, name: "Kabir" },
+    }),
+    {
+      kind: "amount",
+      label: "You're owed",
+      numberText: "₹4,710",
+      mutedLine: "Across 3 groups and Kabir",
+    },
+  );
+});
+
 Deno.test("even when overall_balances is empty does not invent a currency", () => {
   const result = homePosition({
     hasBalances: true,

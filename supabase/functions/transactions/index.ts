@@ -1,4 +1,5 @@
 import { verifyAuth } from '../_shared/auth.ts';
+import { isUniqueViolation, parseClientRequestId } from '../_shared/clientRequestId.ts';
 import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
 import { log } from '../_shared/logger.ts';
 import { createEmptyResponse, createSuccessResponse } from '../_shared/response.ts';
@@ -348,6 +349,27 @@ Deno.serve(async (req: Request) => {
         return createErrorResponse(400, validation.error || 'Invalid transaction data', 'VALIDATION_ERROR', undefined, req);
       }
 
+      const requestId = parseClientRequestId(
+        (transactionData as { client_request_id?: unknown }).client_request_id,
+      );
+      if (!requestId.ok) {
+        return createErrorResponse(400, requestId.error, 'VALIDATION_ERROR', undefined, req);
+      }
+      if (requestId.id) {
+        const { data: existing, error: existingError } = await supabase
+          .from('transactions')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('client_request_id', requestId.id)
+          .maybeSingle();
+        if (existingError) {
+          return handleError(existingError, 'checking transaction idempotency', req);
+        }
+        if (existing) {
+          return createSuccessResponse(existing, 200, 0, req);
+        }
+      }
+
       if (transactionData.group_id) {
         const { data: membership, error: membershipError } = await supabase
           .from('group_members')
@@ -437,9 +459,22 @@ Deno.serve(async (req: Request) => {
           group_id: transactionData.group_id || null,
           currency: transactionData.currency,
           paid_by_participant_id: transactionData.paid_by_participant_id || null,
+          ...(requestId.id ? { client_request_id: requestId.id } : {}),
         })
         .select()
         .single();
+
+      if (error && requestId.id && isUniqueViolation(error)) {
+        const { data: existing } = await supabase
+          .from('transactions')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('client_request_id', requestId.id)
+          .maybeSingle();
+        if (existing) {
+          return createSuccessResponse(existing, 200, 0, req);
+        }
+      }
 
       if (error) {
         return handleError(error, 'creating transaction', req);

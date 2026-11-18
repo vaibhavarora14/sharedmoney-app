@@ -1644,7 +1644,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     ) ?? false;
 
   const canManageMembers = isActiveMember;
-  const canManageInvites = isActiveMember;
+  const canManageInvites = isActiveMember && group.kind !== "direct";
   const showGroupMenu = (isActiveMember || isFormerMember) && !showMembers;
   // Empty-copy / FAB still use account members; settle chrome counts participants
   // (people without accounts + pending invites) so Sheeba-style groups show balances.
@@ -2082,7 +2082,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           testID="back-button"
         />
         <Appbar.Content
-          title={showMembers ? "People" : listMode === "activity" ? "History" : group.name}
+          title={showMembers ? "People" : listMode === "activity" ? "History" : group.kind === "direct" ? `Direct · ${group.name}` : group.name}
           titleStyle={{ fontWeight: "bold" }}
         />
         {/* Group options — back, name, one overflow. */}
@@ -2178,7 +2178,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                   leadingIcon="percent"
                   testID="group-menu-rates"
                 />
-                {isOwner && (
+                {isOwner && group.kind !== "direct" && (
                   <Menu.Item
                     onPress={() => {
                       handleCloseMenu();
@@ -2189,6 +2189,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                     testID="group-menu-edit-details"
                   />
                 )}
+                {group.kind !== "direct" ? (
                 <Menu.Item
                   onPress={() => {
                     handleCloseMenu();
@@ -2199,6 +2200,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                   leadingIcon="scale-balance"
                   testID="group-menu-default-split"
                 />
+                ) : null}
                 <Menu.Item
                   onPress={() => {
                     handleCloseMenu();

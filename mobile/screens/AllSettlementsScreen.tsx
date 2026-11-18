@@ -14,6 +14,11 @@ import { useAuth } from "../contexts/AuthContext";
 import { usePeopleSettlements, type PersonSettlementView } from "../hooks/usePeopleSettlements";
 import { useCreateSettlement, useCreateSettlements } from "../hooks/useSettlements";
 import { useGroups } from "../hooks/useGroups";
+import { useBalances } from "../hooks/useBalances";
+import { HomePositionView } from "./GroupsListScreen";
+import { countGroupsWithViewerBalance, homePosition } from "../utils/homePosition";
+import { buildDirectHomeRows, directPeopleForHome, directRecentTitle } from "../utils/quickSettle";
+import { directActivitySubtitle } from "../utils/groupRecency";
 import { Group } from "../types";
 import { getDefaultCurrency } from "../utils/currency";
 import { showErrorAlert } from "../utils/errorHandling";
@@ -126,6 +131,23 @@ export const AllSettlementsScreen: React.FC<AllSettlementsScreenProps> = ({
   const [selectedLine, setSelectedLine] = useState<GroupSettlementLine | null>(null);
   const [selectedPerson, setSelectedPerson] = useState<PersonSettlementView | null>(null);
 
+  const balances = useBalances(undefined, { enabled: !preview });
+  const directRows = preview ? [] : buildDirectHomeRows({
+    groups: groups ?? [],
+    groupBalances: balances.data?.group_balances ?? [],
+    userId: user?.id,
+  });
+  const position = homePosition({
+    hasBalances: !preview && balances.hasData,
+    overallBalances: balances.data?.overall_balances ?? [],
+    groupsWithBalance: countGroupsWithViewerBalance(
+      balances.data?.group_balances ?? [],
+      (groups ?? []).filter((group) => group.kind !== "direct" && group.user_status !== "left").map((group) => group.id),
+      user?.id,
+    ),
+    activeGroupCount: (groups ?? []).filter((group) => group.kind !== "direct" && group.user_status !== "left" && !group.archived_at).length,
+    directPeople: directPeopleForHome(directRows),
+  });
   const people = preview ? previewPeople() : live.people;
   const summary = preview ? settlementSummary(people) : live.summary;
   const isLoading = preview ? false : live.isLoading;
@@ -177,7 +199,7 @@ export const AllSettlementsScreen: React.FC<AllSettlementsScreenProps> = ({
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Appbar.Header style={{ backgroundColor: theme.colors.background }}>
-        <Appbar.Content title="Settlements" titleStyle={{ fontWeight: "bold" }} />
+        <Appbar.Content title="Settle" titleStyle={{ fontWeight: "bold" }} />
       </Appbar.Header>
 
       {isLoading ? (
@@ -193,6 +215,9 @@ export const AllSettlementsScreen: React.FC<AllSettlementsScreenProps> = ({
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
+          {!preview && position.kind !== "unknown" ? (
+            <HomePositionView position={position} />
+          ) : null}
           <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 16 }}>
             The same person is grouped across every leftover payment. One
             action records a settlement in each group so you only exchange the
@@ -273,6 +298,27 @@ export const AllSettlementsScreen: React.FC<AllSettlementsScreenProps> = ({
               />
             </>
           )}
+
+          {!preview && groups.some((group) => group.kind === "direct" && group.last_activity) ? (
+            <View style={{ marginTop: 8 }}>
+              <Text style={{ fontSize: 12, fontWeight: "700", letterSpacing: 0.6, color: theme.colors.onSurfaceVariant, marginBottom: 4 }}>
+                RECENT
+              </Text>
+              {groups.filter((group) => group.kind === "direct" && group.last_activity).map((group) => (
+                <View key={group.id} style={{ minHeight: 64, flexDirection: "row", alignItems: "center", gap: 12 }} testID={`direct-recent-${group.id}`}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontWeight: "600", color: theme.colors.onSurface }}>
+                      {directRecentTitle(group.name, group.last_activity as NonNullable<typeof group.last_activity>)}
+                      <Text style={{ fontSize: 11, fontWeight: "700", color: theme.colors.onSurfaceVariant }}>  DIRECT</Text>
+                    </Text>
+                    <Text style={{ color: theme.colors.onSurfaceVariant, fontSize: 13 }}>
+                      {directActivitySubtitle(group.last_activity, new Date())}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : null}
 
           {live.error && !preview ? (
             <Button mode="contained" onPress={() => void live.refetch()} style={{ marginTop: 16 }}>

@@ -137,13 +137,18 @@ export function useCreateSettlement(onSuccess?: () => void) {
     amount: number;
     currency: string;
     notes?: string;
+    date?: string;
+    client_request_id?: string;
+    /** Stripped before the request. */
+    analytics?: Record<string, string | number | boolean>;
   }
 
   const mutation = useMutation<SettlementsResponse, Error, CreateSettlementInput>({
     mutationFn: async (settlementData) => {
+      const { analytics: _analytics, ...payload } = settlementData;
       const response = await fetchWithAuth("/settlements", {
         method: "POST",
-        body: JSON.stringify(settlementData),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
@@ -182,6 +187,7 @@ export function useCreateSettlement(onSuccess?: () => void) {
           currency: variables.currency,
           multi_group: false,
           group_id: variables.group_id,
+          ...variables.analytics,
         },
       );
       onSuccess?.();

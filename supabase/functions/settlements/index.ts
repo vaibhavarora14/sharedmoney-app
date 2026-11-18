@@ -1,4 +1,5 @@
 import { verifyAuth } from '../_shared/auth.ts';
+import { isUniqueViolation, isoDateWithinHorizon, parseClientRequestId } from '../_shared/clientRequestId.ts';
 import { classifyDatabaseWriteError } from '../_shared/database-write-error.ts';
 import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
 import { createEmptyResponse, createSuccessResponse } from '../_shared/response.ts';
@@ -44,6 +45,9 @@ interface CreateSettlementRequest {
   amount: number;
   currency?: string;
   notes?: string;
+  /** YYYY-MM-DD. Stored as created_at so a backdated payment keeps its day. */
+  date?: string;
+  client_request_id?: string;
 }
 
 interface UpdateSettlementRequest {
@@ -226,6 +230,40 @@ Deno.serve(async (req: Request) => {
         return createErrorResponse(400, validation.error || 'Invalid settlement data', 'VALIDATION_ERROR', undefined, req);
       }
 
+      const requestId = parseClientRequestId(settlementData.client_request_id);
+      if (!requestId.ok) {
+        return createErrorResponse(400, requestId.error, 'VALIDATION_ERROR', undefined, req);
+      }
+
+      let createdAt: string | undefined;
+      if (settlementData.date) {
+        if (!isValidDate(settlementData.date) || !isoDateWithinHorizon(settlementData.date)) {
+          return createErrorResponse(400, 'Date must be today or earlier', 'VALIDATION_ERROR', undefined, req);
+        }
+        const parsed = parseSettlementDateToCreatedAt(settlementData.date);
+        if (!parsed) {
+          return createErrorResponse(400, 'Invalid date format (expected YYYY-MM-DD)', 'VALIDATION_ERROR', undefined, req);
+        }
+        createdAt = parsed;
+      }
+
+      if (requestId.id) {
+        const { data: existing, error: existingError } = await supabase
+          .from('settlements')
+          .select('id, group_id, from_participant_id, to_participant_id, amount, currency, notes, created_by, created_at')
+          .eq('created_by', currentUserId)
+          .eq('client_request_id', requestId.id)
+          .maybeSingle();
+        if (existingError) {
+          return handleError(existingError, 'checking settlement idempotency', req);
+        }
+        if (existing) {
+          const replay = existing as Settlement;
+          await enrichSettlementsWithParticipants(supabase, [replay], currentUserId, currentUserEmail);
+          return createSuccessResponse({ settlement: replay }, 200, 0, req);
+        }
+      }
+
       if (!settlementData.group_id || !settlementData.from_participant_id || !settlementData.to_participant_id || !settlementData.amount) {
         return createErrorResponse(400, 'Missing required fields: group_id, from_participant_id, to_participant_id, amount', 'VALIDATION_ERROR', undefined, req);
       }
@@ -272,9 +310,25 @@ Deno.serve(async (req: Request) => {
           currency: settlementData.currency || 'USD',
           notes: settlementData.notes || null,
           created_by: currentUserId,
+          ...(requestId.id ? { client_request_id: requestId.id } : {}),
+          ...(createdAt ? { created_at: createdAt } : {}),
         })
         .select()
         .single();
+
+      if (error && requestId.id && isUniqueViolation(error)) {
+        const { data: existing } = await supabase
+          .from('settlements')
+          .select('id, group_id, from_participant_id, to_participant_id, amount, currency, notes, created_by, created_at')
+          .eq('created_by', currentUserId)
+          .eq('client_request_id', requestId.id)
+          .maybeSingle();
+        if (existing) {
+          const replay = existing as Settlement;
+          await enrichSettlementsWithParticipants(supabase, [replay], currentUserId, currentUserEmail);
+          return createSuccessResponse({ settlement: replay }, 200, 0, req);
+        }
+      }
 
       if (error) {
         const classified = classifyDatabaseWriteError(error);

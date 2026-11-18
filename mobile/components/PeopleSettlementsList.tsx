@@ -66,7 +66,9 @@ export const PeopleSettlementsList: React.FC<PeopleSettlementsListProps> = ({
           : person.headline.verb === "pay"
             ? theme.colors.error
             : theme.colors.onSurface;
-        const groupNames = [...new Set(person.lines.map((line) => line.groupName))];
+        const groupNames = [...new Set(person.lines.map((line) => (
+          line.kind === "direct" ? "Direct" : line.groupName
+        )))];
         const plan = personSettlePlan(person);
         const actionLabel = personSettleActionLabel(person, person.headline, { compact: true });
 
