@@ -26,6 +26,8 @@ export const AUTH_FAILURE_REASON_CODES = [
   "otp_invalid",
   "otp_send_failed",
   "rate_limited",
+  "apple_unknown",
+  "interrupted",
   "unknown",
 ] as const;
 
@@ -44,7 +46,8 @@ const SOCIAL_KIND_REASON: Record<SocialAuthFailureKind, AuthFailureReasonCode> =
     browser_unavailable: "browser_unavailable",
     play_services_unavailable: "play_services_unavailable",
     provider_configuration: "provider_configuration",
-    apple_unknown: "unknown",
+    apple_unknown: "apple_unknown",
+    interrupted: "interrupted",
     unexpected: "unknown",
   };
 
@@ -388,6 +391,38 @@ function parseAuthTimestamp(
  * If `last_sign_in_at` is missing, compares against `now`. Missing or
  * unparseable `created_at`, or no reference timestamp, is false.
  */
+/**
+ * WhatsApp OTP mints an email-provider session, so app_metadata.provider is
+ * "email". Prefer the method the user just completed when it is known.
+ */
+export function resolveAuthProvider(input: {
+  appProvider?: string | null;
+  pendingMethod?: AuthFunnelMethod | null;
+}): string {
+  switch (input.pendingMethod) {
+    case "whatsapp":
+      return "whatsapp";
+    case "apple":
+      return "apple";
+    case "google":
+      return "google";
+    case "email":
+      return "email";
+    case null:
+    case undefined:
+      break;
+    default: {
+      const _exhaustive: never = input.pendingMethod;
+      return _exhaustive;
+    }
+  }
+
+  if (typeof input.appProvider === "string" && input.appProvider.trim()) {
+    return input.appProvider;
+  }
+  return "unknown";
+}
+
 export function isNewAuthUser(input: {
   createdAt?: string | number | null;
   lastSignInAt?: string | number | null;

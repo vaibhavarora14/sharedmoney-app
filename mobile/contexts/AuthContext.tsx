@@ -26,9 +26,18 @@ import {
 import { resolveAuthSessionTransition } from "../utils/sentryTriagePolicy";
 import { performLocalLogout } from "../utils/logoutFlow";
 import {
+  appleSignInRequestFromNonce,
+  prefetchPreparedAppleNonce,
+  prepareAppleNonce,
+  takePreparedAppleNonce,
+  type PreparedAppleNonce,
+} from "../utils/appleAuth";
+import {
   authFailureReasonFromSocialFailure,
   isNewAuthUser,
+  resolveAuthProvider,
   shouldCaptureSocialAuthFailure,
+  type AuthFunnelMethod,
 } from "../utils/authFunnelEvents";
 import { captureAnalyticsEvent, captureAuthFailed, syncAnalyticsAuth } from "../utils/posthogAnalytics";
 import { anonymousCaptchaToken } from "../utils/guestCaptcha";
@@ -40,12 +49,15 @@ import {
   canUseNativeGoogleSignIn,
   signInWithNativeGoogle,
 } from "../utils/nativeGoogleAuth";
-import { openGoogleAuthSession } from "../utils/googleBrowserAuth";
+import {
+  classifyGoogleAuthSessionResult,
+  openGoogleAuthSession,
+} from "../utils/googleBrowserAuth";
+import { parseOAuthCallbackUrl } from "../utils/oauthCallback";
 import {
   classifySocialAuthFailure,
   createSocialAuthError,
   readUnknownErrorMessage,
-  shouldRetryAppleNativeAuth,
   type SocialAuthFailure,
   type SocialAuthProvider,
   type SocialAuthStage,
@@ -54,6 +66,31 @@ import { recordSocialAuthFailure } from "../utils/socialAuthTelemetry";
 import { verifyWhatsAppOtp } from "../utils/whatsappOtpApi";
 // Complete the auth session when browser closes
 WebBrowser.maybeCompleteAuthSession();
+
+function appleNonceDependencies() {
+  return {
+    randomBytes: () => Crypto.getRandomBytes(32),
+    digestSha256Hex: (value: string) =>
+      Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, value),
+  };
+}
+
+export function prefetchAppleAuthNonce(): Promise<PreparedAppleNonce> {
+  return prefetchPreparedAppleNonce(() =>
+    prepareAppleNonce(appleNonceDependencies()),
+  );
+}
+
+function nativeAppleSignInOptions(hashedNonce: string) {
+  const request = appleSignInRequestFromNonce(hashedNonce);
+  return {
+    nonce: request.nonce,
+    requestedScopes: [
+      AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+      AppleAuthentication.AppleAuthenticationScope.EMAIL,
+    ],
+  };
+}
 
 /**
  * Maps Supabase auth errors to user-friendly error messages
@@ -160,7 +197,7 @@ function classifyCaughtSocialAuthFailure(
   });
 }
 
-function handleSocialAuthFailure(
+export function handleSocialAuthFailure(
   provider: SocialAuthProvider,
   stage: SocialAuthStage,
   error: unknown,
@@ -188,12 +225,6 @@ function handleSocialAuthFailure(
   }
   return { error: createSocialAuthError(failure) };
 }
-function createAppleNonce(byteCount = 32): string {
-  return Array.from(Crypto.getRandomBytes(byteCount))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
-}
-
 function formatAppleFullName(
   fullName: AppleAuthentication.AppleAuthenticationFullName | null
 ): string | null {
@@ -211,45 +242,34 @@ function formatAppleFullName(
   return name || null;
 }
 
-function extractOAuthTokensFromUrl(url: string): {
-  access_token: string;
-  refresh_token: string;
-} | null {
-  const hash = url.split("#")[1];
-  if (!hash) return null;
-
-  const params = new URLSearchParams(hash);
-  const accessToken = params.get("access_token");
-  const refreshToken = params.get("refresh_token");
-
-  if (!accessToken || !refreshToken) return null;
-
-  return {
-    access_token: accessToken,
-    refresh_token: refreshToken,
-  };
-}
-
-function getWebOAuthTokensFromCurrentUrl(): {
-  access_token: string;
-  refresh_token: string;
-} | null {
+function getWebOAuthCallback() {
   if (Platform.OS !== "web" || typeof window === "undefined") {
     return null;
   }
 
-  return extractOAuthTokensFromUrl(window.location.href);
+  return parseOAuthCallbackUrl(window.location.href);
 }
 
-function clearWebOAuthHash() {
+function clearWebOAuthCallbackParams() {
   if (Platform.OS !== "web" || typeof window === "undefined") {
     return;
   }
 
-  if (!window.location.hash) return;
+  const url = new URL(window.location.href);
+  const hadHash = Boolean(url.hash);
+  url.hash = "";
+  url.searchParams.delete("code");
+  url.searchParams.delete("access_token");
+  url.searchParams.delete("refresh_token");
+  url.searchParams.delete("error");
+  url.searchParams.delete("error_description");
+  if (!hadHash && url.search === window.location.search) return;
 
-  const cleanUrl = `${window.location.pathname}${window.location.search}`;
-  window.history.replaceState({}, document.title, cleanUrl);
+  window.history.replaceState(
+    {},
+    document.title,
+    `${url.pathname}${url.search}`,
+  );
 }
 
 /**
@@ -271,6 +291,14 @@ interface AuthContextType {
   signInWithGoogle: () => Promise<{ error: Error | null }>;
   /** Signs in a user with native Sign in with Apple */
   signInWithApple: () => Promise<{ error: Error | null }>;
+  /**
+   * Exchanges an Apple credential obtained from a user-gesture `signInAsync`
+   * for a Supabase session. AuthScreen calls this after the native sheet.
+   */
+  completeAppleSignIn: (
+    credential: AppleAuthentication.AppleAuthenticationCredential,
+    rawNonce: string,
+  ) => Promise<{ error: Error | null }>;
   /**
    * Feature-flagged WhatsApp OTP login. Sends a code to `phoneE164`.
    * Prefer requesting the code via sendWhatsAppOtp; this verifies and sets the session.
@@ -303,6 +331,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 // getSession here would hide that title behind the groups skeleton.
 const [loading, setLoading] = useState<boolean>(() => !isWebAuthShellActive());
   const previousAuthUserIdRef = useRef<string | null | undefined>(undefined);
+  const pendingAuthMethodRef = useRef<AuthFunnelMethod | null>(null);
 
   // Helper to update auth state and sync with Sentry
   // Wrapped in useCallback to maintain stable reference for useEffect dependency
@@ -342,9 +371,16 @@ const [loading, setLoading] = useState<boolean>(() => !isWebAuthShellActive());
 
     // Sync with PostHog: auth user id as distinct_id + email/name person props
     // so support can search persons by email in SharedMoney Production.
-    const provider = user?.app_metadata?.provider;
+    const appProvider = user?.app_metadata?.provider;
+    const pendingMethod = pendingAuthMethodRef.current;
+    if (user) {
+      pendingAuthMethodRef.current = null;
+    }
     syncAnalyticsAuth(user?.id ?? null, {
-      auth_provider: typeof provider === "string" ? provider : undefined,
+      auth_provider: resolveAuthProvider({
+        appProvider: typeof appProvider === "string" ? appProvider : undefined,
+        pendingMethod,
+      }),
       email: user?.email ?? undefined,
       name: resolveAuthDisplayName(
         user?.user_metadata as Record<string, unknown> | undefined,
@@ -362,10 +398,20 @@ const [loading, setLoading] = useState<boolean>(() => !isWebAuthShellActive());
     let mounted = true;
     let resolved = false;
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
-    const oauthTokens = getWebOAuthTokensFromCurrentUrl();
-    const initialSessionPromise = oauthTokens
-      ? supabase.auth.setSession(oauthTokens).finally(clearWebOAuthHash)
-      : supabase.auth.getSession();
+    const oauthCallback = getWebOAuthCallback();
+    const initialSessionPromise =
+      oauthCallback?.status === "tokens"
+        ? supabase.auth
+            .setSession({
+              access_token: oauthCallback.accessToken,
+              refresh_token: oauthCallback.refreshToken,
+            })
+            .finally(clearWebOAuthCallbackParams)
+        : oauthCallback?.status === "code"
+          ? supabase.auth
+              .exchangeCodeForSession(oauthCallback.code)
+              .finally(clearWebOAuthCallbackParams)
+          : supabase.auth.getSession();
 
     // Get initial session. On web, also consume OAuth hash callbacks such as
     // /app#access_token=... when Supabase does not auto-detect them in time.
@@ -404,7 +450,10 @@ const [loading, setLoading] = useState<boolean>(() => !isWebAuthShellActive());
         }
 
         logError(err, {
-          context: oauthTokens ? "setSessionFromOAuthUrl" : "getSession",
+          context:
+            oauthCallback?.status === "tokens" || oauthCallback?.status === "code"
+              ? "setSessionFromOAuthUrl"
+              : "getSession",
           errorType: "exception",
         });
         // Log out on exception - can't get session means auth is broken
@@ -446,6 +495,11 @@ const [loading, setLoading] = useState<boolean>(() => !isWebAuthShellActive());
     };
   }, [updateAuthState]);
 
+  useEffect(() => {
+    if (Platform.OS !== "ios") return;
+    void prefetchAppleAuthNonce();
+  }, []);
+
   /**
    * Signs in a user with email and password
    * @param email - User's email address
@@ -454,17 +508,20 @@ const [loading, setLoading] = useState<boolean>(() => !isWebAuthShellActive());
    */
   const signIn = useCallback(async (email: string, password: string) => {
     try {
+      pendingAuthMethodRef.current = "email";
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
       if (error) {
+        pendingAuthMethodRef.current = null;
         return { error: mapAuthError(error, "signIn") };
       }
 
       return { error: null };
     } catch (err) {
+      pendingAuthMethodRef.current = null;
       logError(err, { context: "signIn" });
       return {
         error:
@@ -500,17 +557,20 @@ const [loading, setLoading] = useState<boolean>(() => !isWebAuthShellActive());
 
   const signUp = useCallback(async (email: string, password: string) => {
     try {
+      pendingAuthMethodRef.current = "email";
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
       });
 
       if (error) {
+        pendingAuthMethodRef.current = null;
         return { error: mapAuthError(error, "signUp") };
       }
 
       return { error };
     } catch (err) {
+      pendingAuthMethodRef.current = null;
       logError(err, { context: "signUp" });
       return {
         error:
@@ -557,6 +617,7 @@ const [loading, setLoading] = useState<boolean>(() => !isWebAuthShellActive());
         }
 
         stage = "token_exchange";
+        pendingAuthMethodRef.current = "google";
         const { error: sessionError } = await supabase.auth.signInWithIdToken({
           provider: "google",
           token: nativeResult.idToken,
@@ -564,6 +625,7 @@ const [loading, setLoading] = useState<boolean>(() => !isWebAuthShellActive());
         });
 
         if (sessionError) {
+          pendingAuthMethodRef.current = null;
           return handleSocialAuthFailure(
             "google",
             stage,
@@ -579,6 +641,7 @@ const [loading, setLoading] = useState<boolean>(() => !isWebAuthShellActive());
         } = await supabase.auth.getSession();
 
         if (verifyError || !verifySession) {
+          pendingAuthMethodRef.current = null;
           return handleSocialAuthFailure(
             "google",
             stage,
@@ -663,36 +726,74 @@ const [loading, setLoading] = useState<boolean>(() => !isWebAuthShellActive());
 
       if (result.type === "success") {
         stage = "callback_parse";
-        // TypeScript doesn't narrow the type properly, but url exists on success
         const url = (result as { type: "success"; url: string }).url;
-        const tokens = extractOAuthTokensFromUrl(url);
+        const callback = parseOAuthCallbackUrl(url);
 
-        if (!tokens) {
-          return handleSocialAuthFailure(
-            "google",
-            stage,
-            new Error("OAuth callback tokens were missing"),
-            attemptId,
-          );
+        switch (callback.status) {
+          case "tokens": {
+            stage = "token_exchange";
+            pendingAuthMethodRef.current = "google";
+            const { error: sessionError } = await supabase.auth.setSession({
+              access_token: callback.accessToken,
+              refresh_token: callback.refreshToken,
+            });
+            if (sessionError) {
+              pendingAuthMethodRef.current = null;
+              return handleSocialAuthFailure(
+                "google",
+                stage,
+                sessionError,
+                attemptId,
+              );
+            }
+            break;
+          }
+          case "code": {
+            stage = "token_exchange";
+            pendingAuthMethodRef.current = "google";
+            const { error: sessionError } =
+              await supabase.auth.exchangeCodeForSession(callback.code);
+            if (sessionError) {
+              pendingAuthMethodRef.current = null;
+              return handleSocialAuthFailure(
+                "google",
+                stage,
+                sessionError,
+                attemptId,
+              );
+            }
+            break;
+          }
+          case "error": {
+            const cancelled = callback.error === "access_denied";
+            return handleSocialAuthFailure(
+              "google",
+              stage,
+              Object.assign(new Error(callback.error), {
+                code: callback.error,
+              }),
+              attemptId,
+              cancelled,
+            );
+          }
+          case "missing":
+            return handleSocialAuthFailure(
+              "google",
+              stage,
+              new Error("OAuth callback tokens were missing"),
+              attemptId,
+            );
+          default: {
+            const _exhaustive: never = callback;
+            return handleSocialAuthFailure(
+              "google",
+              stage,
+              _exhaustive,
+              attemptId,
+            );
+          }
         }
 
-        // Set session directly from tokens
-        stage = "token_exchange";
-        const { error: sessionError } = await supabase.auth.setSession({
-          access_token: tokens.access_token,
-          refresh_token: tokens.refresh_token,
-        });
-
-        if (sessionError) {
-          return handleSocialAuthFailure(
-            "google",
-            stage,
-            sessionError,
-            attemptId,
-          );
-        }
-
-        // Verify session was created
         stage = "session_verification";
         const {
           data: { session: verifySession },
@@ -700,6 +801,7 @@ const [loading, setLoading] = useState<boolean>(() => !isWebAuthShellActive());
         } = await supabase.auth.getSession();
 
         if (verifyError || !verifySession) {
+          pendingAuthMethodRef.current = null;
           return handleSocialAuthFailure(
             "google",
             stage,
@@ -712,7 +814,9 @@ const [loading, setLoading] = useState<boolean>(() => !isWebAuthShellActive());
         return { error: null };
       }
 
-      if (result.type === "cancel" || result.type === "dismiss") {
+      const sessionKind = classifyGoogleAuthSessionResult(result.type);
+      if (sessionKind === "cancelled") {
+        pendingAuthMethodRef.current = null;
         return handleSocialAuthFailure(
           "google",
           stage,
@@ -725,9 +829,10 @@ const [loading, setLoading] = useState<boolean>(() => !isWebAuthShellActive());
       return handleSocialAuthFailure(
         "google",
         stage,
-        Object.assign(new Error("Browser authentication did not complete"), {
-          code: `WEB_BROWSER_${result.type.toUpperCase()}`,
-        }),
+        Object.assign(
+          new Error("Google sign-in did not complete. Please try again."),
+          { code: `WEB_BROWSER_${result.type.toUpperCase()}` },
+        ),
         attemptId,
       );
     } catch (error) {
@@ -741,168 +846,123 @@ const [loading, setLoading] = useState<boolean>(() => !isWebAuthShellActive());
   }, []);
 
   /**
+   * Exchanges a native Apple credential for a Supabase session. The credential
+   * must come from `signInAsync` invoked in a user-gesture context.
+   */
+  const completeAppleSignIn = useCallback(
+    async (
+      credential: AppleAuthentication.AppleAuthenticationCredential,
+      rawNonce: string,
+    ) => {
+      const attemptId = Crypto.randomUUID();
+      let stage: SocialAuthStage = "native_request";
+
+      try {
+        if (!credential.identityToken) {
+          return handleSocialAuthFailure(
+            "apple",
+            stage,
+            new Error("Apple did not return an identity token"),
+            attemptId,
+          );
+        }
+
+        stage = "token_exchange";
+        pendingAuthMethodRef.current = "apple";
+        const { error: sessionError } = await supabase.auth.signInWithIdToken({
+          provider: "apple",
+          token: credential.identityToken,
+          nonce: rawNonce,
+        });
+
+        if (sessionError) {
+          pendingAuthMethodRef.current = null;
+          return handleSocialAuthFailure(
+            "apple",
+            stage,
+            sessionError,
+            attemptId,
+          );
+        }
+
+        const fullName = formatAppleFullName(credential.fullName);
+        if (fullName) {
+          stage = "profile_update";
+          const { error: metadataError } = await supabase.auth.updateUser({
+            data: {
+              full_name: fullName,
+              given_name: credential.fullName?.givenName ?? undefined,
+              family_name: credential.fullName?.familyName ?? undefined,
+            },
+          });
+
+          if (metadataError) {
+            handleSocialAuthFailure(
+              "apple",
+              stage,
+              metadataError,
+              attemptId,
+            );
+          }
+        }
+
+        stage = "session_verification";
+        const {
+          data: { session: verifySession },
+          error: verifyError,
+        } = await supabase.auth.getSession();
+
+        if (verifyError || !verifySession) {
+          pendingAuthMethodRef.current = null;
+          return handleSocialAuthFailure(
+            "apple",
+            stage,
+            verifyError ||
+              new Error("Session was not created after Apple sign-in"),
+            attemptId,
+          );
+        }
+
+        return { error: null };
+      } catch (error) {
+        pendingAuthMethodRef.current = null;
+        return handleSocialAuthFailure("apple", stage, error, attemptId);
+      } finally {
+        void prefetchAppleAuthNonce();
+      }
+    },
+    [],
+  );
+
+  /**
    * Signs in a user with native Sign in with Apple and exchanges the ID token
-   * for a Supabase session.
-   * @returns Promise resolving to an object with error property (null if successful)
+   * for a Supabase session. Prefetches the nonce so `signInAsync` is the first
+   * native call when a nonce is already ready.
    */
   const signInWithApple = useCallback(async () => {
     const attemptId = Crypto.randomUUID();
-    let stage: SocialAuthStage = "availability_check";
-    let appleNativeRetries = 0;
+    let stage: SocialAuthStage = "native_request";
 
     try {
       if (Platform.OS !== "ios") {
         return { error: new Error("Apple sign-in is only available on iOS") };
       }
 
-      const isAvailable = await AppleAuthentication.isAvailableAsync();
-      if (!isAvailable) {
-        return {
-          error: new Error("Apple sign-in is not available on this device"),
-        };
+      let prepared = takePreparedAppleNonce();
+      if (!prepared) {
+        prepared = await prepareAppleNonce(appleNonceDependencies());
       }
 
-      const requestAppleCredential = async () => {
-        const rawNonce = createAppleNonce();
-        const hashedNonce = await Crypto.digestStringAsync(
-          Crypto.CryptoDigestAlgorithm.SHA256,
-          rawNonce
-        );
-
-        stage = "native_request";
-        const credential = await AppleAuthentication.signInAsync({
-          requestedScopes: [
-            AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
-            AppleAuthentication.AppleAuthenticationScope.EMAIL,
-          ],
-          nonce: hashedNonce,
-        });
-
-        return { credential, rawNonce };
-      };
-
-      let credential: AppleAuthentication.AppleAuthenticationCredential;
-      let rawNonce: string;
-
-      try {
-        ({ credential, rawNonce } = await requestAppleCredential());
-      } catch (nativeError) {
-        const failure = classifyCaughtSocialAuthFailure(
-          "apple",
-          stage,
-          nativeError,
-        );
-
-        // Retry once for transient Apple ERR_REQUEST_UNKNOWN with a fresh nonce.
-        // Do not report the first failure if the retry succeeds (avoids Sentry noise).
-        if (shouldRetryAppleNativeAuth(failure)) {
-          appleNativeRetries = 1;
-          try {
-            ({ credential, rawNonce } = await requestAppleCredential());
-          } catch (retryError) {
-            return handleSocialAuthFailure(
-              "apple",
-              stage,
-              retryError,
-              attemptId,
-              false,
-              appleNativeRetries,
-            );
-          }
-        } else {
-          return handleSocialAuthFailure(
-            "apple",
-            stage,
-            nativeError,
-            attemptId,
-            false,
-            appleNativeRetries,
-          );
-        }
-      }
-
-      if (!credential.identityToken) {
-        return handleSocialAuthFailure(
-          "apple",
-          stage,
-          new Error("Apple did not return an identity token"),
-          attemptId,
-          false,
-          appleNativeRetries,
-        );
-      }
-
-      stage = "token_exchange";
-      const { error: sessionError } = await supabase.auth.signInWithIdToken({
-        provider: "apple",
-        token: credential.identityToken,
-        nonce: rawNonce,
-      });
-
-      if (sessionError) {
-        return handleSocialAuthFailure(
-          "apple",
-          stage,
-          sessionError,
-          attemptId,
-          false,
-          appleNativeRetries,
-        );
-      }
-
-      const fullName = formatAppleFullName(credential.fullName);
-      if (fullName) {
-        stage = "profile_update";
-        const { error: metadataError } = await supabase.auth.updateUser({
-          data: {
-            full_name: fullName,
-            given_name: credential.fullName?.givenName ?? undefined,
-            family_name: credential.fullName?.familyName ?? undefined,
-          },
-        });
-
-        if (metadataError) {
-          handleSocialAuthFailure(
-            "apple",
-            stage,
-            metadataError,
-            attemptId,
-            false,
-            appleNativeRetries,
-          );
-        }
-      }
-
-      stage = "session_verification";
-      const {
-        data: { session: verifySession },
-        error: verifyError,
-      } = await supabase.auth.getSession();
-
-      if (verifyError || !verifySession) {
-        return handleSocialAuthFailure(
-          "apple",
-          stage,
-          verifyError ||
-            new Error("Session was not created after Apple sign-in"),
-          attemptId,
-          false,
-          appleNativeRetries,
-        );
-      }
-
-      return { error: null };
-    } catch (error) {
-      return handleSocialAuthFailure(
-        "apple",
-        stage,
-        error,
-        attemptId,
-        false,
-        appleNativeRetries,
+      stage = "native_request";
+      const credential = await AppleAuthentication.signInAsync(
+        nativeAppleSignInOptions(prepared.hashedNonce),
       );
+      return await completeAppleSignIn(credential, prepared.rawNonce);
+    } catch (error) {
+      void prefetchAppleAuthNonce();
+      return handleSocialAuthFailure("apple", stage, error, attemptId);
     }
-  }, []);
+  }, [completeAppleSignIn]);
 
   /**
    * Verifies a WhatsApp OTP and establishes a Supabase session.
@@ -912,11 +972,13 @@ const [loading, setLoading] = useState<boolean>(() => !isWebAuthShellActive());
     async (phoneE164: string, code: string) => {
       try {
         const result = await verifyWhatsAppOtp(phoneE164, code);
+        pendingAuthMethodRef.current = "whatsapp";
         const { error: sessionError } = await supabase.auth.setSession({
           access_token: result.session.access_token,
           refresh_token: result.session.refresh_token,
         });
         if (sessionError) {
+          pendingAuthMethodRef.current = null;
           return { error: sessionError };
         }
         const {
@@ -924,6 +986,7 @@ const [loading, setLoading] = useState<boolean>(() => !isWebAuthShellActive());
           error: verifyError,
         } = await supabase.auth.getSession();
         if (verifyError || !verifySession) {
+          pendingAuthMethodRef.current = null;
           return {
             error:
               verifyError ||
@@ -932,6 +995,7 @@ const [loading, setLoading] = useState<boolean>(() => !isWebAuthShellActive());
         }
         return { error: null };
       } catch (err) {
+        pendingAuthMethodRef.current = null;
         logError(err, { context: "signInWithWhatsAppOtp" });
         return {
           error:
@@ -979,6 +1043,7 @@ const [loading, setLoading] = useState<boolean>(() => !isWebAuthShellActive());
       signUp,
       signInWithGoogle,
       signInWithApple,
+      completeAppleSignIn,
       signInWithWhatsAppOtp,
       signInAnonymously,
       signOut,
@@ -991,6 +1056,7 @@ const [loading, setLoading] = useState<boolean>(() => !isWebAuthShellActive());
       signUp,
       signInWithGoogle,
       signInWithApple,
+      completeAppleSignIn,
       signInWithWhatsAppOtp,
       signInAnonymously,
       signOut,

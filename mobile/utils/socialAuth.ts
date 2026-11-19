@@ -16,6 +16,7 @@ export type SocialAuthFailureKind =
   | "play_services_unavailable"
   | "apple_unknown"
   | "provider_configuration"
+  | "interrupted"
   | "unexpected";
 
 export type SocialAuthFailureInput = {
@@ -58,6 +59,7 @@ const SOCIAL_AUTH_FAILURE_KINDS: readonly SocialAuthFailureKind[] = [
   "play_services_unavailable",
   "apple_unknown",
   "provider_configuration",
+  "interrupted",
   "unexpected",
 ];
 
@@ -214,6 +216,13 @@ export function classifySocialAuthFailure(
   ) {
     kind = "apple_unknown";
   } else if (
+    input.provider === "google" &&
+    (code.startsWith("WEB_BROWSER_") ||
+      message.includes("did not complete") ||
+      message.includes("authentication session was dismissed"))
+  ) {
+    kind = "interrupted";
+  } else if (
     message.includes("unsupported provider") ||
     message.includes("provider is not enabled") ||
     message.includes("oauth client") ||
@@ -237,17 +246,13 @@ export function classifySocialAuthFailure(
 }
 
 /**
- * Apple's ERR_REQUEST_UNKNOWN is often transient (sheet interruption / OS quirk).
- * Retrying once at the native request stage is safe when we mint a fresh nonce.
+ * Do not auto-present a second Apple sheet. The retry is not a user gesture,
+ * and on iOS 26 it reproduces ERR_REQUEST_UNKNOWN (Sentry REACT-NATIVE-2B).
  */
 export function shouldRetryAppleNativeAuth(
-  failure: SocialAuthFailure,
+  _failure: SocialAuthFailure,
 ): boolean {
-  return (
-    failure.provider === "apple" &&
-    failure.kind === "apple_unknown" &&
-    failure.stage === "native_request"
-  );
+  return false;
 }
 
 export function buildSocialAuthTelemetry(
@@ -262,7 +267,8 @@ export function buildSocialAuthTelemetry(
       failure.kind === "browser_unavailable" ||
       failure.kind === "play_services_unavailable" ||
       failure.kind === "provider_configuration" ||
-      failure.kind === "apple_unknown"
+      failure.kind === "apple_unknown" ||
+      failure.kind === "interrupted"
         ? "warning"
         : "error",
     fingerprint: [failure.group],
@@ -299,6 +305,8 @@ export function getSocialAuthUserMessage(
       return "Apple sign-in couldn’t be completed. Please try again, or use email or Google sign-in.";
     case "provider_configuration":
       return "This sign-in method is temporarily unavailable. Please use email or another sign-in method.";
+    case "interrupted":
+      return "Google sign-in did not complete. Please try again.";
     case "unexpected":
       return failure.provider === "apple"
         ? "Apple sign-in couldn’t be completed. Please try again, or use email or Google sign-in."
