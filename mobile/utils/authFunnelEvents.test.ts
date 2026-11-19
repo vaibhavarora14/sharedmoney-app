@@ -9,6 +9,7 @@ import {
   isNewAuthUser,
   mapAuthFailureReason,
   NEW_AUTH_USER_WINDOW_MS,
+  resolveAuthProvider,
   shouldCaptureSocialAuthFailure,
 } from "./authFunnelEvents.ts";
 
@@ -222,7 +223,11 @@ Deno.test("maps each auth failure family to a reason_code", () => {
       socialAuthKind: "apple_unknown",
       message: "Apple sign-in couldn’t be completed.",
     }),
-    "unknown",
+    "apple_unknown",
+  );
+  assertEquals(
+    mapAuthFailureReason({ socialAuthKind: "interrupted" }),
+    "interrupted",
   );
   assertEquals(
     mapAuthFailureReason({ code: "VALIDATION_ERROR", message: "bad input" }),
@@ -267,6 +272,7 @@ Deno.test("user cancels and profile-name updates are not auth_failed", () => {
   assertEquals(shouldCaptureSocialAuthFailure("browser_unavailable", "profile_update"), false);
   assertEquals(shouldCaptureSocialAuthFailure("unexpected", "token_exchange"), true);
   assertEquals(shouldCaptureSocialAuthFailure("apple_unknown", "native_request"), true);
+  assertEquals(shouldCaptureSocialAuthFailure("interrupted", "browser_session"), true);
 });
 
 Deno.test("is_new_user is true only inside the 10 minute signup window", () => {
@@ -347,6 +353,22 @@ Deno.test("is_new_user falls back to now and is false when timestamps are missin
     }),
     false,
   );
+});
+
+Deno.test("WhatsApp OTP success is not labeled as email", () => {
+  assertEquals(
+    resolveAuthProvider({ appProvider: "email", pendingMethod: "whatsapp" }),
+    "whatsapp",
+  );
+  assertEquals(
+    resolveAuthProvider({ appProvider: "email", pendingMethod: "email" }),
+    "email",
+  );
+  assertEquals(
+    resolveAuthProvider({ appProvider: "google" }),
+    "google",
+  );
+  assertEquals(resolveAuthProvider({}), "unknown");
 });
 
 Deno.test("auth funnel payloads are enums and booleans only", () => {

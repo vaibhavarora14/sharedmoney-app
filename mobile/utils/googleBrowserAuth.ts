@@ -11,6 +11,21 @@ export type GoogleAuthBrowserResult = {
   url?: string;
 };
 
+export type GoogleAuthSessionKind = "success" | "cancelled" | "incomplete";
+
+/**
+ * iOS ASWebAuthenticationSession often returns `dismiss` when the sheet
+ * closes without tokens. That is not a user cancel — treat it as incomplete
+ * so the caller can show an error instead of failing silently.
+ */
+export function classifyGoogleAuthSessionResult(
+  type: string,
+): GoogleAuthSessionKind {
+  if (type === "success") return "success";
+  if (type === "cancel") return "cancelled";
+  return "incomplete";
+}
+
 export type GoogleAuthBrowserOptions = {
   browserPackage?: string;
 };

@@ -1,5 +1,6 @@
 import { assertEquals, assertRejects } from "jsr:@std/assert@1";
 import {
+  classifyGoogleAuthSessionResult,
   openGoogleAuthSession,
   pickCustomTabsBrowserPackage,
   type CustomTabsBrowserListing,
@@ -176,6 +177,14 @@ Deno.test("browser listing failure keeps the original rejection", async () => {
     "No matching browser activity found",
   );
   assertEquals(harness.calls.length, 1);
+});
+
+Deno.test("iOS dismiss is an incomplete Google session, not a silent cancel", () => {
+  assertEquals(classifyGoogleAuthSessionResult("success"), "success");
+  assertEquals(classifyGoogleAuthSessionResult("cancel"), "cancelled");
+  assertEquals(classifyGoogleAuthSessionResult("dismiss"), "incomplete");
+  assertEquals(classifyGoogleAuthSessionResult("opened"), "incomplete");
+  assertEquals(classifyGoogleAuthSessionResult("locked"), "incomplete");
 });
 
 Deno.test("iOS does not retry a browser resolution failure", async () => {

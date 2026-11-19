@@ -162,7 +162,7 @@ Deno.test("Apple cancellation code creates no actionable failure", () => {
   );
 });
 
-Deno.test("Apple unknown request code is grouped and retryable at native_request", () => {
+Deno.test("Apple unknown request code is grouped and not auto-retried", () => {
   const failure = classifySocialAuthFailure({
     provider: "apple",
     stage: "native_request",
@@ -172,10 +172,24 @@ Deno.test("Apple unknown request code is grouped and retryable at native_request
 
   assertEquals(failure.kind, "apple_unknown");
   assertEquals(failure.group, "auth.apple.apple_unknown");
-  assertEquals(shouldRetryAppleNativeAuth(failure), true);
+  assertEquals(shouldRetryAppleNativeAuth(failure), false);
   assertEquals(
     getSocialAuthUserMessage(failure),
     "Apple sign-in couldn’t be completed. Please try again, or use email or Google sign-in.",
+  );
+});
+
+Deno.test("Google dismiss is interrupted, not a silent cancel", () => {
+  const failure = classifySocialAuthFailure({
+    provider: "google",
+    stage: "browser_session",
+    code: "WEB_BROWSER_DISMISS",
+    message: "Google sign-in did not complete. Please try again.",
+  });
+  assertEquals(failure.kind, "interrupted");
+  assertEquals(
+    getSocialAuthUserMessage(failure),
+    "Google sign-in did not complete. Please try again.",
   );
 });
 

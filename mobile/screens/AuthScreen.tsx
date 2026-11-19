@@ -1,4 +1,5 @@
 import * as AppleAuthentication from "expo-apple-authentication";
+import * as Crypto from "expo-crypto";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
@@ -24,8 +25,16 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { CountryCodePicker } from "../components/CountryCodePicker";
 import { isAuthDesktopWebViewport } from "../constants/layout";
-import { useAuth } from "../contexts/AuthContext";
+import {
+  handleSocialAuthFailure,
+  prefetchAppleAuthNonce,
+  useAuth,
+} from "../contexts/AuthContext";
 import { useGuestFlags } from "../hooks/useGuestFlags";
+import {
+  appleSignInRequestFromNonce,
+  takePreparedAppleNonce,
+} from "../utils/appleAuth";
 import {
   CountryCode,
   countryCodes,
@@ -239,8 +248,15 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   const otpInputRef = useRef<any>(null);
   const otpSubmitLockRef = useRef(false);
   const lastAuthScreenViewKey = useRef<string | null>(null);
-  const { signIn, signUp, signInWithGoogle, signInWithApple, signInWithWhatsAppOtp, signInAnonymously } =
-    useAuth();
+  const {
+    signIn,
+    signUp,
+    signInWithGoogle,
+    signInWithApple,
+    completeAppleSignIn,
+    signInWithWhatsAppOtp,
+    signInAnonymously,
+  } = useAuth();
   const { entryEnabled: guestEntryEnabled } = useGuestFlags();
   const theme = useTheme();
   const { width } = useWindowDimensions();
@@ -292,6 +308,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       };
     }
 
+    void prefetchAppleAuthNonce();
     AppleAuthentication.isAvailableAsync()
       .then((available) => {
         if (!mounted) return;
@@ -552,28 +569,65 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     }
   };
 
-  const handleAppleSignIn = async () => {
-    trackAuthMethod("apple");
-    setAppleLoading(true);
-    try {
-      const { error } = await signInWithApple();
-      if (error) {
-        if (!readSocialAuthKind(error)) {
-          captureAuthFailed("apple", mapAuthFailureReason(error));
-        }
-        Alert.alert("Apple Sign In Failed", error.message || "Failed to sign in with Apple", [
-          { text: "OK", style: "default" },
-        ]);
-      }
-    } catch (err) {
-      console.error("Error in Apple sign in:", err);
+  const showAppleSignInError = (error: unknown) => {
+    const err = error instanceof Error ? error : new Error("Failed to sign in with Apple");
+    if (!readSocialAuthKind(err)) {
       captureAuthFailed("apple", mapAuthFailureReason(err));
-      Alert.alert("Error", "An unexpected error occurred. Please try again.", [
-        { text: "OK", style: "default" },
-      ]);
-    } finally {
-      setAppleLoading(false);
     }
+    Alert.alert("Apple Sign In Failed", err.message || "Failed to sign in with Apple", [
+      { text: "OK", style: "default" },
+    ]);
+  };
+
+  const handleAppleSignIn = () => {
+    trackAuthMethod("apple");
+    const prepared = takePreparedAppleNonce();
+    if (!prepared) {
+      setAppleLoading(true);
+      void signInWithApple()
+        .then(({ error }) => {
+          if (error) showAppleSignInError(error);
+        })
+        .catch((err) => {
+          console.error("Error in Apple sign in:", err);
+          captureAuthFailed("apple", mapAuthFailureReason(err));
+          Alert.alert("Error", "An unexpected error occurred. Please try again.", [
+            { text: "OK", style: "default" },
+          ]);
+        })
+        .finally(() => {
+          setAppleLoading(false);
+        });
+      return;
+    }
+
+    const request = appleSignInRequestFromNonce(prepared.hashedNonce);
+    const nativePromise = AppleAuthentication.signInAsync({
+      nonce: request.nonce,
+      requestedScopes: [
+        AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+        AppleAuthentication.AppleAuthenticationScope.EMAIL,
+      ],
+    });
+    setAppleLoading(true);
+    void nativePromise
+      .then(async (credential) => {
+        const { error } = await completeAppleSignIn(credential, prepared.rawNonce);
+        if (error) showAppleSignInError(error);
+      })
+      .catch((err) => {
+        const { error } = handleSocialAuthFailure(
+          "apple",
+          "native_request",
+          err,
+          Crypto.randomUUID(),
+        );
+        if (error) showAppleSignInError(error);
+      })
+      .finally(() => {
+        setAppleLoading(false);
+        void prefetchAppleAuthNonce();
+      });
   };
 
   const handleSendWhatsAppOtp = async () => {
