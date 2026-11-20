@@ -88,6 +88,10 @@ export interface Group {
   default_split_weights?: Record<string, number>;
   /** standard groups are listed. direct is a hidden 1:1 ledger. */
   kind?: "standard" | "direct";
+  /** Automatic balance nudge cadence. Default off. */
+  balance_nudge_cadence?: "off" | "weekly" | "monthly";
+  /** Whether the current user muted balance nudges for this group. */
+  balance_nudge_muted?: boolean;
   /**
    * Present only on a fresh GET /groups. Null means the fetch found no
    * activity. Omitted on the disk cache so recency is not painted from disk.

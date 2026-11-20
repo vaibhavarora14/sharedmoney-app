@@ -11,6 +11,7 @@ import { createEmptyResponse, createSuccessResponse } from '../_shared/response.
 import { fetchUserEmails } from '../_shared/user-email.ts';
 import { fetchUserProfiles } from '../_shared/user-profiles.ts';
 import { parseGroupDefaultSplitUpdate } from '../_shared/groupDefaultSplit.ts';
+import { isBalanceNudgeCadence } from '../_shared/balance-nudges.ts';
 import { normalizeOptionalCurrency } from '../_shared/rates.ts';
 import { isValidUUID, validateBodySize, validateGroupData } from '../_shared/validation.ts';
 import { requireMinVersion } from '../_shared/version-check.ts';
@@ -22,7 +23,7 @@ import { requireMinVersion } from '../_shared/version-check.ts';
  * - GET /groups - List groups for the current user (excludes per-user hidden)
  * - GET /groups/:id - Get group details with members
  * - POST /groups - Create new group
- * - PATCH /groups/:id - Update name/description (owners), settlement currency settings, and/or the default split for new expenses (active members)
+ * - PATCH /groups/:id - Update name/description (owners), settlement currency settings, default split (active members), balance nudge cadence (owners), and mute (active members)
  * - POST /groups/:id/archive | /unarchive | /hide - Per-user list visibility (no hard delete)
  * 
  * Group hard-delete is disabled (DB prevent_group_delete). Use Leave / Archive / Hide instead.
@@ -32,7 +33,7 @@ import { requireMinVersion } from '../_shared/version-check.ts';
  */
 
 const GROUP_COLUMNS =
-  'id, name, description, created_by, created_at, updated_at, settlement_currency, unify_balances, default_split_mode, default_split_weights, kind';
+  'id, name, description, created_by, created_at, updated_at, settlement_currency, unify_balances, default_split_mode, default_split_weights, kind, balance_nudge_cadence';
 
 interface Group {
   id: string;
@@ -45,6 +46,8 @@ interface Group {
   unify_balances?: boolean;
   default_split_mode?: 'equal' | 'weights';
   default_split_weights?: Record<string, number>;
+  balance_nudge_cadence?: 'off' | 'weekly' | 'monthly';
+  balance_nudge_muted?: boolean;
 }
 
 interface GroupMember {
@@ -105,6 +108,30 @@ async function attachGroupLastActivity(
   }));
 }
 
+
+async function attachBalanceNudgeMutes<T extends { id: string }>(
+  supabase: { from: (table: string) => any },
+  groups: T[],
+  userId: string,
+): Promise<Array<T & { balance_nudge_muted: boolean }>> {
+  if (groups.length === 0) {
+    return [];
+  }
+  const { data, error } = await supabase
+    .from('group_balance_nudge_mutes')
+    .select('group_id')
+    .eq('user_id', userId)
+    .in('group_id', groups.map((group) => group.id));
+  if (error) {
+    throw error;
+  }
+  const muted = new Set((data || []).map((row: { group_id: string }) => row.group_id));
+  return groups.map((group) => ({
+    ...group,
+    balance_nudge_muted: muted.has(group.id),
+  }));
+}
+
 Deno.serve(async (req: Request) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -162,6 +189,7 @@ Deno.serve(async (req: Request) => {
           unify_balances,
           default_split_mode,
           default_split_weights,
+          balance_nudge_cadence,
           group_members!inner(status, archived_at, hidden_at)
         `)
         .eq('group_members.user_id', user.id)
@@ -203,7 +231,8 @@ Deno.serve(async (req: Request) => {
         return 0; // Keep DB order (created_at DESC) within the same bucket
       });
 
-      const withActivity = await attachGroupLastActivity(supabase, flattenedGroups, user.id);
+      const withMutes = await attachBalanceNudgeMutes(supabase, flattenedGroups, user.id);
+      const withActivity = await attachGroupLastActivity(supabase, withMutes, user.id);
       return createSuccessResponse(withActivity, 200, 0, req); // No caching - real-time data
     }
 
@@ -215,7 +244,7 @@ Deno.serve(async (req: Request) => {
       }
 
       // Fetch group + members in parallel (members query is cheap even if group 404s)
-      const [groupResult, membersResult] = await Promise.all([
+      const [groupResult, membersResult, muteResult] = await Promise.all([
         supabase
           .from('groups')
           .select(GROUP_COLUMNS)
@@ -226,6 +255,12 @@ Deno.serve(async (req: Request) => {
           .select('id, group_id, user_id, role, joined_at, status, left_at, archived_at, hidden_at')
           .eq('group_id', groupId)
           .order('joined_at', { ascending: true }),
+        supabase
+          .from('group_balance_nudge_mutes')
+          .select('user_id')
+          .eq('group_id', groupId)
+          .eq('user_id', user.id)
+          .maybeSingle(),
       ]);
 
       const { data: group, error: groupError } = groupResult;
@@ -271,6 +306,7 @@ Deno.serve(async (req: Request) => {
         user_status: myMembership?.status || undefined,
         archived_at: myMembership?.archived_at ?? null,
         hidden_at: myMembership?.hidden_at ?? null,
+        balance_nudge_muted: Boolean(muteResult.data),
         members: membersWithEmails,
       };
 
@@ -335,6 +371,8 @@ Deno.serve(async (req: Request) => {
         unify_balances?: boolean;
         default_split_mode?: unknown;
         default_split_weights?: unknown;
+        balance_nudge_cadence?: unknown;
+        mute_balance_nudges?: unknown;
       };
       try {
         updates = body ? JSON.parse(body) : {};
@@ -348,11 +386,13 @@ Deno.serve(async (req: Request) => {
       const hasUnify = updates.unify_balances !== undefined;
       const hasDefaultSplit = updates.default_split_mode !== undefined
         || updates.default_split_weights !== undefined;
+      const hasCadence = updates.balance_nudge_cadence !== undefined;
+      const hasMute = updates.mute_balance_nudges !== undefined;
       const defaultSplit = hasDefaultSplit
         ? parseGroupDefaultSplitUpdate(updates)
         : null;
 
-      if (!hasName && !hasDescription && !hasCurrency && !hasUnify && !hasDefaultSplit) {
+      if (!hasName && !hasDescription && !hasCurrency && !hasUnify && !hasDefaultSplit && !hasCadence && !hasMute) {
         return createErrorResponse(400, 'Provide at least one field to update', 'VALIDATION_ERROR', undefined, req);
       }
 
@@ -499,6 +539,80 @@ Deno.serve(async (req: Request) => {
         }
 
         group = splitGroup;
+      }
+
+      if (hasCadence) {
+        if (!isBalanceNudgeCadence(updates.balance_nudge_cadence)) {
+          return createErrorResponse(400, 'balance_nudge_cadence must be off, weekly, or monthly', 'VALIDATION_ERROR', undefined, req);
+        }
+
+        const { data: membership } = await supabase
+          .from('group_members')
+          .select('role, status')
+          .eq('group_id', groupId)
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        const isActiveOwner =
+          membership?.status === 'active' &&
+          (membership?.role === 'owner' || group.created_by === user.id);
+        if (!isActiveOwner) {
+          return createErrorResponse(403, 'Only group owners can update balance nudge cadence', 'PERMISSION_DENIED', undefined, req);
+        }
+
+        const { data: cadenceGroup, error } = await supabase
+          .from('groups')
+          .update({
+            balance_nudge_cadence: updates.balance_nudge_cadence,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', groupId)
+          .select(GROUP_COLUMNS)
+          .single();
+
+        if (error || !cadenceGroup) {
+          return handleError(error || new Error('Group not found after cadence update'), 'updating balance nudge cadence', req);
+        }
+        group = cadenceGroup;
+      }
+
+      if (hasMute) {
+        if (typeof updates.mute_balance_nudges !== 'boolean') {
+          return createErrorResponse(400, 'mute_balance_nudges must be a boolean', 'VALIDATION_ERROR', undefined, req);
+        }
+
+        const { data: membership } = await supabase
+          .from('group_members')
+          .select('status')
+          .eq('group_id', groupId)
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (membership?.status !== 'active') {
+          return createErrorResponse(403, 'Not an active group member', 'PERMISSION_DENIED', undefined, req);
+        }
+
+        if (updates.mute_balance_nudges) {
+          const { error } = await supabase
+            .from('group_balance_nudge_mutes')
+            .upsert({ user_id: user.id, group_id: groupId }, { onConflict: 'user_id,group_id' });
+          if (error) {
+            return handleError(error, 'muting balance nudges', req);
+          }
+        } else {
+          const { error } = await supabase
+            .from('group_balance_nudge_mutes')
+            .delete()
+            .eq('user_id', user.id)
+            .eq('group_id', groupId);
+          if (error) {
+            return handleError(error, 'unmuting balance nudges', req);
+          }
+        }
+        group = { ...group, balance_nudge_muted: updates.mute_balance_nudges };
+      } else {
+        const withMute = await attachBalanceNudgeMutes(supabase, [group], user.id);
+        group = withMute[0];
       }
 
       return createSuccessResponse(group, 200, 0, req);

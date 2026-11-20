@@ -423,6 +423,7 @@ function AppContent() {
     enabled: homeBalancesEnabled || currentRoute === "settlements",
   });
   const [selectedNotificationId, setSelectedNotificationId] = useState<string | null>(null);
+  const [pendingSettleGroupId, setPendingSettleGroupId] = useState<string | null>(null);
   const [groupInitialListMode, setGroupInitialListMode] = useState<"transactions" | "activity">("transactions");
   const [highlightedTransactionId, setHighlightedTransactionId] = useState<number | null>(null);
   /** Wall-clock start for group_details_ready (set at tap / deep-link intent). */
@@ -695,9 +696,14 @@ function AppContent() {
   }, [desktopNotificationRoute, usesDesktopNotificationPanel]);
 
   const handleNotificationResponse = React.useCallback((data: Record<string, unknown>) => {
-    if (!notificationFeatureEnabled) return;
     const destination = resolveNotificationRoute(data);
     if (!destination) return;
+    if (destination.screen === "settle") {
+      setPendingSettleGroupId(destination.groupId);
+      void openGroupDeepLink(destination.groupId);
+      return;
+    }
+    if (!notificationFeatureEnabled) return;
     setSelectedGroup(null);
     if (destination.screen === "notification-detail") {
       setSelectedNotificationId(destination.notificationId);
@@ -706,7 +712,7 @@ function AppContent() {
       setSelectedNotificationId(null);
       setCurrentRoute("notifications");
     }
-  }, [notificationFeatureEnabled]);
+  }, [notificationFeatureEnabled, openGroupDeepLink]);
 
   useEffect(() => {
     if (!session?.user?.id || !hasAcceptedCurrentTerms || !notificationFeatureResolved) {
@@ -1889,6 +1895,8 @@ function AppContent() {
             <GroupDetailsScreen
               group={groupToDisplay}
               openStartedAtMs={groupDetailsOpenStartedAtMs ?? undefined}
+              openSettleOnMount={pendingSettleGroupId === groupToDisplay.id}
+              onSettleOpened={() => setPendingSettleGroupId(null)}
               refreshTrigger={invitationsRefreshTrigger}
               groupRefreshTrigger={groupRefreshTrigger}
               captureHardwareBack={!transactionFormVisible}
