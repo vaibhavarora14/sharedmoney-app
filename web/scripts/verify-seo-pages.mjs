@@ -124,6 +124,11 @@ for (const page of pages) {
       !html.includes("dinners. No daily limits"),
       `${page.path}: homepage hero must not leave No on the dinners line.`,
     );
+    report(
+      html.includes('id="switching-from-splitwise"') && html.includes("Switching from Splitwise"),
+      `${page.path}: homepage must include the Switching from Splitwise section.`,
+    );
+    report(!html.toLowerCase().includes("whatsapp"), `${page.path}: homepage must not claim WhatsApp features.`);
     report(html.includes('href="/faq">FAQ</a>'), `${page.path}: static footer must link FAQ to /faq.`);
     report(
       html.includes("No bank link") && html.includes(page.description),
