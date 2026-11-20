@@ -42,6 +42,7 @@ export type TransactionDetailModel = {
     | { mode: "none" };
   rateLine: string | null;
   historySummary: string;
+  receipts?: import("./expenseReceipts").TransactionReceipt[];
 };
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -221,6 +222,7 @@ export function buildExpenseDetailModel(input: {
       addedBy === "Unknown" ? null : addedBy,
       input.transaction.created_at,
     ),
+    receipts: input.transaction.receipts ?? [],
   };
 }
 

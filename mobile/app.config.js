@@ -229,6 +229,13 @@ module.exports = ({ config }) => {
         "expo-font",
         "expo-localization",
         "expo-notifications",
+        [
+          "expo-image-picker",
+          {
+            cameraPermission: "Take a photo of a receipt to attach to an expense.",
+            photosPermission: "Choose a receipt photo to attach to an expense."
+          }
+        ],
         "expo-web-browser",
         // Android Credential Manager Google Sign-In. Optional iOS URL scheme via
         // EXPO_PUBLIC_GOOGLE_IOS_URL_SCHEME when native Google on iOS is enabled.
