@@ -152,7 +152,7 @@ for (const page of pages) {
 const splitBillTitle = "Bill Split Calculator: Tax, Tip and Fees, Free | SharedMoney";
 const splitBillDescription =
   "Free bill splitter: split a bill with tax, tip and fees, evenly or by weight, for up to 20 people. No sign-up; values stay in your browser.";
-const splitBillH1 = "Split a bill fairly, down to the last cent.";
+const splitBillH1 = "Bill split calculator, down to the last cent.";
 const splitBill = pages.find((page) => page.path === "/tools/split-bill-calculator");
 report(Boolean(splitBill), "/tools/split-bill-calculator must exist.");
 report(splitBillTitle.length <= 60, "Split-bill title must stay within 60 characters.");
@@ -160,8 +160,13 @@ report(splitBillDescription.length <= 155, "Split-bill description must stay wit
 if (splitBill) {
   report(splitBill.title === splitBillTitle, "/tools/split-bill-calculator: title must lead with Bill Split Calculator.");
   report(splitBill.description === splitBillDescription, "/tools/split-bill-calculator: description must use bill splitter wording.");
-  report(splitBill.heading === splitBillH1, "/tools/split-bill-calculator: visible H1 must stay unchanged.");
-  report(splitBill.updated === "2026-11-13", "/tools/split-bill-calculator: sitemap lastmod must be 2026-11-13.");
+  report(splitBill.heading === splitBillH1, "/tools/split-bill-calculator: visible H1 must use bill split calculator wording.");
+  report(splitBill.eyebrow === "Free bill split calculator", "/tools/split-bill-calculator: eyebrow must use bill split calculator wording.");
+  report(splitBill.updated === "2026-11-21", "/tools/split-bill-calculator: sitemap lastmod must be 2026-11-21.");
+  report(
+    splitBill.faqs.some((faq) => faq.question === "How do I split a bill with tax and tip?"),
+    "/tools/split-bill-calculator: must include a tax and tip FAQ.",
+  );
   const splitHtml = await readFile(outputPath(splitBill), "utf8");
   report(splitHtml.includes(`<title>${splitBillTitle}</title>`), "/tools/split-bill-calculator: built title mismatch.");
   report(
@@ -179,6 +184,14 @@ if (splitBill) {
   report(
     splitHtml.includes(`<h1>${splitBillH1}</h1>`),
     "/tools/split-bill-calculator: built H1 changed.",
+  );
+  report(
+    splitHtml.includes("<p>Free bill split calculator</p>"),
+    "/tools/split-bill-calculator: built eyebrow must use bill split calculator wording.",
+  );
+  report(
+    splitHtml.includes("How do I split a bill with tax and tip?"),
+    "/tools/split-bill-calculator: built FAQ must cover tax and tip.",
   );
   const builtBody = splitHtml.split("</head>")[1] ?? "";
   report(!builtBody.includes(splitBillTitle), "/tools/split-bill-calculator: title leaked into visible HTML.");

@@ -166,7 +166,9 @@ function BillSplitCalculator({ primaryDestination }: { primaryDestination: Platf
       {error ? <p className="calculator-error" role="alert">{error}</p> : null}
       {result ? (
         <SplitBillResult result={result} primaryDestination={primaryDestination} />
-      ) : null}
+      ) : (
+        <CalculatorStoreCtas primaryDestination={primaryDestination} placement="split_bill_form" />
+      )}
     </form>
   );
 }
