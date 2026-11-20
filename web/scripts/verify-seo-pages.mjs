@@ -138,6 +138,15 @@ for (const page of pages) {
       report(html.includes(`href="${related.path}"`), `${page.path}: missing internal link to ${related.path}.`);
     }
   }
+
+  report(
+    html.includes('href="/splitwise-alternative">Splitwise alternative</a>'),
+    `${page.path}: footer must link to /splitwise-alternative.`,
+  );
+  report(
+    html.includes('href="/in/splitwise-alternative">Splitwise alternative in India</a>'),
+    `${page.path}: footer must link to /in/splitwise-alternative.`,
+  );
 }
 
 const splitBillTitle = "Bill Split Calculator: Tax, Tip and Fees, Free | SharedMoney";

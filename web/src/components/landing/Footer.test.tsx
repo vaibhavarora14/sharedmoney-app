@@ -12,4 +12,10 @@ describe("site footer", () => {
     const html = renderToStaticMarkup(<Footer />);
     expect(html).toMatch(/<a href="\/flatmate-expense-tracker">Flatmate expenses<\/a>/);
   });
+
+  it("links the Splitwise-alternative pages so Google can discover them", () => {
+    const html = renderToStaticMarkup(<Footer />);
+    expect(html).toMatch(/<a href="\/splitwise-alternative">Splitwise alternative<\/a>/);
+    expect(html).toMatch(/<a href="\/in\/splitwise-alternative">Splitwise alternative in India<\/a>/);
+  });
 });
