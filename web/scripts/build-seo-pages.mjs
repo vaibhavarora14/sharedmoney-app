@@ -70,7 +70,7 @@ function fallbackMarkup(page) {
 
   const lead = page.lead ? `<p>${escapeHtml(page.lead)}</p>` : "";
   const body = renderSeoBodyParagraph(page.body, escapeHtml);
-  return `<main id="main-content"><article class="seo-source"><header><p>${escapeHtml(page.eyebrow)}</p><h1>${escapeHtml(page.heading)}</h1>${lead}${body}<ul>${proofItems}</ul>${ctaMarkup(page)}</header>${sections}<section><h2>Common questions</h2>${faqs}</section><nav aria-label="Related SharedMoney pages"><h2>Explore SharedMoney</h2><ul>${related}</ul></nav><footer><a href="/faq">FAQ</a><a href="/privacy">Privacy Policy</a><a href="/delete-account">Delete Account</a><a href="mailto:support@sharedmoney.app">Contact support</a></footer></article></main>`;
+  return `<main id="main-content"><article class="seo-source"><header><p>${escapeHtml(page.eyebrow)}</p><h1>${escapeHtml(page.heading)}</h1>${lead}${body}<ul>${proofItems}</ul>${ctaMarkup(page)}</header>${sections}<section><h2>Common questions</h2>${faqs}</section><nav aria-label="Related SharedMoney pages"><h2>Explore SharedMoney</h2><ul>${related}</ul></nav><footer><a href="/splitwise-alternative">Splitwise alternative</a><a href="/in/splitwise-alternative">Splitwise alternative in India</a><a href="/faq">FAQ</a><a href="/privacy">Privacy Policy</a><a href="/delete-account">Delete Account</a><a href="mailto:support@sharedmoney.app">Contact support</a></footer></article></main>`;
 }
 
 function structuredData(page) {

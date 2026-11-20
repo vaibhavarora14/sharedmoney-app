@@ -10,6 +10,8 @@ export function Footer() {
         <nav className="footer-links" aria-label="Support and legal">
           <a href="/split-bills">Split bills</a>
           <a href="/flatmate-expense-tracker">Flatmate expenses</a>
+          <a href="/splitwise-alternative">Splitwise alternative</a>
+          <a href="/in/splitwise-alternative">Splitwise alternative in India</a>
           <a href="/tools">Calculators</a>
           <a href="/faq">FAQ</a>
           <a href="mailto:support@sharedmoney.app">Contact support</a>
