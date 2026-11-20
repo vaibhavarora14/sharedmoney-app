@@ -6,12 +6,22 @@ import { createEmptyResponse, createSuccessResponse } from '../_shared/response.
 import { fetchUserEmails } from '../_shared/user-email.ts';
 import { fetchUserProfiles } from '../_shared/user-profiles.ts';
 import { isValidUUID } from '../_shared/validation.ts';
+import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { SUPABASE_SERVICE_ROLE_KEY, SUPABASE_URL } from '../_shared/env.ts';
 import {
   loadGroupLedger,
   type GroupLedgerSnapshot,
   type LedgerParticipant,
   type LedgerTransaction,
 } from './load-group-ledger.ts';
+import {
+  YOU_OWE_HIT_LIMIT,
+  YOU_OWE_HIT_WINDOW_MS,
+  YOU_OWE_TOKEN_PATTERN,
+  balancesPublicAction,
+  sha256Hex,
+  toPublicYouOweView,
+} from './public-you-owe.ts';
 
 interface Balance {
   user_id: string;
@@ -493,9 +503,96 @@ function calculateGroupStatsFromLedger(
   };
 }
 
+function serviceRoleClient() {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    throw new Error('Service role is not configured');
+  }
+  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  });
+}
+
+async function servePublicYouOwe(req: Request): Promise<Response> {
+  const unavailable = () => createSuccessResponse(null, 200, 0, req);
+  const token = new URL(req.url).searchParams.get('token') || '';
+  if (!YOU_OWE_TOKEN_PATTERN.test(token)) return unavailable();
+
+  try {
+    const supabase = serviceRoleClient();
+    const { data: flag } = await supabase
+      .from('app_feature_flags')
+      .select('enabled')
+      .eq('key', 'public_you_owe')
+      .maybeSingle();
+    if (!flag?.enabled) return unavailable();
+
+    const tokenHash = await sha256Hex(token);
+    const { data: link } = await supabase
+      .from('balance_share_links')
+      .select('group_id, viewer_participant_id, expires_at, revoked_at')
+      .eq('token_hash', tokenHash)
+      .maybeSingle();
+    if (!link || link.revoked_at || new Date(link.expires_at).getTime() <= Date.now()) {
+      return unavailable();
+    }
+
+    await supabase.from('balance_share_link_hits').insert({ token_hash: tokenHash });
+    const windowStart = new Date(Date.now() - YOU_OWE_HIT_WINDOW_MS).toISOString();
+    const { count } = await supabase
+      .from('balance_share_link_hits')
+      .select('*', { count: 'exact', head: true })
+      .eq('token_hash', tokenHash)
+      .gte('hit_at', windowStart);
+    if ((count || 0) > YOU_OWE_HIT_LIMIT) return unavailable();
+
+    const { balances, ledger } = await calculateGroupBalances(
+      supabase,
+      link.group_id,
+      '',
+      null,
+    );
+    const canonicalParticipantId = buildParticipantCanonicalResolver(
+      ledger.participants.map((person) => ({
+        id: person.id,
+        user_id: person.user_id,
+        email: person.email,
+        type: person.type || 'member',
+      })),
+      new Map(),
+    );
+    const viewerCanonical = canonicalParticipantId(link.viewer_participant_id);
+    const viewerIds = Array.from(new Set([
+      link.viewer_participant_id,
+      viewerCanonical,
+      ...ledger.participants
+        .filter((person) => canonicalParticipantId(person.id) === viewerCanonical)
+        .map((person) => person.id),
+    ]));
+    return createSuccessResponse(
+      toPublicYouOweView(balances, viewerIds, link.expires_at),
+      200,
+      0,
+      req,
+    );
+  } catch (error) {
+    log.error('Public you-owe lookup failed', 'balances', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return unavailable();
+  }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return createEmptyResponse(200, req);
+  }
+
+  const publicAction = balancesPublicAction(new URL(req.url).pathname);
+  if (publicAction === 'you-owe') {
+    if (req.method !== 'GET') {
+      return createErrorResponse(405, 'Method not allowed', 'METHOD_NOT_ALLOWED', undefined, req);
+    }
+    return await servePublicYouOwe(req);
   }
 
   try {

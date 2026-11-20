@@ -18,6 +18,10 @@ Deno.test("sanitizeWebVitalUrl keeps public paths and drops query, hash, and tok
     "https://sharedmoney.app/split/:token",
   );
   assertEquals(
+    sanitizeWebVitalUrl(`https://sharedmoney.app/owe/${TOKEN}?ref=1`),
+    "https://sharedmoney.app/owe/:token",
+  );
+  assertEquals(
     sanitizeWebVitalUrl(`https://sharedmoney.app/app/join/${TOKEN.toUpperCase()}`),
     "https://sharedmoney.app/app/join/:token",
   );
