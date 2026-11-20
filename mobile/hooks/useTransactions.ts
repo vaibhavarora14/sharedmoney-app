@@ -15,6 +15,7 @@ import {
 } from "../utils/groupSplit";
 import { countActiveGroupMembers } from "../utils/inAppReviewEligibility";
 import { maybeRequestInAppReviewAfterExpense } from "../utils/inAppReviewPrompt";
+import { maybePromptAppUpdateAfterExpense } from "../utils/inAppUpdatePrompt";
 import { guestEventProps } from "../utils/guestMode";
 import { captureIdentifiedAnalyticsEvent } from "../utils/posthogAnalytics";
 import { ANALYTICS_EVENTS } from "../utils/posthogEvents";
@@ -428,13 +429,21 @@ export function useCreateTransaction(onSuccess?: () => void) {
         ...guestEventProps(user),
       });
       onSuccess?.();
-      // After save UI settles (dismiss/navigate via onSuccess), maybe ask for
-      // a native in-app review. Never blocks the mutation; never throws.
-      void maybeRequestInAppReviewAfterExpense({
-        userId: user?.id,
-        transactionType: variables.type,
-        groupMemberCount: resolveActiveGroupMemberCount(queryClient, groupId),
-      });
+      // After save UI settles, maybe offer an update, then maybe a review.
+      // Never blocks the mutation; never throws. Skip review if an update
+      // prompt was scheduled so the two sheets do not stack.
+      void (async () => {
+        const updatePromptScheduled = await maybePromptAppUpdateAfterExpense({
+          userId: user?.id,
+          transactionType: variables.type,
+        });
+        if (updatePromptScheduled) return;
+        await maybeRequestInAppReviewAfterExpense({
+          userId: user?.id,
+          transactionType: variables.type,
+          groupMemberCount: resolveActiveGroupMemberCount(queryClient, groupId),
+        });
+      })();
     },
   });
 

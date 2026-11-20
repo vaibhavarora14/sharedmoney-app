@@ -57,7 +57,9 @@
  *   from_cache; duration_ms is visit start → list commit),
  * `upi_pay_tapped` (settle Pay via UPI; never include VPA),
  * `upi_id_saved` (profile UPI ID saved; never include VPA),
- * `review_prompt_requested` (native in-app review API invoked).
+ * `review_prompt_requested` (native in-app review API invoked),
+ * `app_update_prompt_shown` (in-app update prompt displayed),
+ * `app_update_started` (user chose Update and the store URL opened).
  */
 export const ANALYTICS_EVENTS = {
   AUTH_SUCCEEDED: "auth_succeeded",
@@ -96,6 +98,10 @@ export const ANALYTICS_EVENTS = {
   UPI_ID_SAVED: "upi_id_saved",
   /** Native StoreReview.requestReview invoked (OS may still throttle UI). */
   REVIEW_PROMPT_REQUESTED: "review_prompt_requested",
+  /** Update prompt shown after a store lookup found a newer listing. */
+  APP_UPDATE_PROMPT_SHOWN: "app_update_prompt_shown",
+  /** User accepted the update prompt and the store URL was opened. */
+  APP_UPDATE_STARTED: "app_update_started",
   /** Home settle sheet opened. source: home_header | home_empty */
   QUICK_SETTLE_OPENED: "quick_settle_opened",
   /** A direct payment or debt was saved. Amounts are never included. */
