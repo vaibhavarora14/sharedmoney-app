@@ -27,6 +27,17 @@ export interface TransactionSplit {
   participant?: Participant; // Enriched participant data
 }
 
+export interface TransactionReceipt {
+  id: string;
+  transaction_id: number;
+  group_id: string;
+  storage_path: string;
+  content_type: string;
+  byte_size?: number | null;
+  sort_order?: number;
+  created_at?: string;
+}
+
 export interface Transaction {
   id: number;
   amount: number;
@@ -38,6 +49,7 @@ export interface Transaction {
   user_id?: string;
   group_id?: string;
   currency?: string;
+  receipts?: TransactionReceipt[];
   paid_by?: string; // Legacy: User ID of who paid (deprecated, use paid_by_participant_id)
   paid_by_participant_id?: string; // Participant who paid
   split_among?: string[]; // Legacy: Array of user IDs/emails (deprecated, use split_among_participant_ids)

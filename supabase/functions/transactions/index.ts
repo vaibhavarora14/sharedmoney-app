@@ -80,6 +80,17 @@ interface TransactionCursor {
   id: number;
 }
 
+
+function attachReceipts<T extends { transaction_receipts?: unknown; receipts?: unknown }>(tx: T): T {
+  const rows = Array.isArray(tx.transaction_receipts) ? tx.transaction_receipts : [];
+  const receipts = [...rows].sort((a: any, b: any) =>
+    (a.sort_order ?? 0) - (b.sort_order ?? 0) || String(a.created_at || '').localeCompare(String(b.created_at || ''))
+  );
+  const next = { ...tx, receipts };
+  delete (next as { transaction_receipts?: unknown }).transaction_receipts;
+  return next;
+}
+
 const TRANSACTION_PAGE_DEFAULT_LIMIT = 30;
 const TRANSACTION_PAGE_MAX_LIMIT = 100;
 
@@ -178,6 +189,16 @@ Deno.serve(async (req: Request) => {
               id,
               participant_id,
               amount,
+              created_at
+            ),
+            transaction_receipts (
+              id,
+              transaction_id,
+              group_id,
+              storage_path,
+              content_type,
+              byte_size,
+              sort_order,
               created_at
             )
           `);
@@ -320,7 +341,7 @@ Deno.serve(async (req: Request) => {
             .filter((id): id is string => !!id);
         }
 
-        return tx;
+        return attachReceipts(tx);
       });
 
       return createSuccessResponse({
@@ -543,6 +564,16 @@ Deno.serve(async (req: Request) => {
               participant_id,
               amount,
               created_at
+            ),
+            transaction_receipts (
+              id,
+              transaction_id,
+              group_id,
+              storage_path,
+              content_type,
+              byte_size,
+              sort_order,
+              created_at
             )
           `)
           .eq('id', transaction.id)
@@ -587,7 +618,7 @@ Deno.serve(async (req: Request) => {
         }).catch(() => {});
       }
 
-      return createSuccessResponse(responseTransaction, 201, 0, req);
+      return createSuccessResponse(attachReceipts(responseTransaction), 201, 0, req);
     }
 
     // Handle PUT - Update existing transaction
@@ -831,6 +862,16 @@ Deno.serve(async (req: Request) => {
             participant_id,
             amount,
             created_at
+          ),
+          transaction_receipts (
+            id,
+            transaction_id,
+            group_id,
+            storage_path,
+            content_type,
+            byte_size,
+            sort_order,
+            created_at
           )
         `)
         .eq('id', transaction.id)
@@ -866,7 +907,7 @@ Deno.serve(async (req: Request) => {
         }).catch(() => {});
       }
 
-      return createSuccessResponse(responseTransaction, 200, 0, req);
+      return createSuccessResponse(attachReceipts(responseTransaction), 200, 0, req);
     }
 
     // Handle DELETE - Delete transaction

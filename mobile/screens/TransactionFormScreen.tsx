@@ -1,5 +1,6 @@
 import DateTimePicker from "@react-native-community/datetimepicker";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
     Alert,
     BackHandler,
@@ -33,6 +34,7 @@ import {
     useSafeAreaInsets,
 } from "react-native-safe-area-context";
 import { ConvertedAmountHint } from "../components/ConvertedAmountHint";
+import { ExpenseReceiptEditor } from "../components/ExpenseReceipts";
 import { ExchangeRateEditor } from "../components/ExchangeRateEditor";
 import { SplitAmongEditor, SplitMode } from "../components/SplitAmongEditor";
 import { TransactionWebDateField } from "../components/TransactionWebDateField";
@@ -42,6 +44,8 @@ import { useCurrencyPreferences } from "../hooks/useCurrencyPreferences";
 import { useParticipants } from "../hooks/useParticipants";
 import { useGroupLastExpenseSplitAmong } from "../hooks/useTransactions";
 import { Participant, Transaction } from "../types";
+import { normalizeTransactionReceipts } from "../utils/expenseReceipts";
+import { syncExpenseReceipts, type ReceiptDraft } from "../utils/expenseReceiptActions";
 import {
     filterCurrencies,
     getCurrencySymbol,
@@ -69,6 +73,7 @@ import {
     sumSelectedAmounts,
 } from "../utils/splits";
 import { useGroupDetails, useGroups } from "../hooks/useGroups";
+import { queryKeys } from "../hooks/queryKeys";
 import {
   SplitBillScreen,
   splitDraftFromExpense,
@@ -79,7 +84,7 @@ interface TransactionFormScreenProps {
   transaction?: Transaction | null;
   onSave: (
     transaction: Omit<Transaction, "id" | "created_at" | "user_id">
-  ) => Promise<void>;
+  ) => Promise<Transaction | void | null>;
   onDismiss: () => void;
   onDelete?: () => Promise<void>;
   defaultCurrency?: string;
@@ -126,6 +131,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
   onOpenOneTimeSplit,
 }) => {
   const effectiveDefaultCurrency = defaultCurrency || getDefaultCurrency();
+  const queryClient = useQueryClient();
   const theme = useTheme();
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
@@ -178,6 +184,8 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
   const [dateError, setDateError] = useState<string>("");
   const [paidByError, setPaidByError] = useState<string>("");
   const [splitAmongError, setSplitAmongError] = useState<string>("");
+  const [receiptDrafts, setReceiptDrafts] = useState<ReceiptDraft[]>([]);
+  const [removedReceiptIds, setRemovedReceiptIds] = useState<string[]>([]);
 
   // Fetch participants
   const {
@@ -285,6 +293,8 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     setDateError("");
     setPaidByError("");
     setSplitAmongError("");
+    setReceiptDrafts([]);
+    setRemovedReceiptIds([]);
   }, [effectiveDefaultCurrency]);
 
   const loadTransactionData = useCallback(
@@ -299,6 +309,10 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
       setCategory(nextCategory);
       setUseCustomCategoryInput(!!nextCategory && !isPresetCategory(nextCategory));
       setCurrency(tx.currency || effectiveDefaultCurrency);
+      setReceiptDrafts(
+        normalizeTransactionReceipts(tx.receipts).map((receipt) => ({ kind: "saved" as const, receipt })),
+      );
+      setRemovedReceiptIds([]);
 
       if (tx.paid_by_participant_id) {
         setPaidBy(tx.paid_by_participant_id);
@@ -614,7 +628,7 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     const amountValue = parseFloat(amount);
     setLoading(true);
     try {
-      await onSave({
+      const saved = await onSave({
         description: description.trim(),
         amount: amountValue,
         date: date.trim(),
@@ -625,6 +639,18 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
         split_among_participant_ids: isGroupExpense ? effectiveSplitIds : undefined,
         splits: customSplitsForSave(),
       });
+      const savedId = saved?.id ?? transaction?.id;
+      const savedGroupId = saved?.group_id ?? transaction?.group_id ?? effectiveGroupId;
+      if (savedId && savedGroupId && (receiptDrafts.length > 0 || removedReceiptIds.length > 0)) {
+        await syncExpenseReceipts({
+          groupId: savedGroupId,
+          transactionId: savedId,
+          drafts: receiptDrafts,
+          removedIds: removedReceiptIds,
+        });
+        setRemovedReceiptIds([]);
+        queryClient.invalidateQueries({ queryKey: queryKeys.transactionsFeed(savedGroupId) });
+      }
     } catch (error) {
       Alert.alert("Error", getUserFriendlyErrorMessage(error));
     } finally {
@@ -952,6 +978,30 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
               )}
             </Card.Content>
           </Card>
+
+          {effectiveGroupId || transaction?.group_id ? (
+            <Card style={styles.card} mode="outlined" testID="expense-receipts-card">
+              <Card.Content>
+                <ExpenseReceiptEditor
+                  drafts={receiptDrafts}
+                  disabled={loading}
+                  onChange={(next) => {
+                    const keptIds = new Set(
+                      next.filter((draft) => draft.kind === "saved").map((draft) => draft.receipt.id),
+                    );
+                    const dropped = receiptDrafts
+                      .filter((draft) => draft.kind === "saved" && !keptIds.has(draft.receipt.id))
+                      .map((draft) => draft.kind === "saved" ? draft.receipt.id : "")
+                      .filter(Boolean);
+                    if (dropped.length > 0) {
+                      setRemovedReceiptIds((current) => [...new Set([...current, ...dropped])]);
+                    }
+                    setReceiptDrafts(next);
+                  }}
+                />
+              </Card.Content>
+            </Card>
+          ) : null}
 
           {/* Global Add expense: pick a group, or split once without one. */}
           {isGlobalAddExpense ? (

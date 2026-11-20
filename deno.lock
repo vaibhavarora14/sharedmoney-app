@@ -122,6 +122,8 @@
             "npm:expo-document-picker@~57.0.3",
             "npm:expo-file-system@~57.0.7",
             "npm:expo-font@~57.0.4",
+            "npm:expo-image-manipulator@~57.0.22",
+            "npm:expo-image-picker@~57.0.21",
             "npm:expo-image@~57.0.5",
             "npm:expo-insights@~57.0.20",
             "npm:expo-linking@~57.0.11",

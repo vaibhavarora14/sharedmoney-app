@@ -1371,19 +1371,18 @@ function AppContent() {
     if (!selectedGroup) return;
 
     if (editingTransaction) {
-      await updateTx.mutate({
+      return updateTx.mutate({
         ...transactionData,
         id: editingTransaction.id,
         group_id: selectedGroup.id,
         currency: transactionData.currency || getDefaultCurrency(),
       });
-    } else {
-      await createTx.mutate({
-        ...transactionData,
-        group_id: selectedGroup.id,
-        currency: transactionData.currency || getDefaultCurrency(),
-      });
     }
+    return createTx.mutate({
+      ...transactionData,
+      group_id: selectedGroup.id,
+      currency: transactionData.currency || getDefaultCurrency(),
+    });
   };
 
   const handleDeleteTransaction = async () => {

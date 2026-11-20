@@ -9,6 +9,8 @@ import {
   buildPaymentDetailModel,
   type TransactionDetailModel,
 } from "../utils/transactionDetail";
+import { ExpenseReceiptGallery } from "../components/ExpenseReceipts";
+import { normalizeTransactionReceipts } from "../utils/expenseReceipts";
 import { useActivity } from "../hooks/useActivity";
 
 export function TransactionDetailView({
@@ -65,6 +67,9 @@ export function TransactionDetailView({
           <Text variant="titleMedium" testID="transaction-detail-your-line" style={styles.yourLine}>
             {model.yourLine}
           </Text>
+        ) : null}
+        {model.receipts && model.receipts.length > 0 ? (
+          <ExpenseReceiptGallery receipts={model.receipts} />
         ) : null}
         {model.paidBy ? (
           <View style={[styles.pair, hairline]}>
