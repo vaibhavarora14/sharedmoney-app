@@ -1,5 +1,7 @@
 SharedMoney helps friends, roommates, families, and travel groups keep shared expenses clear.
 
+There are no daily limits, no ads, and no bank link. If you are switching from Splitwise, you can import a group CSV and keep the shared record in SharedMoney.
+
 Create a group, add expenses, choose who paid, and split costs across the people involved. SharedMoney keeps a shared ledger of what happened and shows simple balances so everyone can see who owes who.
 
 Use SharedMoney for:
@@ -19,6 +21,8 @@ Key features:
 - Track balances across group members
 - Record settlements when someone pays back
 - Invite people to groups
+- Import a Splitwise CSV into a group
 - Keep every expense, split, and settlement in one shared record
+- No daily expense limits and no ads
 
 No more guessing, screenshots, or messy notes. SharedMoney gives your group a simple answer to the question: who owes who?

@@ -4,7 +4,7 @@
     "path": "/",
     "kind": "home",
     "region": "global",
-    "updated": "2026-11-06",
+    "updated": "2026-11-21",
     "title": "SharedMoney | Split Bills and Track Group Expenses",
     "description": "Shared expense ledger for trips and roommates. Clear balances. No bank link. Settle outside the app.",
     "eyebrow": "Free on Android, iOS and web",
@@ -38,7 +38,7 @@
     "faqs": [
       {
         "question": "Is SharedMoney free to use?",
-        "answer": "Yes. SharedMoney is free for tracking shared expenses and balances."
+        "answer": "Yes. SharedMoney is free for tracking shared expenses and balances, with no daily limits and no ads."
       },
       {
         "question": "Is my financial data secure?",
@@ -63,6 +63,10 @@
       {
         "question": "Can groups use different currencies?",
         "answer": "Yes. SharedMoney keeps balances specific to each currency instead of silently converting them."
+      },
+      {
+        "question": "Can I import my groups from Splitwise?",
+        "answer": "Yes. Export a CSV from Splitwise, then in SharedMoney open a group and choose Import from Splitwise. Review the imported record with the group before using it for a final settlement."
       }
     ],
     "related": [

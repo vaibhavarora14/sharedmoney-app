@@ -7,6 +7,7 @@ import { Footer } from "./components/landing/Footer";
 import { Header } from "./components/landing/Header";
 import { Hero } from "./components/landing/Hero";
 import { InstallSection } from "./components/landing/InstallSection";
+import { SwitchSection } from "./components/landing/SwitchSection";
 import { TrustSection } from "./components/landing/TrustSection";
 import { UseCases } from "./components/landing/UseCases";
 import { WorkflowSection } from "./components/landing/WorkflowSection";
@@ -117,6 +118,7 @@ function App() {
             />
             <WorkflowSection />
             <UseCases />
+            <SwitchSection />
             <TrustSection />
           </>
         ) : (
