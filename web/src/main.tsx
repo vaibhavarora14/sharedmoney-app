@@ -7,10 +7,14 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import App from "./App.tsx";
 import "./index.css";
 import { billSplitRoute } from "./billSplitApi";
+import { youOweRoute } from "./youOweApi";
 
 // Bearer bill links and guest names must not enter marketing analytics.
 // Speed Insights still runs there; its reporter strips the token from the URL.
-if (billSplitRoute(window.location.pathname) === undefined) initializeAnalytics();
+if (
+  billSplitRoute(window.location.pathname) === undefined
+  && youOweRoute(window.location.pathname) === undefined
+) initializeAnalytics();
 enableSpeedInsights();
 
 const rootEl = document.getElementById("root");

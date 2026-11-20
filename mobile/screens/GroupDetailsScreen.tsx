@@ -39,6 +39,7 @@ import {
 import { GroupDashboard } from "../components/GroupDashboard";
 import { GroupDefaultSplitSheet } from "../components/GroupDefaultSplitSheet";
 import { RecurringDueBanners, RecurringTemplatesSheet } from "../components/RecurringTemplatesSheet";
+import { BalanceShareLinkSheet } from "../components/BalanceShareLinkSheet";
 import { GroupExportSheet } from "../components/GroupExportSheet";
 import { SettlementCurrencySheet } from "../components/SettlementCurrencySheet";
 import { InvitationsList } from "../components/InvitationsList";
@@ -65,6 +66,7 @@ import {
 } from "../hooks/useGroupInvitations";
 import { useRemoveMember, useUpdateGroup, useUpdateGroupBalanceNudges, useUpdateGroupDefaultSplit, useArchiveGroup, useUnarchiveGroup, useHideGroupFromLists } from "../hooks/useGroupMutations";
 import { useRecurringTemplates } from "../hooks/useRecurringTemplates";
+import { usePublicYouOweFlag } from "../hooks/useBalanceShareLinks";
 import { useGroupDetails } from "../hooks/useGroups";
 import { SafetyTarget, useModeration } from "../hooks/useModeration";
 import {
@@ -291,6 +293,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const [settleListOpen, setSettleListOpen] = useState(false);
   const [showBalanceNudges, setShowBalanceNudges] = useState(false);
   const [showRecurringTemplates, setShowRecurringTemplates] = useState(false);
+  const [showBalanceShareLinks, setShowBalanceShareLinks] = useState(false);
   const [draftNudgeCadence, setDraftNudgeCadence] = useState<"off" | "weekly" | "monthly">("off");
   const [draftNudgeMuted, setDraftNudgeMuted] = useState(false);
   const settleOpenedFromNudgeRef = useRef(false);
@@ -693,6 +696,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const recurringTemplates = useRecurringTemplates(initialGroup.id, () => {
     void refetchGroup();
   });
+  const publicYouOwe = usePublicYouOweFlag();
 
   useEffect(() => {
     if (!openSettleOnMount || settleOpenedFromNudgeRef.current || balancesLoading) {
@@ -2290,6 +2294,17 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                   leadingIcon="cash-sync"
                   testID="group-menu-settlement-currency"
                 />
+                {isActiveMember && group.kind === "direct" && publicYouOwe.enabled ? (
+                <Menu.Item
+                  onPress={() => {
+                    handleCloseMenu();
+                    setShowBalanceShareLinks(true);
+                  }}
+                  title="Share balance link"
+                  leadingIcon="link-variant"
+                  testID="group-menu-share-balance-link"
+                />
+                ) : null}
                 {onImportSplitwise && (
                   <Menu.Item
                     onPress={() => {
@@ -2981,6 +2996,12 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
         onSave={(mode, weights) => {
           void handleSaveDefaultSplit(mode, weights);
         }}
+      />
+
+      <BalanceShareLinkSheet
+        visible={showBalanceShareLinks}
+        groupId={group.id}
+        onDismiss={() => setShowBalanceShareLinks(false)}
       />
 
       <RecurringTemplatesSheet
