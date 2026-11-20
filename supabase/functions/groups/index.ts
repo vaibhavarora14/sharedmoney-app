@@ -12,6 +12,7 @@ import { fetchUserEmails } from '../_shared/user-email.ts';
 import { fetchUserProfiles } from '../_shared/user-profiles.ts';
 import { parseGroupDefaultSplitUpdate } from '../_shared/groupDefaultSplit.ts';
 import { isBalanceNudgeCadence } from '../_shared/balance-nudges.ts';
+import { handleRecurringTemplateRequest, loadRecurringTemplateViews } from '../_shared/recurring-template-api.ts';
 import { normalizeOptionalCurrency } from '../_shared/rates.ts';
 import { isValidUUID, validateBodySize, validateGroupData } from '../_shared/validation.ts';
 import { requireMinVersion } from '../_shared/version-check.ts';
@@ -310,11 +311,12 @@ Deno.serve(async (req: Request) => {
         members: membersWithEmails,
       };
 
-      return createSuccessResponse(groupWithMembers, 200, 0, req); // No caching - real-time data
+      const recurring_templates = await loadRecurringTemplateViews(supabase, groupId);
+      return createSuccessResponse({ ...groupWithMembers, recurring_templates }, 200, 0, req); // No caching - real-time data
     }
 
     // Handle POST /groups - Create new group
-    if (httpMethod === 'POST') {
+    if (httpMethod === 'POST' && !groupId) {
       let groupData: Partial<Group>;
       try {
         groupData = body ? JSON.parse(body) : {};
@@ -359,7 +361,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // Handle PATCH /groups/:id - name/description and/or settlement currency settings
-    if (httpMethod === 'PATCH' && groupId) {
+    if (httpMethod === 'PATCH' && groupId && !parsedPath.action) {
       if (!isValidUUID(groupId)) {
         return createErrorResponse(400, 'Invalid group_id format. Expected UUID.', 'VALIDATION_ERROR', undefined, req);
       }
@@ -617,6 +619,17 @@ Deno.serve(async (req: Request) => {
 
       return createSuccessResponse(group, 200, 0, req);
     }
+
+    const recurringResponse = await handleRecurringTemplateRequest({
+      req,
+      supabase,
+      user,
+      groupId: groupId || '',
+      action: parsedPath.resource === 'groups' ? (parsedPath.action || null) : null,
+      httpMethod,
+      body,
+    });
+    if (recurringResponse) return recurringResponse;
 
     // Per-user list visibility: archive / unarchive / hide (never delete the group)
     const membershipAction = parsedPath.resource === 'groups' ? parsedPath.action : null;

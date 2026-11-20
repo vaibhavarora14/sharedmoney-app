@@ -147,9 +147,32 @@ export interface GroupInvitation {
   uses_count?: number | null;
 }
 
+export type RecurringCadence = "weekly" | "monthly" | "yearly";
+export type RecurringTemplateStatus = "active" | "paused";
+export type RecurringProgressStatus = "paused" | "upcoming" | "due" | "added" | "skipped";
+
+export interface RecurringTemplate {
+  id: string;
+  group_id: string;
+  title: string;
+  amount: number;
+  currency: string;
+  category?: string | null;
+  cadence: RecurringCadence;
+  anchor_date: string;
+  paid_by_participant_id?: string | null;
+  split_among_participant_ids: string[];
+  status: RecurringTemplateStatus;
+  current_period_key: string;
+  current_status: RecurringProgressStatus;
+  due_on: string;
+  current_transaction_id?: number | null;
+}
+
 export interface GroupWithMembers extends Group {
   members?: GroupMember[];
   invitations?: GroupInvitation[];
+  recurring_templates?: RecurringTemplate[];
 }
 
 export type CurrencyCode = string;

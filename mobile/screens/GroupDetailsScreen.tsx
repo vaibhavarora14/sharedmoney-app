@@ -38,6 +38,7 @@ import {
 } from "../components/ActivityFeed";
 import { GroupDashboard } from "../components/GroupDashboard";
 import { GroupDefaultSplitSheet } from "../components/GroupDefaultSplitSheet";
+import { RecurringDueBanners, RecurringTemplatesSheet } from "../components/RecurringTemplatesSheet";
 import { GroupExportSheet } from "../components/GroupExportSheet";
 import { SettlementCurrencySheet } from "../components/SettlementCurrencySheet";
 import { InvitationsList } from "../components/InvitationsList";
@@ -63,6 +64,7 @@ import {
   useGroupInvitations,
 } from "../hooks/useGroupInvitations";
 import { useRemoveMember, useUpdateGroup, useUpdateGroupBalanceNudges, useUpdateGroupDefaultSplit, useArchiveGroup, useUnarchiveGroup, useHideGroupFromLists } from "../hooks/useGroupMutations";
+import { useRecurringTemplates } from "../hooks/useRecurringTemplates";
 import { useGroupDetails } from "../hooks/useGroups";
 import { SafetyTarget, useModeration } from "../hooks/useModeration";
 import {
@@ -288,6 +290,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const [searchOpen, setSearchOpen] = useState(false);
   const [settleListOpen, setSettleListOpen] = useState(false);
   const [showBalanceNudges, setShowBalanceNudges] = useState(false);
+  const [showRecurringTemplates, setShowRecurringTemplates] = useState(false);
   const [draftNudgeCadence, setDraftNudgeCadence] = useState<"off" | "weekly" | "monthly">("off");
   const [draftNudgeMuted, setDraftNudgeMuted] = useState(false);
   const settleOpenedFromNudgeRef = useRef(false);
@@ -685,6 +688,9 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     void refetchGroup();
   });
   const updateBalanceNudgesMutation = useUpdateGroupBalanceNudges(() => {
+    void refetchGroup();
+  });
+  const recurringTemplates = useRecurringTemplates(initialGroup.id, () => {
     void refetchGroup();
   });
 
@@ -2264,6 +2270,17 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                   testID="group-menu-balance-nudges"
                 />
                 ) : null}
+                {isActiveMember && group.kind !== "direct" ? (
+                <Menu.Item
+                  onPress={() => {
+                    handleCloseMenu();
+                    setShowRecurringTemplates(true);
+                  }}
+                  title="Recurring"
+                  leadingIcon="calendar-refresh"
+                  testID="group-menu-recurring"
+                />
+                ) : null}
                 <Menu.Item
                   onPress={() => {
                     handleCloseMenu();
@@ -2461,6 +2478,25 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
           ListHeaderComponent={
             <View>
               {listMode === "transactions" && searchEngaged ? null : (
+              <>
+              <RecurringDueBanners
+                templates={group.recurring_templates || []}
+                disabled={!isActiveMember || recurringTemplates.isWorking}
+                onAdd={(template) => {
+                  void recurringTemplates.addDueExpense(template).catch((error) => {
+                    Alert.alert("Couldn’t add expense", error instanceof Error ? error.message : "Please try again.");
+                  });
+                }}
+                onSkip={(template) => {
+                  void recurringTemplates.recordCycle.mutateAsync({
+                    template_id: template.id,
+                    action: "skip",
+                    period_key: template.current_period_key,
+                  }).catch((error) => {
+                    Alert.alert("Couldn’t skip", error instanceof Error ? error.message : "Please try again.");
+                  });
+                }}
+              />
               <GroupDashboard
                 key={group.id}
                 groupId={group.id}
@@ -2492,6 +2528,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                 }}
                 onOpenCurrencySettings={() => setShowCurrencySettings(true)}
               />
+              </>
               )}
 
               {listMode === "transactions" ? (
@@ -2943,6 +2980,20 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
         }}
         onSave={(mode, weights) => {
           void handleSaveDefaultSplit(mode, weights);
+        }}
+      />
+
+      <RecurringTemplatesSheet
+        visible={showRecurringTemplates}
+        groupId={group.id}
+        groupName={group.name}
+        templates={group.recurring_templates || []}
+        participants={participants}
+        defaultCurrency={preferredCurrency || getDefaultCurrency()}
+        currentUserParticipantId={participants.find((person) => person.user_id === session?.user?.id)?.id}
+        onDismiss={() => setShowRecurringTemplates(false)}
+        onExpenseCreated={() => {
+          void refetchGroup();
         }}
       />
 
