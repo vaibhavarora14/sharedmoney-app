@@ -340,9 +340,19 @@ function activeRecipientMap(
   return recipients;
 }
 
-export function buildGroupSettlementEdges(
-  input: BuildGroupSettlementEdgesInput,
-): SettlementReminderEdge[] {
+export interface MemberOwedTotal {
+  group_id: string;
+  group_name: string;
+  user_id: string;
+  amount: number;
+  currency: string;
+}
+
+function resolveGroupBalances(input: BuildGroupSettlementEdgesInput): {
+  canonicalParticipantId: (participantId: string) => string;
+  recipients: Map<string, ActiveRecipient>;
+  balances: Map<string, Map<string, number>>;
+} {
   const canonicalParticipantId = buildParticipantCanonicalResolver(
     input.participants.map((participant) => ({
       id: participant.id,
@@ -403,6 +413,13 @@ export function buildGroupSettlementEdges(
     addBalance(balances, toId, currency, -amount);
   }
 
+  return { canonicalParticipantId, recipients, balances };
+}
+
+export function buildGroupSettlementEdges(
+  input: BuildGroupSettlementEdgesInput,
+): SettlementReminderEdge[] {
+  const { recipients, balances } = resolveGroupBalances(input);
   const balancesByCurrency = new Map<string, Array<{ participant_id: string; amount: number }>>();
   for (const [participantId, currencyBalances] of balances.entries()) {
     for (const [currency, amount] of currencyBalances.entries()) {
@@ -460,6 +477,33 @@ export function buildGroupSettlementEdges(
   }
 
   return edges;
+}
+
+export function buildMemberOwedTotals(
+  input: BuildGroupSettlementEdgesInput,
+): MemberOwedTotal[] {
+  const { canonicalParticipantId, balances } = resolveGroupBalances(input);
+  const totals: MemberOwedTotal[] = [];
+
+  for (const participant of input.participants) {
+    if (participant.type !== 'member' || !participant.user_id) continue;
+    const canonicalId = canonicalParticipantId(participant.id);
+    if (canonicalId !== participant.id) continue;
+    const currencyBalances = balances.get(canonicalId);
+    if (!currencyBalances) continue;
+    for (const [currency, amount] of currencyBalances.entries()) {
+      if (amount >= -MIN_ACTIONABLE_BALANCE) continue;
+      totals.push({
+        group_id: input.group.id,
+        group_name: input.group.name,
+        user_id: participant.user_id,
+        amount: Math.abs(roundMoney(amount)),
+        currency,
+      });
+    }
+  }
+
+  return totals;
 }
 
 function addAction(

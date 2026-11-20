@@ -7,6 +7,7 @@ import { log } from '../_shared/logger.ts';
 import {
   aggregateMonthlyReminderEmails,
   buildGroupSettlementEdges,
+  buildMemberOwedTotals,
   getDeliveryReservationMode,
   getPreviousMonthPeriodKey,
   type ReminderEmail,
@@ -16,6 +17,15 @@ import {
   type ReminderSettlement,
   type ReminderTransaction,
 } from '../_shared/monthly-reminders.ts';
+import {
+  composeBalanceNudgePush,
+  deliveryKey,
+  isCadenceDue,
+  selectBalanceNudgeCandidates,
+  utcDayKey,
+  userGroupKey,
+  type BalanceNudgeCadence,
+} from '../_shared/balance-nudges.ts';
 import { createEmptyResponse, createSuccessResponse } from '../_shared/response.ts';
 
 interface ReminderRunRow {
@@ -428,6 +438,290 @@ async function markDeliveryFailed(
   if (error) throw error;
 }
 
+
+interface BalanceNudgePrefsRow {
+  user_id: string;
+  push_enabled: boolean | null;
+  permission_status: string | null;
+}
+
+interface BalanceNudgeTokenRow {
+  user_id: string;
+  expo_push_token: string;
+}
+
+function nextUtcDayStart(dayKey: string): Date {
+  const start = new Date(`${dayKey}T00:00:00.000Z`);
+  start.setUTCDate(start.getUTCDate() + 1);
+  return start;
+}
+
+async function runBalanceNudges(
+  supabase: SupabaseClient,
+  options: { dryRun: boolean; now: Date },
+) {
+  const dayKey = utcDayKey(options.now);
+  const dayStart = new Date(`${dayKey}T00:00:00.000Z`);
+  const dayEnd = nextUtcDayStart(dayKey);
+
+  const cadenceRows = await fetchAllRows<{ id: string; balance_nudge_cadence: string }>((from, to) =>
+    supabase
+      .from('groups')
+      .select('id, balance_nudge_cadence')
+      .in('balance_nudge_cadence', ['weekly', 'monthly'])
+      .range(from, to)
+  );
+
+  const dueGroups = cadenceRows.filter((group) =>
+    isCadenceDue((group.balance_nudge_cadence as BalanceNudgeCadence) ?? 'off', options.now),
+  );
+  if (dueGroups.length === 0) {
+    return {
+      job: 'balance_nudges',
+      day_key: dayKey,
+      dry_run: options.dryRun,
+      due_groups: 0,
+      candidates: 0,
+      sent: 0,
+      skipped: 0,
+      failed: 0,
+    };
+  }
+
+  const dueIds = new Set(dueGroups.map((group) => group.id));
+  const groupCadenceById = new Map(
+    dueGroups.map((group) => [group.id, group.balance_nudge_cadence as BalanceNudgeCadence]),
+  );
+
+  const inputs = await fetchReminderInputs(supabase);
+  const participantsByGroup = new Map<string, ReminderParticipant[]>();
+  const transactionsByGroup = new Map<string, ReminderTransaction[]>();
+  const settlementsByGroup = new Map<string, ReminderSettlement[]>();
+
+  for (const participant of inputs.participants) {
+    if (!dueIds.has(participant.group_id)) continue;
+    if (!participantsByGroup.has(participant.group_id)) {
+      participantsByGroup.set(participant.group_id, []);
+    }
+    participantsByGroup.get(participant.group_id)!.push(participant);
+  }
+  for (const transaction of inputs.transactions) {
+    if (!dueIds.has(transaction.group_id)) continue;
+    if (!transactionsByGroup.has(transaction.group_id)) {
+      transactionsByGroup.set(transaction.group_id, []);
+    }
+    transactionsByGroup.get(transaction.group_id)!.push(transaction);
+  }
+  for (const settlement of inputs.settlements) {
+    if (!dueIds.has(settlement.group_id)) continue;
+    if (!settlementsByGroup.has(settlement.group_id)) {
+      settlementsByGroup.set(settlement.group_id, []);
+    }
+    settlementsByGroup.get(settlement.group_id)!.push(settlement);
+  }
+
+  const owedTotals = inputs.groups
+    .filter((group) => dueIds.has(group.id))
+    .flatMap((group) =>
+      buildMemberOwedTotals({
+        group,
+        participants: participantsByGroup.get(group.id) || [],
+        transactions: transactionsByGroup.get(group.id) || [],
+        settlements: settlementsByGroup.get(group.id) || [],
+        userIdToEmail: inputs.userIdToEmail,
+      }),
+    );
+
+  const muteRows = await fetchAllRows<{ user_id: string; group_id: string }>((from, to) =>
+    supabase
+      .from('group_balance_nudge_mutes')
+      .select('user_id, group_id')
+      .in('group_id', [...dueIds])
+      .range(from, to)
+  );
+  const emailRows = await fetchAllRows<{ user_id: string; sent_at: string | null; status: string }>((from, to) =>
+    supabase
+      .from('monthly_reminder_deliveries')
+      .select('user_id, sent_at, status')
+      .eq('status', 'sent')
+      .gte('sent_at', dayStart.toISOString())
+      .lt('sent_at', dayEnd.toISOString())
+      .range(from, to)
+  );
+  const deliveryRows = await fetchAllRows<{
+    user_id: string;
+    group_id: string;
+    currency: string;
+    status: string;
+  }>((from, to) =>
+    supabase
+      .from('balance_nudge_deliveries')
+      .select('user_id, group_id, currency, status')
+      .eq('channel', 'push')
+      .eq('day_key', dayKey)
+      .in('status', ['sent', 'skipped'])
+      .range(from, to)
+  );
+
+  const candidates = selectBalanceNudgeCandidates({
+    owedTotals,
+    groupCadenceById,
+    mutedUserGroupKeys: new Set(muteRows.map((row) => userGroupKey(row.user_id, row.group_id))),
+    emailedUserIds: new Set(emailRows.map((row) => row.user_id)),
+    alreadyDeliveredKeys: new Set(
+      deliveryRows.map((row) => deliveryKey(row.user_id, row.group_id, row.currency)),
+    ),
+    now: options.now,
+  });
+
+  if (options.dryRun) {
+    return {
+      job: 'balance_nudges',
+      day_key: dayKey,
+      dry_run: true,
+      due_groups: dueIds.size,
+      candidates: candidates.length,
+      sent: 0,
+      skipped: 0,
+      failed: 0,
+    };
+  }
+
+  const userIds = [...new Set(candidates.map((candidate) => candidate.userId))];
+  const prefs = userIds.length
+    ? await fetchAllRows<BalanceNudgePrefsRow>((from, to) =>
+      supabase
+        .from('notification_preferences')
+        .select('user_id, push_enabled, permission_status')
+        .in('user_id', userIds)
+        .range(from, to)
+    )
+    : [];
+  const tokens = userIds.length
+    ? await fetchAllRows<BalanceNudgeTokenRow>((from, to) =>
+      supabase
+        .from('push_tokens')
+        .select('user_id, expo_push_token')
+        .in('user_id', userIds)
+        .range(from, to)
+    )
+    : [];
+
+  const prefByUser = new Map(prefs.map((row) => [row.user_id, row]));
+  const tokensByUser = new Map<string, string[]>();
+  for (const row of tokens) {
+    if (!row.expo_push_token) continue;
+    const list = tokensByUser.get(row.user_id) || [];
+    list.push(row.expo_push_token);
+    tokensByUser.set(row.user_id, list);
+  }
+
+  let sent = 0;
+  let skipped = 0;
+  let failed = 0;
+
+  for (const candidate of candidates) {
+    const push = composeBalanceNudgePush(candidate);
+    const preference = prefByUser.get(candidate.userId);
+    const userTokens = tokensByUser.get(candidate.userId) || [];
+    const canPush = preference?.push_enabled === true
+      && preference.permission_status === 'granted'
+      && userTokens.length > 0;
+
+    let status: 'sent' | 'skipped' | 'failed' = 'skipped';
+    if (!canPush) {
+      status = 'skipped';
+      skipped += 1;
+    } else {
+      const ok = await sendBalanceNudgePush(userTokens, push);
+      status = ok ? 'sent' : 'failed';
+      if (ok) sent += 1;
+      else failed += 1;
+    }
+
+    const { error } = await supabase.from('balance_nudge_deliveries').upsert({
+      user_id: candidate.userId,
+      group_id: candidate.groupId,
+      currency: candidate.currency,
+      channel: 'push',
+      day_key: dayKey,
+      status,
+    }, { onConflict: 'user_id,group_id,currency,channel,day_key' });
+    if (error) {
+      log.error('Failed to record balance nudge delivery', 'monthly-reminders', {
+        userId: candidate.userId,
+        groupId: candidate.groupId,
+        error: sanitizeError(error),
+      });
+    }
+  }
+
+  return {
+    job: 'balance_nudges',
+    day_key: dayKey,
+    dry_run: false,
+    due_groups: dueIds.size,
+    candidates: candidates.length,
+    sent,
+    skipped,
+    failed,
+  };
+}
+
+async function sendBalanceNudgePush(
+  tokens: string[],
+  push: { title: string; body: string; data: Record<string, string | number> },
+): Promise<boolean> {
+  const provider = Deno.env.get('PUSH_PROVIDER')?.toLowerCase();
+  if (provider === 'console' || provider === 'local') {
+    log.info('Console balance nudge push', 'monthly-reminders', {
+      tokens: tokens.length,
+      title: push.title,
+      body: push.body,
+    });
+    return true;
+  }
+
+  try {
+    const headers: Record<string, string> = {
+      'Accept': 'application/json',
+      'Accept-Encoding': 'gzip, deflate',
+      'Content-Type': 'application/json',
+    };
+    const accessToken = Deno.env.get('EXPO_ACCESS_TOKEN');
+    if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+
+    const response = await fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(tokens.map((to) => ({
+        to,
+        title: push.title,
+        body: push.body,
+        sound: 'default',
+        data: push.data,
+      }))),
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      log.error('Expo balance nudge push failed', 'monthly-reminders', {
+        status: response.status,
+        error: text.slice(0, 500),
+      });
+      return false;
+    }
+    return true;
+  } catch (error) {
+    log.error('Expo balance nudge push threw', 'monthly-reminders', {
+      error: sanitizeError(error),
+    });
+    return false;
+  }
+}
+
+// POST body { job: 'balance_nudges' } sends #417 per-group balance nudge
+// pushes (default cadence off). The existing monthly email path is unchanged
+// when job is omitted. WhatsApp is out of scope.
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return createEmptyResponse(200, req);
@@ -449,6 +743,37 @@ Deno.serve(async (req: Request) => {
 
     const url = new URL(req.url);
     const dryRun = url.searchParams.get('dry_run') === 'true';
+    let requestedJob = url.searchParams.get('job') === 'balance_nudges' ? 'balance_nudges' : 'monthly_emails';
+    let scheduledAt = new Date();
+    if (req.method === 'POST') {
+      const raw = await req.text();
+      if (raw.trim()) {
+        let body: { job?: string; scheduled_at?: string };
+        try {
+          body = JSON.parse(raw) as { job?: string; scheduled_at?: string };
+        } catch {
+          return createErrorResponse(400, 'Invalid JSON body', 'VALIDATION_ERROR', undefined, req);
+        }
+        if (body.job === 'balance_nudges') requestedJob = 'balance_nudges';
+        if (typeof body.scheduled_at === 'string' && !Number.isNaN(Date.parse(body.scheduled_at))) {
+          scheduledAt = new Date(body.scheduled_at);
+        }
+      }
+    }
+
+    supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+    });
+
+    if (requestedJob === 'balance_nudges') {
+      const result = await runBalanceNudges(supabase, { dryRun, now: scheduledAt });
+      return createSuccessResponse(result, 200, 0, req);
+    }
+
     const periodKey = getPreviousMonthPeriodKey();
     const appUrl = requireSecret('APP_URL');
     const logoUrl = getOptionalSecret('REMINDER_LOGO_URL');
@@ -460,14 +785,6 @@ Deno.serve(async (req: Request) => {
       requireSecret('RESEND_API_KEY');
       requireSecret('REMINDER_FROM_EMAIL');
     }
-
-    supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-        detectSessionInUrl: false,
-      },
-    });
 
     const inputs = await fetchReminderInputs(supabase);
     const lastSeenByUserId = await loadLastSeenByUserId(

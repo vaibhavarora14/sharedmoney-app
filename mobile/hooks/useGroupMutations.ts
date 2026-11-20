@@ -223,6 +223,58 @@ export function useUpdateGroup(onSuccess?: () => void) {
   };
 }
 
+
+export type BalanceNudgeCadence = "off" | "weekly" | "monthly";
+
+export function useUpdateGroupBalanceNudges(onSuccess?: () => void) {
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: async (variables: {
+      groupId: string;
+      balance_nudge_cadence?: BalanceNudgeCadence;
+      mute_balance_nudges?: boolean;
+    }) => {
+      const payload: Record<string, string | boolean> = {};
+      if (variables.balance_nudge_cadence !== undefined) {
+        payload.balance_nudge_cadence = variables.balance_nudge_cadence;
+      }
+      if (variables.mute_balance_nudges !== undefined) {
+        payload.mute_balance_nudges = variables.mute_balance_nudges;
+      }
+      if (Object.keys(payload).length === 0) {
+        throw new Error("Provide a cadence or mute setting to update");
+      }
+
+      const response = await fetchWithAuth(`/groups/${variables.groupId}`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      });
+
+      return response.json() as Promise<Group>;
+    },
+    onSuccess: (result, variables) => {
+      invalidateGroupAdjacents(queryClient, variables.groupId);
+      queryClient.setQueryData<Group[]>(queryKeys.groups, (current) =>
+        (current || []).map((item) =>
+          item.id === result.id ? { ...item, ...result } : item
+        )
+      );
+      queryClient.setQueryData<GroupWithMembers | null>(
+        queryKeys.group(variables.groupId),
+        (current) => (current ? { ...current, ...result } : current)
+      );
+      onSuccess?.();
+    },
+  });
+
+  return {
+    mutate: mutation.mutateAsync,
+    isLoading: mutation.isPending,
+    error: (mutation.error as Error | null) ?? null,
+  };
+}
+
 export function useUpdateGroupDefaultSplit(onSuccess?: () => void) {
   const queryClient = useQueryClient();
 

@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Alert,
@@ -25,6 +25,8 @@ import {
   FAB,
   Menu,
   Portal,
+  RadioButton,
+  Switch,
   Text,
   TextInput,
   useTheme
@@ -60,7 +62,7 @@ import {
   useCancelInvitation,
   useGroupInvitations,
 } from "../hooks/useGroupInvitations";
-import { useRemoveMember, useUpdateGroup, useUpdateGroupDefaultSplit, useArchiveGroup, useUnarchiveGroup, useHideGroupFromLists } from "../hooks/useGroupMutations";
+import { useRemoveMember, useUpdateGroup, useUpdateGroupBalanceNudges, useUpdateGroupDefaultSplit, useArchiveGroup, useUnarchiveGroup, useHideGroupFromLists } from "../hooks/useGroupMutations";
 import { useGroupDetails } from "../hooks/useGroups";
 import { SafetyTarget, useModeration } from "../hooks/useModeration";
 import {
@@ -227,6 +229,9 @@ interface GroupDetailsScreenProps {
   captureHardwareBack?: boolean;
   /** Epoch ms when the user started opening this group (tap / deep link). */
   openStartedAtMs?: number;
+  /** Open the settle list after balances load (balance nudge deep link). */
+  openSettleOnMount?: boolean;
+  onSettleOpened?: () => void;
 }
 
 export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
@@ -247,6 +252,8 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   onHighlightedTransactionShown,
   captureHardwareBack = true,
   openStartedAtMs,
+  openSettleOnMount = false,
+  onSettleOpened,
 }) => {
   const [leaving, setLeaving] = useState<boolean>(false);
   const [membershipActionLoading, setMembershipActionLoading] = useState<boolean>(false);
@@ -280,6 +287,10 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const [searchFilter, setSearchFilter] = useState<TransactionSearchFilter>("all");
   const [searchOpen, setSearchOpen] = useState(false);
   const [settleListOpen, setSettleListOpen] = useState(false);
+  const [showBalanceNudges, setShowBalanceNudges] = useState(false);
+  const [draftNudgeCadence, setDraftNudgeCadence] = useState<"off" | "weekly" | "monthly">("off");
+  const [draftNudgeMuted, setDraftNudgeMuted] = useState(false);
+  const settleOpenedFromNudgeRef = useRef(false);
   const [compactHeader, setCompactHeader] = useState(false);
   const [detailItem, setDetailItem] = useState<
     | { kind: "expense"; transaction: Transaction }
@@ -673,6 +684,18 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const updateGroupMutation = useUpdateGroup(() => {
     void refetchGroup();
   });
+  const updateBalanceNudgesMutation = useUpdateGroupBalanceNudges(() => {
+    void refetchGroup();
+  });
+
+  useEffect(() => {
+    if (!openSettleOnMount || settleOpenedFromNudgeRef.current || balancesLoading) {
+      return;
+    }
+    settleOpenedFromNudgeRef.current = true;
+    setSettleListOpen(true);
+    onSettleOpened?.();
+  }, [openSettleOnMount, balancesLoading, onSettleOpened]);
   const inviteParticipant = useInviteParticipant(() => {
     refetchParticipants();
     refetchInvites();
@@ -2228,6 +2251,19 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                   testID="group-menu-default-split"
                 />
                 ) : null}
+                {isActiveMember && group.kind !== "direct" ? (
+                <Menu.Item
+                  onPress={() => {
+                    handleCloseMenu();
+                    setDraftNudgeCadence(group.balance_nudge_cadence || "off");
+                    setDraftNudgeMuted(group.balance_nudge_muted === true);
+                    setShowBalanceNudges(true);
+                  }}
+                  title="Balance nudges"
+                  leadingIcon="bell-outline"
+                  testID="group-menu-balance-nudges"
+                />
+                ) : null}
                 <Menu.Item
                   onPress={() => {
                     handleCloseMenu();
@@ -2821,6 +2857,78 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
         }}
       />
 
+
+      <Portal>
+        <Dialog
+          visible={showBalanceNudges}
+          onDismiss={() => setShowBalanceNudges(false)}
+          testID="balance-nudges-dialog"
+        >
+          <Dialog.Title>Balance nudges</Dialog.Title>
+          <Dialog.Content>
+            <Text variant="bodyMedium" style={{ marginBottom: 12 }}>
+              Members who owe more than a small amount get a push on a schedule. Default is off. Weekly is Mondays at 9:00 UTC. Monthly is the 1st at 9:00 UTC.
+            </Text>
+            {isOwner ? (
+              <RadioButton.Group
+                onValueChange={(value) => {
+                  if (value === "off" || value === "weekly" || value === "monthly") {
+                    setDraftNudgeCadence(value);
+                  }
+                }}
+                value={draftNudgeCadence}
+              >
+                <RadioButton.Item label="Off" value="off" testID="balance-nudge-cadence-off" />
+                <RadioButton.Item label="Weekly" value="weekly" testID="balance-nudge-cadence-weekly" />
+                <RadioButton.Item label="Monthly" value="monthly" testID="balance-nudge-cadence-monthly" />
+              </RadioButton.Group>
+            ) : (
+              <Text variant="bodySmall" style={{ marginBottom: 12 }}>
+                Cadence is {group.balance_nudge_cadence || "off"}. Only owners can change it.
+              </Text>
+            )}
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 8 }}>
+              <Text variant="bodyMedium">Mute nudges for me</Text>
+              <Switch
+                value={draftNudgeMuted}
+                onValueChange={setDraftNudgeMuted}
+                testID="balance-nudge-mute-switch"
+              />
+            </View>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setShowBalanceNudges(false)}>Cancel</Button>
+            <Button
+              onPress={() => {
+                void (async () => {
+                  try {
+                    const payload: {
+                      groupId: string;
+                      balance_nudge_cadence?: "off" | "weekly" | "monthly";
+                      mute_balance_nudges?: boolean;
+                    } = { groupId: group.id, mute_balance_nudges: draftNudgeMuted };
+                    if (isOwner) {
+                      payload.balance_nudge_cadence = draftNudgeCadence;
+                    }
+                    await updateBalanceNudgesMutation.mutate(payload);
+                    setShowBalanceNudges(false);
+                  } catch (error) {
+                    Alert.alert(
+                      "Couldn’t save balance nudges",
+                      error instanceof Error ? error.message : "Please try again.",
+                    );
+                  }
+                })();
+              }}
+              loading={updateBalanceNudgesMutation.isLoading}
+              disabled={updateBalanceNudgesMutation.isLoading}
+              testID="balance-nudge-save"
+            >
+              Save
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
       <GroupDefaultSplitSheet
         visible={showDefaultSplit}
         groupName={group.name}

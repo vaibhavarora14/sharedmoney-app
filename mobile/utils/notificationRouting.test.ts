@@ -25,3 +25,27 @@ Deno.test("Android relaunch placeholders and invalid payloads are ignored", () =
     notification_id: "not-an-id",
   }), null);
 });
+
+Deno.test("balance nudge payloads open the group settle list", () => {
+  assertEquals(resolveNotificationRoute({
+    schema_version: 1,
+    route: "settle",
+    group_id: "12345678-1234-4123-8123-123456789abc",
+  }), {
+    screen: "settle",
+    groupId: "12345678-1234-4123-8123-123456789abc",
+  });
+  assertEquals(resolveNotificationRoute({
+    schema_version: "1",
+    route: "settle",
+    group_id: "12345678-1234-4123-8123-123456789abc",
+  }), {
+    screen: "settle",
+    groupId: "12345678-1234-4123-8123-123456789abc",
+  });
+  assertEquals(resolveNotificationRoute({
+    schema_version: 1,
+    route: "settle",
+    group_id: "not-an-id",
+  }), null);
+});

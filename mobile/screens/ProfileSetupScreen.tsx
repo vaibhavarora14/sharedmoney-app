@@ -43,6 +43,8 @@ import {
 import { useCurrencyPreferences } from "../hooks/useCurrencyPreferences";
 import { useDeferUntilIdle } from "../hooks/useDeferUntilIdle";
 import { useDeleteAccount } from "../hooks/useDeleteAccount";
+import { useUpdateGroupBalanceNudges } from "../hooks/useGroupMutations";
+import { useGroups } from "../hooks/useGroups";
 import { useProfile } from "../hooks/useProfile";
 import { CURRENCIES, getCurrencyName } from "../utils/currency";
 import { openAppExternalUrl } from "../utils/openAppExternalUrl";
@@ -132,6 +134,13 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
   const { signOut, user } = useAuth();
   const isGuest = isGuestUser(user);
   const deleteAccount = useDeleteAccount();
+  const groupsQuery = useGroups({
+    enabled: profileQueriesReady && notificationsEnabled && !isGuest,
+  });
+  const updateBalanceNudges = useUpdateGroupBalanceNudges();
+  const muteableGroups = (groupsQuery.data || []).filter((group) =>
+    group.kind !== "direct" && group.user_status !== "left"
+  );
 
   useEffect(() => {
     if (profile) {
@@ -770,6 +779,51 @@ export const ProfileSetupScreen: React.FC<ProfileSetupScreenProps> = ({
                   }}
                   accessibilityLabel="Push notifications"
                 />
+              </View>
+            ) : null}
+            {notificationsEnabled && !isGuest && muteableGroups.length > 0 ? (
+              <View
+                style={[
+                  styles.notificationSetting,
+                  { borderTopColor: theme.colors.outlineVariant, flexDirection: "column", alignItems: "stretch" },
+                ]}
+              >
+                <Text
+                  variant="titleSmall"
+                  style={{ color: theme.colors.onSurface, fontWeight: "700", marginBottom: 4 }}
+                >
+                  Balance nudges
+                </Text>
+                <Text
+                  variant="bodySmall"
+                  style={{ color: theme.colors.onSurfaceVariant, marginBottom: 8 }}
+                >
+                  Mute automatic balance reminders for a group. Owners set Off, Weekly, or Monthly in the group menu. Default is off.
+                </Text>
+                {muteableGroups.map((group) => (
+                  <View
+                    key={group.id}
+                    style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 8 }}
+                  >
+                    <Text variant="bodyMedium" style={{ flex: 1, marginRight: 12 }} numberOfLines={1}>
+                      {group.name}
+                    </Text>
+                    <Switch
+                      value={group.balance_nudge_muted !== true}
+                      disabled={updateBalanceNudges.isLoading}
+                      onValueChange={(enabled) => {
+                        void updateBalanceNudges.mutate({
+                          groupId: group.id,
+                          mute_balance_nudges: !enabled,
+                        }).catch((error) => {
+                          showErrorAlert(error, signOut, "Balance nudges");
+                        });
+                      }}
+                      accessibilityLabel={`Receive balance nudges for ${group.name}`}
+                      testID={`balance-nudge-mute-${group.id}`}
+                    />
+                  </View>
+                ))}
               </View>
             ) : null}
             </>) : null}

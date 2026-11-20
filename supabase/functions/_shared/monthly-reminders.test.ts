@@ -1,6 +1,7 @@
 import {
   aggregateMonthlyReminderEmails,
   buildGroupSettlementEdges,
+  buildMemberOwedTotals,
   buildUpdateNudge,
   getDeliveryReservationMode,
   getPreviousMonthPeriodKey,
@@ -230,6 +231,52 @@ Deno.test('buildGroupSettlementEdges skips invited, former, no-email, and near-z
   });
 
   assertEquals(edges, []);
+});
+
+Deno.test('buildMemberOwedTotals includes debts to name-only people and skips creditors', () => {
+  const input = {
+    group: { id: 'group-1', name: 'House' },
+    participants: [
+      ...participants,
+      {
+        id: 'guest-participant',
+        group_id: 'group-1',
+        user_id: null,
+        email: null,
+        full_name: 'Roommate',
+        type: 'guest',
+      },
+    ],
+    userIdToEmail: new Map([
+      ['alice-user', 'alice@example.com'],
+      ['bob-user', 'bob@example.com'],
+    ]),
+    transactions: [
+      {
+        id: 1,
+        group_id: 'group-1',
+        amount: 40,
+        currency: 'USD',
+        paid_by_participant_id: 'guest-participant',
+        transaction_splits: [
+          { participant_id: 'alice-participant', amount: 20 },
+          { participant_id: 'guest-participant', amount: 20 },
+        ],
+      },
+    ],
+    settlements: [],
+  };
+
+  assertEquals(buildGroupSettlementEdges(input), []);
+  assertEquals(buildMemberOwedTotals(input), [
+    {
+      group_id: 'group-1',
+      group_name: 'House',
+      user_id: 'alice-user',
+      amount: 20,
+      currency: 'USD',
+    },
+  ]);
 });
 
 Deno.test('aggregateMonthlyReminderEmails creates one digest per user across roles and groups', () => {
