@@ -8,7 +8,13 @@ import { normalizeSeoPath, pageByPath, relatedPages, seoPages } from "./seoPages
 const SPLIT_BILL_TITLE = "Bill Split Calculator: Tax, Tip and Fees, Free | SharedMoney";
 const SPLIT_BILL_DESCRIPTION =
   "Free bill splitter: split a bill with tax, tip and fees, evenly or by weight, for up to 20 people. No sign-up; values stay in your browser.";
-const SPLIT_BILL_H1 = "Split a bill fairly, down to the last cent.";
+const SPLIT_BILL_H1 = "Bill split calculator, down to the last cent.";
+const SPLIT_BILL_EYEBROW = "Free bill split calculator";
+const SPLIT_BILL_TAX_TIP_FAQ = {
+  question: "How do I split a bill with tax and tip?",
+  answer:
+    "Enter the pre-tax subtotal, any tax or fixed fees, and an optional tip. The bill split calculator adds those in before dividing the total equally or by weight, so each person's share includes tax and tip.",
+};
 
 function sitemapLoc(pagePath: string) {
   return `https://sharedmoney.app${pagePath === "/" ? "" : pagePath}`;
@@ -90,20 +96,21 @@ describe("SEO route content", () => {
     );
   });
 
-  it("retargets split-bill calculator search metadata and keeps the visible H1", () => {
+  it("retargets split-bill calculator search metadata, visible H1, and tax/tip FAQ", () => {
     const page = pageByPath.get("/tools/split-bill-calculator");
     expect(page).toBeDefined();
     if (!page) return;
 
     expect(page.path).toBe("/tools/split-bill-calculator");
-    expect(page.updated).toBe("2026-11-13");
+    expect(page.updated).toBe("2026-11-21");
     expect(page.title).toBe(SPLIT_BILL_TITLE);
     expect(page.title.length).toBeLessThanOrEqual(60);
     expect(page.description).toBe(SPLIT_BILL_DESCRIPTION);
     expect(page.description.length).toBeLessThanOrEqual(155);
     expect(page.description).toContain("bill splitter");
     expect(page.heading).toBe(SPLIT_BILL_H1);
-    expect(page.eyebrow).toBe("Free split bill calculator");
+    expect(page.eyebrow).toBe(SPLIT_BILL_EYEBROW);
+    expect(page.faqs[0]).toEqual(SPLIT_BILL_TAX_TIP_FAQ);
     expect(page.body).toBe(
       "Add the subtotal, fixed fees, optional tip, currency, and the people sharing the bill. Choose equal weights or adjust weights for an uneven split; your values stay in this browser.",
     );

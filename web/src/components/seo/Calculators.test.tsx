@@ -2,7 +2,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { platformDestinations } from "../../landingContent";
 import { StoreBadges } from "../landing/StoreBadges";
-import { calculatorRecordCta, SettleUpResult, SplitBillResult } from "./Calculators";
+import { pageByPath } from "../../seoPages";
+import { calculatorRecordCta, Calculator, SettleUpResult, SplitBillResult } from "./Calculators";
 
 const primaryDestination = platformDestinations.find((destination) => destination.platform === "android");
 
@@ -22,6 +23,19 @@ function expectCalculatorRecordCta(html: string, placement: string) {
 }
 
 describe("calculator result install CTA", () => {
+  it("offers an in-calculator app CTA before a split-bill result", () => {
+    if (!primaryDestination) throw new Error("missing android destination");
+    const page = pageByPath.get("/tools/split-bill-calculator");
+    if (!page) throw new Error("missing split-bill calculator page");
+    const html = renderToStaticMarkup(
+      <Calculator page={page} primaryDestination={primaryDestination} />,
+    );
+
+    expect(html).toContain("Calculate split");
+    expect(html).not.toContain("Total bill");
+    expectCalculatorRecordCta(html, "split_bill_form");
+  });
+
   it("offers a shared-record CTA with source=calculator on a split-bill result", () => {
     if (!primaryDestination) throw new Error("missing android destination");
     const html = renderToStaticMarkup(
