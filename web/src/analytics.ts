@@ -15,14 +15,14 @@ import { detectDevice } from "./utils/deviceDetection";
 type PostHogClient = typeof import("posthog-js").default;
 
 /**
- * Standard `$pageview` and `$web_vitals` for the marketing site.
+ * Standard `$pageview`, `$pageleave`, and `$web_vitals` for the marketing site.
  * `web_vitals: true` overrides PostHog remote config so capture does not
  * depend on a project setting. Session replay and autocapture stay off.
  */
 export const marketingPostHogClientOptions = {
   autocapture: false,
   capture_pageview: true,
-  capture_pageleave: false,
+  capture_pageleave: true,
   capture_performance: { web_vitals: true },
   disable_session_recording: true,
   person_profiles: "never",
