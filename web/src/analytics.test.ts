@@ -15,6 +15,7 @@ describe("SSR CTA destination resolution", () => {
 
   it("captures pageviews and web vitals without session replay", () => {
     expect(marketingPostHogClientOptions.capture_pageview).toBe(true);
+    expect(marketingPostHogClientOptions.capture_pageleave).toBe(true);
     expect(marketingPostHogClientOptions.capture_performance.web_vitals).toBe(true);
     expect(marketingPostHogClientOptions.autocapture).toBe(false);
     expect(marketingPostHogClientOptions.disable_session_recording).toBe(true);
