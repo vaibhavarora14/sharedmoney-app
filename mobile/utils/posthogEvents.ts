@@ -55,6 +55,7 @@
  *   from_cache, cache_status hit|miss|partial),
  * `groups_home_loaded` (home list rendered; props: duration_ms, group_count,
  *   from_cache; duration_ms is visit start → list commit),
+ * `balance_breakdown_opened` (person row on group balances; no names or amounts),
  * `upi_pay_tapped` (settle Pay via UPI; never include VPA),
  * `upi_id_saved` (profile UPI ID saved; never include VPA),
  * `review_prompt_requested` (native in-app review API invoked),
@@ -104,6 +105,8 @@ export const ANALYTICS_EVENTS = {
   APP_UPDATE_STARTED: "app_update_started",
   /** Home settle sheet opened. source: home_header | home_empty */
   QUICK_SETTLE_OPENED: "quick_settle_opened",
+  /** Person balance row opened to show expenses/payments. No names or amounts. */
+  BALANCE_BREAKDOWN_OPENED: "balance_breakdown_opened",
   /** A direct payment or debt was saved. Amounts are never included. */
   QUICK_SETTLE_RECORDED: "quick_settle_recorded",
   /** Existing group balances were offered before a direct record. */

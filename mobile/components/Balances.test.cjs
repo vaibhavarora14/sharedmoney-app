@@ -623,6 +623,21 @@ test("BalancesSection person rows stay non-actionable even with onSettleUp", () 
     assert.notEqual(node.props.accessibilityRole, "button");
   }
 });
+test("dashboard prefers onBalancePress over onSettlePress for the person row", () => {
+  let breakdown = null;
+  let settled = null;
+  const tree = dashboard([balance("me", 50), balance("Alice", -50)], {
+    onBalancePress: (row) => { breakdown = row; },
+    onSettlePress: (row) => { settled = row; },
+  });
+  const rows = settlementRows(tree);
+  assert.equal(rows.length, 1);
+  rows[0].props.onPress();
+  assert.equal(breakdown?.full_name, "Alice");
+  assert.equal(settled, null);
+  assert.match(rows[0].props.accessibilityHint, /breakdown of the expenses and payments/);
+});
+
 test("GroupDashboard settlement rows are pressable only when pressed", () => {
   let pressed = null;
   const tree = dashboard([balance("me", 50), balance("Alice", -50)], {
@@ -744,6 +759,7 @@ test("GroupDetailsScreen wires balanceError and gates onSettlePress for active m
   assert.match(source, /error:\s*balancesError/);
   assert.match(source, /balanceError=\{\!\!balancesError\}/);
   assert.match(source, /onSettlePress=\{isActiveMember && !balancesError \? handleSettleUp : undefined\}/);
+  assert.match(source, /onBalancePress=\{!balancesError \? handleBalancePress : undefined\}/);
   assert.match(source, /if\s*\(\s*!isActiveMember\s*\|\|\s*balancesError\s*\)\s*return/);
 });
 
