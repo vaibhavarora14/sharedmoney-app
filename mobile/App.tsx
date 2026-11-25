@@ -129,6 +129,10 @@ import { NotificationDetailScreen } from "./screens/NotificationDetailScreen";
 import { NotificationsScreen } from "./screens/NotificationsScreen";
 import { CurrencyMergePreviewScreen } from "./screens/CurrencyMergePreviewScreen";
 import { HomePolishPreviewScreen } from "./screens/HomePolishPreviewScreen";
+import {
+  BalanceBreakdownPreviewScreen,
+  readBalanceBreakdownShot,
+} from "./screens/BalanceBreakdownPreviewScreen";
 import { ProfileBootSkeleton, ProfileSetupScreen } from "./screens/ProfileSetupScreen";
 import { SplitwiseImportScreen } from "./screens/SplitwiseImportScreen";
 import { GuestSessionHost } from "./components/guest/GuestSessionHost";
@@ -1437,6 +1441,7 @@ function AppContent() {
   const showPeopleSettlementsPreview = previewParam === "people-settlements";
   const showTodayRefinedPreview = previewParam === "today-refined";
   const showHomePolishPreview = previewParam === "home-polish";
+  const showBalanceBreakdownPreview = previewParam === "balance-breakdown";
 
   if (showCurrencyMergePreview) {
     return (
@@ -1470,6 +1475,20 @@ function AppContent() {
       <>
         <HomePolishPreviewScreen />
         <StatusBar style="dark" />
+      </>
+    );
+  }
+
+  if (showBalanceBreakdownPreview) {
+    const href = Platform.OS === "web" && typeof window !== "undefined" ? window.location.href : "";
+    const dark = /[?&]theme=dark/.test(href);
+    return (
+      <>
+        <BalanceBreakdownPreviewScreen
+          shot={readBalanceBreakdownShot(href)}
+          dark={dark}
+        />
+        <StatusBar style={dark ? "light" : "dark"} />
       </>
     );
   }

@@ -110,7 +110,7 @@ import {
   isExportCancel,
   nativePdfExportAvailable,
 } from "../utils/groupExportDelivery";
-import { loadGroupExportSource } from "../utils/groupExportLoad";
+import { fetchAllGroupTransactions, loadGroupExportSource } from "../utils/groupExportLoad";
 import { resolveSettlementPerson } from "../utils/groupExportNames";
 import {
   buildGroupExportPdfHtml,
@@ -198,6 +198,7 @@ import {
 import { captureIdentifiedAnalyticsEvent } from "../utils/posthogAnalytics";
 import { ANALYTICS_EVENTS } from "../utils/posthogEvents";
 import { GroupStatsMode } from "./GroupStatsScreen";
+import { BalanceBreakdownScreen } from "./BalanceBreakdownScreen";
 import { SettlementFormScreen } from "./SettlementFormScreen";
 import { TransactionDetailScreen } from "./TransactionDetailScreen";
 import { resolveGroupPosition } from "../utils/groupPosition";
@@ -271,6 +272,9 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const [whatsAppInstalled, setWhatsAppInstalled] = useState(false);
   const [showSettlementForm, setShowSettlementForm] = useState<boolean>(false);
   const [settlingBalance, setSettlingBalance] = useState<Balance | null>(null);
+  const [breakdownBalance, setBreakdownBalance] = useState<Balance | null>(null);
+  const [breakdownExpenses, setBreakdownExpenses] = useState<Transaction[]>([]);
+  const [breakdownLoading, setBreakdownLoading] = useState(false);
   const [editingSettlement, setEditingSettlement] = useState<Settlement | null>(
     null
   );
@@ -1389,6 +1393,39 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     setShowSettlementForm(true);
   };
 
+  const handleBalancePress = (balance: Balance) => {
+    if (balancesError) return;
+    setBreakdownBalance(balance);
+    captureIdentifiedAnalyticsEvent(
+      session?.user?.id,
+      ANALYTICS_EVENTS.BALANCE_BREAKDOWN_OPENED,
+      { platform: Platform.OS },
+    );
+    const ledgerComplete = !txLoading && !txHasNextPage;
+    if (ledgerComplete) {
+      setBreakdownExpenses(transactions);
+      setBreakdownLoading(false);
+      return;
+    }
+    setBreakdownLoading(true);
+    void fetchAllGroupTransactions(group.id)
+      .then((items) => {
+        setBreakdownExpenses(items);
+      })
+      .catch(() => {
+        setBreakdownExpenses(transactions);
+      })
+      .finally(() => {
+        setBreakdownLoading(false);
+      });
+  };
+
+  const handleSettleFromBreakdown = () => {
+    const balance = breakdownBalance;
+    setBreakdownBalance(null);
+    if (balance) handleSettleUp(balance);
+  };
+
   useEffect(() => {
     if (Platform.OS === "web") {
       setWhatsAppInstalled(false);
@@ -1750,6 +1787,8 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     setSettleListOpen(false);
     setCompactHeader(false);
     setDetailItem(null);
+    setBreakdownBalance(null);
+    setBreakdownExpenses([]);
     const timer = setTimeout(() => setCalmReady(true), 800);
     return () => clearTimeout(timer);
   }, [initialGroup.id]);
@@ -2536,6 +2575,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                 participants={participants}
                 unifyBalances={group.unify_balances}
                 balanceError={!!balancesError}
+                onBalancePress={!balancesError ? handleBalancePress : undefined}
                 onSettlePress={isActiveMember && !balancesError ? handleSettleUp : undefined}
                 onShareSummaryChange={isActiveMember && !balancesError ? handleShareSummaryChange : undefined}
                 onBalancesRetry={() => {
@@ -2866,6 +2906,23 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
         onDismiss={dismissSafetyAction}
         onReport={handleReportContent}
         onBlock={handleBlockUser}
+      />
+
+      <BalanceBreakdownScreen
+        visible={!!breakdownBalance}
+        balance={breakdownBalance}
+        expenses={breakdownExpenses}
+        settlements={settlements}
+        participants={participants}
+        currentUserId={session?.user?.id}
+        currentUserParticipantId={participants.find((person) => person.user_id === session?.user?.id)?.id}
+        loading={breakdownLoading}
+        unifyEnabled={groupSettings?.enabled === true && !!groupSettings.settlementCurrency}
+        settlementCurrency={groupSettings?.settlementCurrency || getDefaultCurrency()}
+        defaultCurrency={getDefaultCurrency()}
+        rateBook={rateBook}
+        onDismiss={() => setBreakdownBalance(null)}
+        onSettleUp={isActiveMember && !balancesError ? handleSettleFromBreakdown : undefined}
       />
 
       {/* Settlement form modal — Remind lives here for owes-you creates only */}

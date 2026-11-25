@@ -56,6 +56,12 @@ interface GroupDashboardProps {
   statsLoading?: boolean;
   balanceError?: boolean;
   defaultCurrency?: string;
+  /**
+   * Opens a breakdown of the expenses and payments behind this person row.
+   * Falls back to `onSettlePress` when omitted so existing settle-only
+   * surfaces stay tappable.
+   */
+  onBalancePress?: (balance: Balance) => void;
   /** Opens SettlementFormScreen for a viewer-involved settlement edge. Does not mutate data. */
   onSettlePress?: (balance: Balance) => void;
   /** Reports whether a non-empty group settle-up summary can be shared. */
@@ -109,6 +115,7 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
   loading,
   balanceError = false,
   defaultCurrency = getDefaultCurrency(),
+  onBalancePress,
   onSettlePress,
   onShareSummaryChange,
   onOpenCurrencySettings,
@@ -333,7 +340,8 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
         ? theme.colors.onTertiaryContainer
         : theme.colors.onSecondaryContainer;
       const isConverted = !unifyEnabled || balance.currency.toUpperCase() === settlementCurrency.toUpperCase();
-      const Row = onSettlePress ? TouchableRipple : View;
+      const rowAction = onBalancePress ?? onSettlePress;
+      const Row = rowAction ? TouchableRipple : View;
       const a11yName = isFormer ? `${name} (Former)` : name;
       const a11yPresence = presenceCaption ? `, ${presenceCaption}` : "";
       const a11yOwes = isOwed
@@ -343,6 +351,11 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
       const nameColor = isFormer
         ? theme.colors.onSurfaceVariant
         : theme.colors.onSurface;
+      const a11yHint = onBalancePress
+        ? "Opens a breakdown of the expenses and payments behind this balance."
+        : onSettlePress
+          ? "Opens the payment record form. No payment is recorded until confirmed."
+          : undefined;
       return (
         <View
           key={`${rowKey}-${currency}-${index}`}
@@ -350,11 +363,11 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
         >
           <Row
             testID={`settlement-row-${rowKey}-${currency}`}
-            onPress={onSettlePress ? () => onSettlePress(balance) : undefined}
+            onPress={rowAction ? () => rowAction(balance) : undefined}
             accessible
-            accessibilityRole={onSettlePress ? "button" : undefined}
+            accessibilityRole={rowAction ? "button" : undefined}
             accessibilityLabel={`${a11yOwes}, ${signedAmount}`}
-            accessibilityHint={onSettlePress ? "Opens the payment record form. No payment is recorded until confirmed." : undefined}
+            accessibilityHint={a11yHint}
             style={styles.settlementRow}
           >
             {/* Avatar + chevron centre on the full (1- or 2-line) block. */}
@@ -448,7 +461,7 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
                   {signedAmount}
                 </Text>
               </View>
-              {onSettlePress ? <MaterialCommunityIcons
+              {rowAction ? <MaterialCommunityIcons
                 name="chevron-right"
                 size={22}
                 color={theme.colors.onSurfaceVariant}

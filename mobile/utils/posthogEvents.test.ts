@@ -48,6 +48,10 @@ Deno.test("review prompt requested event name is stable", () => {
   assertEquals(ANALYTICS_EVENTS.REVIEW_PROMPT_REQUESTED, "review_prompt_requested");
 });
 
+Deno.test("balance breakdown opened event name is stable", () => {
+  assertEquals(ANALYTICS_EVENTS.BALANCE_BREAKDOWN_OPENED, "balance_breakdown_opened");
+});
+
 Deno.test("quick settle events stay free of amounts and names", () => {
   assertEquals(ANALYTICS_EVENTS.QUICK_SETTLE_OPENED, "quick_settle_opened");
   assertEquals(ANALYTICS_EVENTS.QUICK_SETTLE_RECORDED, "quick_settle_recorded");
