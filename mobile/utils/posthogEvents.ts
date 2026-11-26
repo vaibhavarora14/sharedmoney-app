@@ -53,6 +53,7 @@
  * `group_list_scroll` (sampled FlatList perf), `group_list_page_loaded`,
  * `group_details_ready` (open latency; props: group_id, duration_ms,
  *   from_cache, cache_status hit|miss|partial),
+ * `group_ledger_ready` (expense list first paint; props: group_id, duration_ms),
  * `groups_home_loaded` (home list rendered; props: duration_ms, group_count,
  *   from_cache; duration_ms is visit start → list commit),
  * `balance_breakdown_opened` (person row on group balances; no names or amounts),
@@ -91,6 +92,8 @@ export const ANALYTICS_EVENTS = {
   GROUP_LIST_PAGE_LOADED: "group_list_page_loaded",
   /** Group details critical path ready (details + balances/stats). */
   GROUP_DETAILS_READY: "group_details_ready",
+  /** Expense list first rendered after opening a group. */
+  GROUP_LEDGER_READY: "group_ledger_ready",
   /** Groups home list ready (after cold/warm paint). */
   GROUPS_HOME_LOADED: "groups_home_loaded",
   /** Settle modal Pay via UPI tapped (deep link or desktop copy). No VPA. */

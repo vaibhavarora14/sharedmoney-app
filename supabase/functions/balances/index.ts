@@ -9,7 +9,18 @@ import { isValidUUID } from '../_shared/validation.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { SUPABASE_SERVICE_ROLE_KEY, SUPABASE_URL } from '../_shared/env.ts';
 import {
+  applyEmailAndProfiles,
+  assembleHomeGroupBalances,
+  calculateGroupBalancesFromLedger,
+  membershipGroupIds,
+  participantUserIdsFromLedgers,
+  type Balance,
+  type GroupBalance,
+  type HomeMembershipRow,
+} from './calculate-group-balances.ts';
+import {
   loadGroupLedger,
+  loadGroupLedgers,
   type GroupLedgerSnapshot,
   type LedgerParticipant,
   type LedgerTransaction,
@@ -22,23 +33,6 @@ import {
   sha256Hex,
   toPublicYouOweView,
 } from './public-you-owe.ts';
-
-interface Balance {
-  user_id: string;
-  participant_id?: string;
-  email?: string;
-  full_name?: string | null;
-  avatar_url?: string | null;
-  amount: number;
-  currency: string;
-}
-
-interface GroupBalance {
-  group_id: string;
-  group_name: string;
-  group_kind?: 'standard' | 'direct';
-  balances: Balance[];
-}
 
 interface BalancesResponse {
   group_balances: GroupBalance[];
@@ -129,169 +123,13 @@ interface GroupStatsResponse {
  * @requires Authentication
  */
 
-function buildParticipantMaps(
-  participants: LedgerParticipant[],
-  userIdToEmail: Map<string, string>
-) {
-  const canonicalParticipantId = buildParticipantCanonicalResolver(
-    participants.map((p) => ({
-      id: p.id,
-      user_id: p.user_id,
-      email: p.email,
-      type: p.type || 'member',
-    })),
-    userIdToEmail
-  );
-
-  const participantToUserMap = new Map<string, string>();
-  const participantToEmailMap = new Map<string, string>();
-  const participantToFullNameMap = new Map<string, string>();
-  const participantToAvatarMap = new Map<string, string>();
-
-  const rowsByCanonical = new Map<string, LedgerParticipant[]>();
-  for (const p of participants) {
-    const cid = canonicalParticipantId(p.id);
-    if (!rowsByCanonical.has(cid)) rowsByCanonical.set(cid, []);
-    rowsByCanonical.get(cid)!.push(p);
-  }
-  for (const [cid, rows] of rowsByCanonical) {
-    const withUser = rows.find((r) => r.user_id);
-    if (withUser?.user_id) participantToUserMap.set(cid, withUser.user_id);
-    const emailSource =
-      rows.find((r) => r.user_id && r.email) || rows.find((r) => r.email);
-    if (emailSource?.email) participantToEmailMap.set(cid, emailSource.email);
-    const nameSource =
-      rows.find((r) => r.user_id && r.full_name) || rows.find((r) => r.full_name);
-    if (nameSource?.full_name) {
-      participantToFullNameMap.set(cid, nameSource.full_name);
-    }
-    const avatarSource =
-      rows.find((r) => r.user_id && r.avatar_url) ||
-      rows.find((r) => r.avatar_url);
-    if (avatarSource?.avatar_url) {
-      participantToAvatarMap.set(cid, avatarSource.avatar_url);
-    }
-  }
-
-  return {
-    canonicalParticipantId,
-    participantToUserMap,
-    participantToEmailMap,
-    participantToFullNameMap,
-    participantToAvatarMap,
-  };
-}
-
-function calculateGroupBalancesFromLedger(
-  ledger: GroupLedgerSnapshot,
-  userIdToEmail: Map<string, string>
-): Balance[] {
-  const {
-    canonicalParticipantId,
-    participantToUserMap,
-    participantToEmailMap,
-    participantToFullNameMap,
-    participantToAvatarMap,
-  } = buildParticipantMaps(ledger.participants, userIdToEmail);
-
-  const balanceMap = new Map<string, Map<string, number>>();
-
-  const updateBalance = (key: string, currency: string, amount: number) => {
-    if (!balanceMap.has(key)) {
-      balanceMap.set(key, new Map());
-    }
-    const userBalances = balanceMap.get(key)!;
-    const currentAmount = userBalances.get(currency) || 0;
-    userBalances.set(currency, currentAmount + amount);
-  };
-
-  for (const tx of ledger.transactions) {
-    const totalAmount = typeof tx.amount === 'string' ? parseFloat(tx.amount) : tx.amount;
-    const currency = tx.currency;
-
-    if (isNaN(totalAmount)) continue;
-
-    const paidByPid = tx.paid_by_participant_id;
-    if (!paidByPid) continue;
-
-    const paidByKey = canonicalParticipantId(paidByPid);
-
-    if (tx.transaction_splits && Array.isArray(tx.transaction_splits)) {
-      const splits = tx.transaction_splits
-        .map((s) => {
-          if (!s) return undefined;
-          const amount = typeof s.amount === 'string' ? parseFloat(s.amount) : s.amount;
-          if (!s.participant_id || isNaN(amount)) return undefined;
-
-          return { pid: canonicalParticipantId(s.participant_id), amount };
-        })
-        .filter((s): s is { pid: string; amount: number } => !!s);
-
-      if (splits.length === 0) continue;
-
-      updateBalance(paidByKey, currency, totalAmount);
-
-      for (const split of splits) {
-        updateBalance(split.pid, currency, -split.amount);
-      }
-    }
-  }
-
-  for (const settlement of ledger.settlements) {
-    const fromKey = settlement.from_participant_id
-      ? canonicalParticipantId(settlement.from_participant_id)
-      : null;
-    const toKey = settlement.to_participant_id
-      ? canonicalParticipantId(settlement.to_participant_id)
-      : null;
-
-    if (!fromKey || !toKey) continue;
-
-    const settlementAmount = typeof settlement.amount === 'string'
-      ? parseFloat(settlement.amount)
-      : settlement.amount;
-    const currency = settlement.currency;
-
-    if (isNaN(settlementAmount) || settlementAmount <= 0) continue;
-
-    updateBalance(fromKey, currency, settlementAmount);
-    updateBalance(toKey, currency, -settlementAmount);
-  }
-
-  const balances: Balance[] = [];
-
-  for (const [key, currencyMap] of balanceMap.entries()) {
-    for (const [currency, amount] of currencyMap.entries()) {
-      const roundedAmount = Math.round(amount * 100) / 100;
-      if (Math.abs(roundedAmount) > 0.01) {
-        const userId = participantToUserMap.get(key);
-        const email = participantToEmailMap.get(key);
-        const fullName = participantToFullNameMap.get(key);
-        const avatarUrl = participantToAvatarMap.get(key);
-
-        balances.push({
-          user_id: userId || (isValidUUID(key) ? key : ''),
-          participant_id: key,
-          email: email,
-          full_name: fullName || null,
-          avatar_url: avatarUrl || null,
-          amount: roundedAmount,
-          currency: currency
-        });
-      }
-    }
-  }
-
-  return balances;
-}
-
 async function calculateGroupBalances(
   supabase: any,
   groupId: string,
   currentUserId: string,
   currentUserEmail: string | null,
   options?: { includeStatsFields?: boolean; ledger?: GroupLedgerSnapshot }
-): Promise<{ balances: Balance[]; ledger: GroupLedgerSnapshot }> {
+): Promise<{ balances: Balance[]; ledger: GroupLedgerSnapshot; userIdToEmail: Map<string, string> }> {
   const ledger = options?.ledger ?? await loadGroupLedger(supabase, groupId, {
     includeStatsFields: options?.includeStatsFields,
   });
@@ -303,6 +141,9 @@ async function calculateGroupBalances(
         .filter((id): id is string => typeof id === 'string' && id.length > 0)
     )
   );
+  if (!participantUserIds.includes(currentUserId)) {
+    participantUserIds.push(currentUserId);
+  }
   const userIdToEmail = await fetchUserEmails(
     participantUserIds,
     currentUserId,
@@ -312,6 +153,7 @@ async function calculateGroupBalances(
   return {
     balances: calculateGroupBalancesFromLedger(ledger, userIdToEmail),
     ledger,
+    userIdToEmail,
   };
 }
 
@@ -647,6 +489,7 @@ Deno.serve(async (req: Request) => {
 
       let balances: Balance[] = [];
       let ledger: GroupLedgerSnapshot | null = null;
+      let userIdToEmail = new Map<string, string>();
       try {
         const result = await calculateGroupBalances(
           supabase,
@@ -657,6 +500,7 @@ Deno.serve(async (req: Request) => {
         );
         balances = result.balances;
         ledger = result.ledger;
+        userIdToEmail = result.userIdToEmail;
       } catch (error) {
         log.error('Error calculating group balances', 'balances', {
           groupId,
@@ -699,30 +543,11 @@ Deno.serve(async (req: Request) => {
       }
 
       if (allUserIds.size > 0) {
-        const userIdsArray = Array.from(allUserIds);
-        const [emailMap, profileMap] = await Promise.all([
-          fetchUserEmails(userIdsArray, currentUserId, currentUserEmail),
-          fetchUserProfiles(supabase, userIdsArray),
-        ]);
-
-        for (const b of balances) {
-          const profile = b.user_id ? profileMap.get(b.user_id) : null;
-          if (b.user_id) {
-            const authEmail = emailMap.get(b.user_id);
-            if (authEmail) b.email = authEmail;
-          }
-          b.full_name = profile?.full_name || b.full_name || null;
-          b.avatar_url = profile?.avatar_url || b.avatar_url || null;
-        }
-        for (const b of overallBalances) {
-          const profile = b.user_id ? profileMap.get(b.user_id) : null;
-          if (b.user_id) {
-            const authEmail = emailMap.get(b.user_id);
-            if (authEmail) b.email = authEmail;
-          }
-          b.full_name = profile?.full_name || b.full_name || null;
-          b.avatar_url = profile?.avatar_url || b.avatar_url || null;
-        }
+        // Emails were already loaded inside calculateGroupBalances. Reuse that
+        // map so overall_balances still get email without a second lookup.
+        const profileMap = await fetchUserProfiles(supabase, Array.from(allUserIds));
+        applyEmailAndProfiles(balances, userIdToEmail, profileMap);
+        applyEmailAndProfiles(overallBalances, userIdToEmail, profileMap);
       }
 
       const response: BalancesResponse = {
@@ -741,15 +566,15 @@ Deno.serve(async (req: Request) => {
       return createSuccessResponse(response, 200, 0, req);
     }
 
-    const { data: memberships } = await supabase
+    const { data: memberships, error: membershipError } = await supabase
       .from('group_members')
       .select('group_id')
       .eq('user_id', currentUserId);
-
-    interface Membership {
-      group_id: string;
+    if (membershipError) {
+      return handleError(membershipError, 'fetching group memberships', req);
     }
-    const targetGroupIds = (memberships || []).map((m: Membership) => m.group_id);
+
+    const targetGroupIds = membershipGroupIds((memberships || []) as HomeMembershipRow[]);
 
     if (targetGroupIds.length === 0) {
       return createSuccessResponse({
@@ -758,58 +583,44 @@ Deno.serve(async (req: Request) => {
       }, 200, 0, req);
     }
 
-    const { data: groups } = await supabase
-      .from('groups')
-      .select('id, name, kind')
-      .in('id', targetGroupIds);
+    const [groupsResult, ledgers] = await Promise.all([
+      supabase
+        .from('groups')
+        .select('id, name, kind')
+        .in('id', targetGroupIds),
+      loadGroupLedgers(supabase, targetGroupIds),
+    ]);
+    if (groupsResult.error) {
+      return handleError(groupsResult.error, 'fetching groups for balances', req);
+    }
 
-    const groupMap = new Map((groups || []).map((g: Group) => [g.id, g]));
+    const participantUserIds = participantUserIdsFromLedgers(ledgers.values());
+    const lookupIds = participantUserIds.includes(currentUserId)
+      ? participantUserIds
+      : [...participantUserIds, currentUserId];
+    const [emailMap, profileMap] = await Promise.all([
+      fetchUserEmails(lookupIds, currentUserId, currentUserEmail ?? null),
+      fetchUserProfiles(supabase, lookupIds),
+    ]);
 
-    const balancePromises = targetGroupIds.map(async (gId: string) => {
-      try {
-        const { balances } = await calculateGroupBalances(
-          supabase,
-          gId,
-          currentUserId,
-          currentUserEmail ?? null
-        );
-        const group = groupMap.get(gId);
-        const groupName = group?.name || 'Unknown Group';
-        return {
-          group_id: gId,
-          group_name: groupName,
-          group_kind: group?.kind === 'direct' ? 'direct' as const : 'standard' as const,
-          balances,
-        };
-      } catch (_error) {
-        const group = groupMap.get(gId);
-        return {
-          group_id: gId,
-          group_name: group?.name || 'Unknown Group',
-          group_kind: group?.kind === 'direct' ? 'direct' as const : 'standard' as const,
-          balances: [] as Balance[],
-        };
-      }
+    const groupBalances = assembleHomeGroupBalances({
+      groupIds: targetGroupIds,
+      groups: (groupsResult.data || []) as Group[],
+      ledgers,
+      userIdToEmail: emailMap,
     });
-
-    const balanceResults = await Promise.allSettled(balancePromises);
-    const groupBalances: GroupBalance[] = [];
 
     const overallBalanceMap = new Map<string, Map<string, number>>();
 
-    for (const result of balanceResults) {
-      if (result.status === 'fulfilled') {
-        const groupBalance = result.value;
-        groupBalances.push(groupBalance);
-
-        for (const balance of groupBalance.balances) {
-          if (!overallBalanceMap.has(balance.user_id)) {
-            overallBalanceMap.set(balance.user_id, new Map());
-          }
-          const userBalances = overallBalanceMap.get(balance.user_id)!;
-          const current = userBalances.get(balance.currency) || 0;
-          userBalances.set(balance.currency, current + balance.amount);
+    for (const groupBalance of groupBalances) {
+      applyEmailAndProfiles(groupBalance.balances, emailMap, profileMap);
+      for (const balance of groupBalance.balances) {
+        if (!overallBalanceMap.has(balance.user_id)) {
+          overallBalanceMap.set(balance.user_id, new Map());
         }
+        const userBalances = overallBalanceMap.get(balance.user_id)!;
+        const current = userBalances.get(balance.currency) || 0;
+        userBalances.set(balance.currency, current + balance.amount);
       }
     }
 
@@ -828,46 +639,7 @@ Deno.serve(async (req: Request) => {
         }
       }
     }
-
-    const allUserIds = new Set<string>();
-
-    for (const gb of groupBalances) {
-      for (const b of gb.balances) {
-        allUserIds.add(b.user_id);
-      }
-    }
-    for (const b of overallBalances) {
-      allUserIds.add(b.user_id);
-    }
-
-    if (allUserIds.size > 0) {
-      const userIdsArray = Array.from(allUserIds);
-      const [emailMap, profileMap] = await Promise.all([
-        fetchUserEmails(userIdsArray, currentUserId, currentUserEmail),
-        fetchUserProfiles(supabase, userIdsArray),
-      ]);
-
-      for (const gb of groupBalances) {
-        for (const b of gb.balances) {
-          const profile = b.user_id ? profileMap.get(b.user_id) : null;
-          if (b.user_id) {
-            const authEmail = emailMap.get(b.user_id);
-            if (authEmail) b.email = authEmail;
-          }
-          b.full_name = profile?.full_name || b.full_name || null;
-          b.avatar_url = profile?.avatar_url || b.avatar_url || null;
-        }
-      }
-      for (const b of overallBalances) {
-        const profile = b.user_id ? profileMap.get(b.user_id) : null;
-        if (b.user_id) {
-          const authEmail = emailMap.get(b.user_id);
-          if (authEmail) b.email = authEmail;
-        }
-        b.full_name = profile?.full_name || b.full_name || null;
-        b.avatar_url = profile?.avatar_url || b.avatar_url || null;
-      }
-    }
+    applyEmailAndProfiles(overallBalances, emailMap, profileMap);
 
     const response: BalancesResponse = {
       group_balances: groupBalances,

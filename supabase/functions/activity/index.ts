@@ -8,6 +8,7 @@ import { createEmptyResponse, createSuccessResponse } from '../_shared/response.
 import { fetchUserEmails } from '../_shared/user-email.ts';
 import { fetchUserProfiles } from '../_shared/user-profiles.ts';
 import { isValidUUID } from '../_shared/validation.ts';
+import { activityPageMeta } from './page-meta.ts';
 
 /**
  * Activity Edge Function
@@ -431,35 +432,36 @@ Deno.serve(async (req: Request) => {
       return createErrorResponse(400, 'Invalid group_id format. Expected UUID.', 'VALIDATION_ERROR', undefined, req);
     }
 
-    const { data: membership, error: membershipError } = await supabase
-      .from('group_members')
-      .select('id')
-      .eq('group_id', groupId)
-      .eq('user_id', user.id)
-      .eq('status', 'active')
-      .single();
-
-    if (membershipError || !membership) {
-      return createErrorResponse(403, 'You must be a member of the group to view activity', 'PERMISSION_DENIED', undefined, req);
-    }
-
     const limit = Math.min(
-      parseInt(url.searchParams.get('limit') || String(ACTIVITY_FEED_CONFIG.DEFAULT_LIMIT)), 
+      parseInt(url.searchParams.get('limit') || String(ACTIVITY_FEED_CONFIG.DEFAULT_LIMIT)),
       ACTIVITY_FEED_CONFIG.MAX_LIMIT
     );
     const offset = parseInt(url.searchParams.get('offset') || '0');
 
-    const { data: blockedRows, error: blockedUsersError } = await supabase
-      .from('user_blocks')
-      .select('blocked_user_id')
-      .eq('blocker_id', user.id);
+    const [membershipResult, blockedResult] = await Promise.all([
+      supabase
+        .from('group_members')
+        .select('id')
+        .eq('group_id', groupId)
+        .eq('user_id', user.id)
+        .eq('status', 'active')
+        .single(),
+      supabase
+        .from('user_blocks')
+        .select('blocked_user_id')
+        .eq('blocker_id', user.id),
+    ]);
 
-    if (blockedUsersError) {
-      return handleError(blockedUsersError, 'fetching blocked users', req);
+    if (membershipResult.error || !membershipResult.data) {
+      return createErrorResponse(403, 'You must be a member of the group to view activity', 'PERMISSION_DENIED', undefined, req);
+    }
+
+    if (blockedResult.error) {
+      return handleError(blockedResult.error, 'fetching blocked users', req);
     }
 
     const blockedUserIds = new Set<string>(
-      (blockedRows || []).map((row: { blocked_user_id: string }) => row.blocked_user_id),
+      (blockedResult.data || []).map((row: { blocked_user_id: string }) => row.blocked_user_id),
     );
 
     let historyQuery = supabase
@@ -468,23 +470,28 @@ Deno.serve(async (req: Request) => {
       .eq('group_id', groupId)
       .order('changed_at', { ascending: false });
 
+    let countQuery = supabase
+      .from('transaction_history')
+      .select('id', { count: 'exact', head: true })
+      .eq('group_id', groupId);
+
     if (blockedUserIds.size > 0) {
-      historyQuery = historyQuery.not(
-        'changed_by',
-        'in',
-        `(${Array.from(blockedUserIds).join(',')})`,
-      );
+      const blockedFilter = `(${Array.from(blockedUserIds).join(',')})`;
+      historyQuery = historyQuery.not('changed_by', 'in', blockedFilter);
+      countQuery = countQuery.not('changed_by', 'in', blockedFilter);
     }
 
-    const { data: historyRecords, error: historyError } = await historyQuery
-      .range(offset, offset + limit - 1);
+    const [historyResult, countResult] = await Promise.all([
+      historyQuery.range(offset, offset + limit - 1),
+      countQuery,
+    ]);
 
-    if (historyError) {
-      return handleError(historyError, 'fetching transaction history', req);
+    if (historyResult.error) {
+      return handleError(historyResult.error, 'fetching transaction history', req);
     }
 
     const visibleHistoryRecords: TransactionHistory[] = filterBlockedActivityRecords(
-      (historyRecords || []) as TransactionHistory[],
+      (historyResult.data || []) as TransactionHistory[],
       blockedUserIds,
     );
 
@@ -500,36 +507,21 @@ Deno.serve(async (req: Request) => {
       transformHistoryToActivity(h, emailMap, profileMap, participantMap)
     );
 
-    let countQuery = supabase
-      .from('transaction_history')
-      .select('id', { count: 'exact', head: true })
-      .eq('group_id', groupId);
-
-    if (blockedUserIds.size > 0) {
-      countQuery = countQuery.not(
-        'changed_by',
-        'in',
-        `(${Array.from(blockedUserIds).join(',')})`,
-      );
-    }
-    
-    const { count, error: countError } = await countQuery;
-
-    let total: number;
-    let hasMore: boolean;
-    
-    if (countError) {
+    if (countResult.error) {
       log.error('Count query error', 'activity-feed', {
-        error: countError.message,
-        code: countError.code,
+        error: countResult.error.message,
+        code: countResult.error.code,
         groupId,
       });
-      total = activities.length;
-      hasMore = activities.length >= limit;
-    } else {
-      total = count || 0;
-      hasMore = offset + activities.length < total;
     }
+
+    const { total, has_more: hasMore } = activityPageMeta({
+      offset,
+      limit,
+      pageLength: activities.length,
+      count: countResult.error ? null : (countResult.count ?? 0),
+      countError: Boolean(countResult.error),
+    });
 
     return createSuccessResponse({
       activities,

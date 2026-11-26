@@ -1,12 +1,36 @@
-import { SupabaseClient } from '@supabase/supabase-js';
 import { log } from './logger.ts';
+
+type ProfileRow = {
+  id: string;
+  full_name: string | null;
+  avatar_url: string | null;
+};
+
+/**
+ * Minimal client surface so Deno tests at the repo root do not need
+ * `@supabase/supabase-js` (that specifier is only mapped in
+ * supabase/functions/deno.json). Matches jsr:@supabase/supabase-js@2.
+ */
+type ProfilesClient = {
+  from: (table: string) => {
+    select: (columns: string) => {
+      in: (
+        column: string,
+        values: string[],
+      ) => PromiseLike<{
+        data: ProfileRow[] | null;
+        error: { message: string } | null;
+      }>;
+    };
+  };
+};
 
 /**
  * Fetches profile data (full_name, avatar_url) for multiple user IDs
  * Returns a map of user_id -> { full_name, avatar_url }
  */
 export async function fetchUserProfiles(
-  supabase: SupabaseClient,
+  supabase: ProfilesClient,
   userIds: string[]
 ): Promise<Map<string, { full_name: string | null; avatar_url: string | null }>> {
   const profileMap = new Map<string, { full_name: string | null; avatar_url: string | null }>();
@@ -38,12 +62,12 @@ export async function fetchUserProfiles(
       return profileMap;
     }
 
-    (profiles || []).forEach(profile => {
+    for (const profile of profiles || []) {
       profileMap.set(profile.id, {
         full_name: profile.full_name,
         avatar_url: profile.avatar_url,
       });
-    });
+    }
   } catch (err) {
     log.error('Error in fetchUserProfiles', 'user-profiles', {
       error: err instanceof Error ? err.message : String(err),

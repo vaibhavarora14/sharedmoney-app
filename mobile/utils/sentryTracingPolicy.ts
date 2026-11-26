@@ -91,6 +91,24 @@ export function resolveSentryTracePropagationTargets(input?: {
   return targets;
 }
 
+/** Whether an outbound URL should get a Sentry HTTP span + trace headers. */
+export function shouldCreateSentryHttpSpan(
+  url: string,
+  targets: Array<string | RegExp> = resolveSentryTracePropagationTargets(),
+): boolean {
+  try {
+    const host = new URL(url).host;
+    return targets.some((target) => {
+      if (typeof target === "string") {
+        return host === target || host.endsWith(`.${target}`) || url.includes(target);
+      }
+      return target.test(url);
+    });
+  } catch {
+    return false;
+  }
+}
+
 export function getPublishedSentryRoute(): string {
   return publishedRoute;
 }

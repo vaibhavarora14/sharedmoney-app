@@ -179,7 +179,10 @@ import {
   shouldShowGroupDetailsFab,
 } from "../utils/transactionsEmptyCopy";
 import { resolveGroupDetailsLoadingTreatment } from "../utils/groupDetailsLoadingTreatment";
-import { resolveGroupDetailsReadyTiming } from "../utils/groupDetailsReadyTelemetry";
+import {
+  resolveGroupDetailsReadyTiming,
+  resolveGroupLedgerReadyTiming,
+} from "../utils/groupDetailsReadyTelemetry";
 import {
   ARCHIVE_GROUP_CONFIRM_MESSAGE,
   REMOVE_FROM_LISTS_CONFIRM_MESSAGE,
@@ -377,7 +380,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     seedGroupOpenQueries(queryClient, session.user.id, initialGroup.id);
   }
 
-  // Balance first. The ledger, participants, and history wait until it settles.
   const {
     data: groupData,
     isLoading: groupLoading,
@@ -388,19 +390,19 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     data: balancesData,
     hasData: balancesHasData,
     isLoading: balancesLoading,
-    isFetching: balancesFetching,
     error: balancesError,
     refetch: refetchBalances,
   } = useBalances(initialGroup.id);
-  const ledgerEnabled = !balancesFetching && (balancesHasData || !!balancesError);
   const {
     data: txData,
     isLoading: txLoading,
+    isFetched: txFetched,
+    error: txError,
     hasNextPage: txHasNextPage,
     isFetchingNextPage: txIsFetchingNextPage,
     fetchNextPage: fetchNextTransactionsPage,
     refetch: refetchTx,
-  } = useTransactions(initialGroup.id, { enabled: ledgerEnabled });
+  } = useTransactions(initialGroup.id);
   // Keep this group's latest-entered currency and split-among cached while the screen is open.
   useGroupLastTransactionCurrency(initialGroup.id);
   useGroupLastExpenseSplitAmong(initialGroup.id);
@@ -417,12 +419,12 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     data: participants = [],
     isLoading: participantsLoading,
     refetch: refetchParticipants,
-  } = useParticipants(initialGroup.id, { enabled: ledgerEnabled });
+  } = useParticipants(initialGroup.id);
   const {
     data: settlementsData,
     isLoading: settlementsLoading,
     refetch: refetchSettlements,
-  } = useSettlements(initialGroup.id, { enabled: ledgerEnabled });
+  } = useSettlements(initialGroup.id);
   const {
     data: activityData,
     isLoading: activityLoading,
@@ -464,12 +466,14 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const groupOpenStartedAtRef = React.useRef(openStartedAtMs ?? Date.now());
   const trackedReadyGroupIdRef = React.useRef(initialGroup.id);
   const groupDetailsReadyLoggedRef = React.useRef(false);
+  const groupLedgerReadyLoggedRef = React.useRef(false);
   const sawGroupLoadingRef = React.useRef(false);
   const sawBalancesLoadingRef = React.useRef(false);
   if (trackedReadyGroupIdRef.current !== initialGroup.id) {
     trackedReadyGroupIdRef.current = initialGroup.id;
     groupOpenStartedAtRef.current = openStartedAtMs ?? Date.now();
     groupDetailsReadyLoggedRef.current = false;
+    groupLedgerReadyLoggedRef.current = false;
     sawGroupLoadingRef.current = false;
     sawBalancesLoadingRef.current = false;
   } else if (
@@ -510,6 +514,25 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     initialGroup.id,
     session?.user?.id,
   ]);
+
+  useEffect(() => {
+    if (groupLedgerReadyLoggedRef.current) return;
+    if (!txFetched || txLoading) return;
+    if (txError) return;
+    groupLedgerReadyLoggedRef.current = true;
+    const timing = resolveGroupLedgerReadyTiming({
+      openStartedAtMs: groupOpenStartedAtRef.current,
+      nowMs: Date.now(),
+    });
+    captureIdentifiedAnalyticsEvent(
+      session?.user?.id,
+      ANALYTICS_EVENTS.GROUP_LEDGER_READY,
+      {
+        group_id: initialGroup.id,
+        duration_ms: timing.duration_ms,
+      }
+    );
+  }, [txFetched, txLoading, txError, initialGroup.id, session?.user?.id]);
 
   // Map user_id to participant_id for involvement filtering
   const userIdToParticipantId = useMemo(() => {
@@ -741,7 +764,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   // API already filters by group_id, so no need for client-side filtering
   const transactions = txData;
   const settlements = settlementsData?.settlements ?? [];
-  const ledgerPending = !ledgerEnabled && transactions.length === 0;
+  const ledgerPending = txLoading && transactions.length === 0;
   const viewerUserId = session?.user?.id ?? null;
   const viewerParticipantId = participants.find((person) => person.user_id === viewerUserId)?.id ?? null;
   const searchEngaged = searchOpen || searchQuery.trim().length > 0 || searchFilter !== "all";
@@ -1795,7 +1818,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
 
   useEffect(() => {
     const userId = session?.user?.id;
-    if (!userId || !ledgerEnabled || balancesError || !balancesHasData) return;
+    if (!userId || balancesError || !balancesHasData) return;
     if (txLoading || settlementsLoading || participantsLoading) return;
     const feed = queryClient.getQueryData<{
       pages?: { items: Transaction[]; has_more: boolean; next_cursor: { date: string; id: number } | null }[];
@@ -1821,7 +1844,6 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     balancesError,
     balancesHasData,
     initialGroup.id,
-    ledgerEnabled,
     participants,
     participantsLoading,
     queryClient,

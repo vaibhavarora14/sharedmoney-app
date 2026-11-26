@@ -29,24 +29,42 @@ type TemplateRow = {
   split_among_participant_ids?: string[] | null;
 };
 
+type RecurringTemplateView = TemplateRow & {
+  amount: number;
+  current_period_key: string;
+  current_status: RecurringViewState['current_status'];
+  due_on: string;
+  current_transaction_id: number | null;
+};
+
 export async function loadRecurringTemplateViews(
   supabase: SupabaseClient,
   groupId: string,
   now = new Date(),
-) {
-  const { data: templates, error } = await supabase
-    .from('recurring_templates')
-    .select(TEMPLATE_COLUMNS)
-    .eq('group_id', groupId)
-    .order('created_at', { ascending: true });
-  if (error) throw error;
+): Promise<RecurringTemplateView[]> {
+  const [templatesResult, cyclesResult] = await Promise.all([
+    supabase
+      .from('recurring_templates')
+      .select(TEMPLATE_COLUMNS)
+      .eq('group_id', groupId)
+      .order('created_at', { ascending: true }),
+    supabase
+      .from('recurring_template_cycles')
+      .select('template_id, period_key, status, transaction_id, recurring_templates!inner(group_id)')
+      .eq('recurring_templates.group_id', groupId),
+  ]);
+  if (templatesResult.error) throw templatesResult.error;
+  const templates = templatesResult.data;
   if (!templates?.length) return [];
-
-  const { data: cycles, error: cycleError } = await supabase
-    .from('recurring_template_cycles')
-    .select('template_id, period_key, status, transaction_id')
-    .in('template_id', templates.map((template: { id: string }) => template.id));
-  if (cycleError) throw cycleError;
+  let cycles = cyclesResult.data;
+  if (cyclesResult.error) {
+    const retry = await supabase
+      .from('recurring_template_cycles')
+      .select('template_id, period_key, status, transaction_id')
+      .in('template_id', templates.map((template: TemplateRow) => template.id));
+    if (retry.error) throw retry.error;
+    cycles = retry.data;
+  }
 
   const cyclesByTemplate = new Map<string, RecurringCycleLookup[]>();
   for (const cycle of cycles || []) {
@@ -240,7 +258,7 @@ export async function handleRecurringTemplateRequest(params: {
   }
 }
 
-function decorateTemplate(template: TemplateRow, view: RecurringViewState) {
+function decorateTemplate(template: TemplateRow, view: RecurringViewState): RecurringTemplateView {
   return {
     ...template,
     amount: Number(template.amount),
@@ -251,12 +269,18 @@ function decorateTemplate(template: TemplateRow, view: RecurringViewState) {
   };
 }
 
-async function decorate(templates: TemplateRow[], supabase: SupabaseClient) {
+async function decorate(
+  templates: TemplateRow[],
+  supabase: SupabaseClient,
+): Promise<RecurringTemplateView[]> {
   if (templates.length === 0) return [];
   const groupId = templates[0].group_id;
   const views = await loadRecurringTemplateViews(supabase, groupId);
-  const byId = new Map(views.map((view: { id: string }) => [view.id, view]));
-  return templates.map((template) => byId.get(template.id) || template);
+  const byId = new Map(views.map((view: RecurringTemplateView) => [view.id, view]));
+  return templates.flatMap((template) => {
+    const view = byId.get(template.id);
+    return view ? [view] : [];
+  });
 }
 
 async function assertParticipantsInGroup(
