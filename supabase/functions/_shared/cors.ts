@@ -1,3 +1,4 @@
+import { resolveAllowHeaders } from './cors-headers.ts';
 import { ALLOWED_ORIGIN } from './env.ts';
 
 const IS_PROD = Deno.env.get('NODE_ENV') === 'production';
@@ -40,12 +41,11 @@ export function getCorsHeaders(req?: Request): Record<string, string> {
     originToAllow = requestOrigin || allowedOrigins[0] || 'http://localhost:8081';
   }
   
-  // Get requested headers for preflight
   const requestedHeaders = req?.headers.get('Access-Control-Request-Headers');
-  
+
   return {
     'Access-Control-Allow-Origin': originToAllow,
-    'Access-Control-Allow-Headers': requestedHeaders || 'authorization, x-client-info, apikey, content-type, x-app-version, prefer',
+    'Access-Control-Allow-Headers': resolveAllowHeaders(requestedHeaders),
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
     'Access-Control-Expose-Headers': 'Content-Length, X-JSON',
   };

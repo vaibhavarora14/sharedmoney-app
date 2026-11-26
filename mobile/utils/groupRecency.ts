@@ -1,6 +1,6 @@
 /**
- * Recency line for a group row. Names and amounts stay on the cached group;
- * this line is shown only after `last_activity` has been fetched.
+ * Recency line for a group row. Names, amounts, and `last_activity` can come
+ * from the groups-list disk cache; the list still refreshes in the background.
  */
 export type GroupRecencyAction = "added" | "edited" | "removed" | "settled";
 

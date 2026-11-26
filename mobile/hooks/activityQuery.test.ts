@@ -18,11 +18,14 @@ Deno.test("prefetched activity mounts and loads older pages alongside legacy cac
     activities: [{ id: "50" } as ActivityItem], total: 51, has_more: false,
   };
   const offsets: number[] = [];
-  const options = activityQueryOptions("group-a", async (groupId, offset, limit) => {
-    assert(groupId === "group-a" && limit === 50, "wrong request parameters");
-    offsets.push(offset);
-    return offset === 0 ? firstPage : lastPage;
-  });
+  const options = {
+    ...activityQueryOptions("group-a", async (groupId, offset, limit) => {
+      assert(groupId === "group-a" && limit === 50, "wrong request parameters");
+      offsets.push(offset);
+      return offset === 0 ? firstPage : lastPage;
+    }),
+    refetchOnMount: false as const,
+  };
   // Existing single-page entries must not be consumed by the infinite observer.
   client.setQueryData(queryKeys.activity("group-a"), firstPage);
   try {
@@ -53,10 +56,13 @@ Deno.test("activity infinite query keeps paging while has_more is true", async (
     has_more: hasMore,
   });
   const offsets: number[] = [];
-  const options = activityQueryOptions("group-uncapped", async (_groupId, offset) => {
-    offsets.push(offset);
-    return page(offset, offset < 100);
-  });
+  const options = {
+    ...activityQueryOptions("group-uncapped", async (_groupId, offset) => {
+      offsets.push(offset);
+      return page(offset, offset < 100);
+    }),
+    refetchOnMount: false as const,
+  };
 
   try {
     await client.prefetchInfiniteQuery(options);

@@ -1,12 +1,14 @@
 import { assertEquals } from "jsr:@std/assert@1";
-import type { BalancesResponse } from "../types";
+import type { ActivityItem, BalancesResponse } from "../types";
 import {
+  DISK_CACHE_UPDATED_AT,
   clearSavedGroupMoney,
   GROUP_OPEN_CACHE_LIMIT,
   hydrateGroupOpenCache,
   readAllBalancesMemory,
   readGroupOpenMemory,
   rememberAllBalances,
+  rememberGroupActivity,
   rememberGroupOpen,
   resetGroupOpenMemoryForTests,
   seedGroupOpenQueries,
@@ -89,4 +91,24 @@ Deno.test("group open cache keeps the last 10 groups and restores the first ledg
   const ledger = writes.find((write) => write.key[0] === "transactions");
   const page = ledger?.data as { pages: { items: { description: string }[] }[] };
   assertEquals(page.pages[0].items[0].description, "g10");
+});
+
+Deno.test("activity first page is restored as a stale infinite query", async () => {
+  resetGroupOpenMemoryForTests();
+  const storage = memoryStorage();
+  await rememberGroupOpen(storage, "user", entry("g1"));
+  await rememberGroupActivity(storage, "user", "g1", {
+    activities: [{ id: "hist-1" } as ActivityItem],
+    total: 1,
+    has_more: false,
+  });
+  const writes: { key: readonly unknown[]; updatedAt?: number }[] = [];
+  seedGroupOpenQueries({
+    setQueryData: (key, _data, options) => writes.push({ key, updatedAt: options?.updatedAt }),
+  }, "user", "g1");
+  const activity = writes.find((write) => write.key[0] === "activity");
+  const balances = writes.find((write) => write.key[0] === "balances");
+  assertEquals(activity?.key, ["activity", "g1", "feed"]);
+  assertEquals(activity?.updatedAt, DISK_CACHE_UPDATED_AT);
+  assertEquals(balances?.updatedAt, DISK_CACHE_UPDATED_AT);
 });

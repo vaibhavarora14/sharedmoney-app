@@ -4,29 +4,12 @@ import { useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { Group, GroupWithMembers } from "../types";
 import { fetchWithAuth } from "../utils/api";
-import { groupsWithoutRecency } from "../utils/groupRecency";
+import {
+  hydrateGroupsListCache,
+  seedGroupsListQuery,
+  writeGroupsListCache,
+} from "../utils/groupsListCache";
 import { queryKeys } from "./queryKeys";
-
-const groupsCacheKey = (userId: string) => `sm:rq-groups:${userId}`;
-
-async function readGroupsCache(userId: string): Promise<Group[] | null> {
-  try {
-    const raw = await AsyncStorage.getItem(groupsCacheKey(userId));
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return null;
-    return groupsWithoutRecency(parsed as Group[]);
-  } catch {
-    return null;
-  }
-}
-
-function writeGroupsCache(userId: string, groups: Group[]): void {
-  AsyncStorage.setItem(
-    groupsCacheKey(userId),
-    JSON.stringify(groupsWithoutRecency(groups)),
-  ).catch(() => {});
-}
 
 export async function fetchGroups(): Promise<Group[]> {
   const response = await fetchWithAuth("/groups?include_direct=1");
@@ -49,17 +32,13 @@ export function useGroups(options?: { enabled?: boolean }) {
   const queryClient = useQueryClient();
   const enabled = options?.enabled !== false && !!user?.id;
 
-  // Warm RQ from AsyncStorage so cold start can skip the empty-list spinner.
-  // Skip the read while a Profile visit is holding groups work off the critical path.
+  // Disk → RQ so the first paint can skip the empty-list spinner, then SWR.
   useEffect(() => {
     if (!enabled || !user?.id) return;
     let cancelled = false;
-    void readGroupsCache(user.id).then((cached) => {
+    void hydrateGroupsListCache(user.id, AsyncStorage).then((cached) => {
       if (cancelled || !cached?.length) return;
-      const existing = queryClient.getQueryData<Group[]>(queryKeys.groups);
-      if (!existing || existing.length === 0) {
-        queryClient.setQueryData(queryKeys.groups, cached);
-      }
+      seedGroupsListQuery(queryClient, user.id);
     });
     return () => {
       cancelled = true;
@@ -70,11 +49,12 @@ export function useGroups(options?: { enabled?: boolean }) {
     queryKey: queryKeys.groups,
     queryFn: async () => {
       const groups = await fetchGroups();
-      if (user?.id) writeGroupsCache(user.id, groups);
+      if (user?.id) writeGroupsListCache(user.id, groups, AsyncStorage);
       return groups;
     },
     enabled,
-    staleTime: 60_000,
+    staleTime: 0,
+    refetchOnMount: "always",
     gcTime: 1000 * 60 * 60 * 24,
   });
 
@@ -91,7 +71,6 @@ export function useGroupDetails(groupId: string | null) {
   const { user } = useAuth();
 
   const query = useQuery<GroupWithMembers | null, Error>({
-    // Guarded by `enabled`, so groupId is always non-null inside queryFn
     queryKey: groupId ? queryKeys.group(groupId) : queryKeys.group(""),
     queryFn: () => fetchGroupDetails(groupId as string),
     enabled: !!user?.id && !!groupId,

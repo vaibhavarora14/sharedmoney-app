@@ -1,10 +1,19 @@
 import { assertEquals } from "jsr:@std/assert@1";
-import { ACTIVITY_SEQUENTIAL_DB_ROUND_TRIPS, activityPageMeta } from "./page-meta.ts";
+import { activityPageMeta } from "./page-meta.ts";
+import {
+  ACTIVITY_SEQUENTIAL_DB_ROUND_TRIPS,
+  ACTIVITY_SEQUENTIAL_DB_ROUND_TRIPS_BEFORE,
+} from "./load-activity.ts";
 
-Deno.test("activity membership/blocked and history/count each count as one sequential batch", () => {
-  assertEquals(ACTIVITY_SEQUENTIAL_DB_ROUND_TRIPS, {
+Deno.test("activity feed is one RPC after JWT instead of four sequential DB batches", () => {
+  assertEquals(ACTIVITY_SEQUENTIAL_DB_ROUND_TRIPS_BEFORE, {
     membershipAndBlocked: 1,
     historyAndCount: 1,
+    participants: 1,
+    emailsAndProfiles: 1,
+  });
+  assertEquals(ACTIVITY_SEQUENTIAL_DB_ROUND_TRIPS, {
+    activityPageRpc: 1,
   });
 });
 

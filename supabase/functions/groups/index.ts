@@ -10,7 +10,7 @@ import { handleRecurringTemplateRequest, loadRecurringTemplateViews } from '../_
 import { normalizeOptionalCurrency } from '../_shared/rates.ts';
 import { isValidUUID, validateBodySize, validateGroupData } from '../_shared/validation.ts';
 import { requireMinVersion } from '../_shared/version-check.ts';
-import { loadGroupsList } from './list-groups.ts';
+import { attachBalanceNudgeMutes, loadGroupsList } from './list-groups.ts';
 
 /**
  * Groups Edge Function

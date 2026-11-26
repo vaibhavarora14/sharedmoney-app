@@ -4,6 +4,11 @@ import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
 import { log } from '../_shared/logger.ts';
 import { createEmptyResponse, createSuccessResponse } from '../_shared/response.ts';
 import {
+  loadGroupTransactionsPage,
+  parseTransactionListRequest,
+  transactionListHttpResponse,
+} from './list-transactions.ts';
+import {
   loadExpenseSnapshot,
   safelyCreateTransactionNotifications,
 } from '../_shared/transaction-notifications.ts';
@@ -91,20 +96,6 @@ function attachReceipts<T extends { transaction_receipts?: unknown; receipts?: u
   return next;
 }
 
-const TRANSACTION_PAGE_DEFAULT_LIMIT = 30;
-const TRANSACTION_PAGE_MAX_LIMIT = 100;
-
-function resolveTransactionListSort(sort: string | null): 'date' | 'created_at' {
-  return sort === 'created_at' ? 'created_at' : 'date';
-}
-
-function parsePositiveInt(input: string | null): number | null {
-  if (!input) return null;
-  const parsed = Number.parseInt(input, 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) return null;
-  return parsed;
-}
-
 Deno.serve(async (req: Request) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -133,222 +124,12 @@ Deno.serve(async (req: Request) => {
 
     // Handle GET - Fetch transactions (optionally filtered by group_id)
     if (httpMethod === 'GET') {
-      const groupId = url.searchParams.get('group_id');
-      const rawLimit = parsePositiveInt(url.searchParams.get('limit'));
-      const limit = Math.min(
-        rawLimit ?? TRANSACTION_PAGE_DEFAULT_LIMIT,
-        TRANSACTION_PAGE_MAX_LIMIT
-      );
-      const cursorDate = url.searchParams.get('cursor_date');
-      const cursorId = parsePositiveInt(url.searchParams.get('cursor_id'));
-      const listSort = resolveTransactionListSort(url.searchParams.get('sort'));
-      
-      if (groupId && !isValidUUID(groupId)) {
-        return createErrorResponse(400, 'Invalid group_id format. Expected UUID.', 'VALIDATION_ERROR', undefined, req);
+      const parsed = parseTransactionListRequest(url);
+      if (!parsed.ok) {
+        return createErrorResponse(parsed.status, parsed.message, parsed.code, undefined, req);
       }
-
-      if ((cursorDate && !cursorId) || (!cursorDate && cursorId)) {
-        return createErrorResponse(400, 'Both cursor_date and cursor_id are required when paginating.', 'VALIDATION_ERROR', undefined, req);
-      }
-
-      if (listSort === 'created_at' && (cursorDate || cursorId)) {
-        return createErrorResponse(400, 'sort=created_at does not support cursor pagination.', 'VALIDATION_ERROR', undefined, req);
-      }
-
-      if (listSort === 'created_at' && !groupId) {
-        return createErrorResponse(400, 'sort=created_at requires group_id.', 'VALIDATION_ERROR', undefined, req);
-      }
-      
-      let participantData: { id: string; type: string } | null = null;
-
-      if (groupId) {
-        // Fetch user's participant record to check status and ID
-        const { data: participantRecord, error: participantAuthError } = await supabase
-          .from('participants')
-          .select('id, type')
-          .eq('group_id', groupId)
-          .eq('user_id', user.id)
-          .single();
-
-        if (participantAuthError || !participantRecord) {
-          return createErrorResponse(403, 'Forbidden: You are not a participant in this group', 'PERMISSION_DENIED', undefined, req);
-        }
-
-        participantData = participantRecord;
-      }
-
-      const buildTransactionsQuery = (
-        pageCursorDate?: string | null,
-        pageCursorId?: number | null
-      ) => {
-        let query = supabase
-          .from('transactions')
-          .select(`
-            *,
-            transaction_splits (
-              id,
-              participant_id,
-              amount,
-              created_at
-            ),
-            transaction_receipts (
-              id,
-              transaction_id,
-              group_id,
-              storage_path,
-              content_type,
-              byte_size,
-              sort_order,
-              created_at
-            )
-          `);
-
-        if (groupId) {
-          query = query.eq('group_id', groupId);
-        }
-
-        if (pageCursorDate && pageCursorId) {
-          query = query.or(
-            `date.lt.${pageCursorDate},and(date.eq.${pageCursorDate},id.lt.${pageCursorId})`
-          );
-        }
-
-        if (listSort === 'created_at') {
-          return query
-            .order('created_at', { ascending: false })
-            .order('id', { ascending: false });
-        }
-
-        return query
-          .order('date', { ascending: false })
-          .order('id', { ascending: false });
-      };
-
-      const isFormerParticipant = participantData?.type === 'former' && !!groupId;
-      const formerParticipantId = participantData?.id ?? null;
-
-      let fetchedTransactions: any[] = [];
-      let sourceExhausted = false;
-      let rollingCursorDate = cursorDate;
-      let rollingCursorId = cursorId;
-      let safetyIterations = 0;
-      const maxFetchIterations = listSort === 'created_at' ? 1 : 20;
-
-      while (fetchedTransactions.length < limit + 1 && !sourceExhausted && safetyIterations < maxFetchIterations) {
-        safetyIterations += 1;
-        const { data: transactionsData, error } = await buildTransactionsQuery(rollingCursorDate, rollingCursorId)
-          .limit(limit + 1);
-
-        if (error) {
-          return handleError(error, 'fetching transactions', req);
-        }
-
-        const pageRows = transactionsData || [];
-        if (pageRows.length === 0) {
-          sourceExhausted = true;
-          break;
-        }
-
-        if (isFormerParticipant && formerParticipantId) {
-          const formerVisible = pageRows.filter((tx: any) => {
-            const isPayer = tx.paid_by_participant_id === formerParticipantId;
-            const isInSplits = tx.transaction_splits?.some((s: any) => s.participant_id === formerParticipantId);
-            const isLegacyPayer = tx.paid_by === user.id || tx.user_id === user.id;
-            const isLegacySplit = tx.split_among?.includes(user.id);
-
-            return isPayer || isInSplits || isLegacyPayer || isLegacySplit;
-          });
-          fetchedTransactions.push(...formerVisible);
-        } else {
-          fetchedTransactions.push(...pageRows);
-        }
-
-        const lastRow = pageRows[pageRows.length - 1];
-        rollingCursorDate = lastRow?.date ?? null;
-        rollingCursorId = lastRow?.id ?? null;
-
-        if (pageRows.length < limit + 1) {
-          sourceExhausted = true;
-        }
-      }
-
-      const transactions = fetchedTransactions.slice(0, limit);
-      const lastVisibleTransaction = transactions[transactions.length - 1];
-      const moreInSource = fetchedTransactions.length > limit || !sourceExhausted;
-      const nextCursor: TransactionCursor | null =
-        listSort === 'created_at' || !moreInSource || !lastVisibleTransaction
-          ? null
-          : {
-            date: lastVisibleTransaction.date,
-            id: lastVisibleTransaction.id,
-          };
-      // Former-participant filtering can drop an entire page; never signal has_more without a cursor.
-      const hasMore = nextCursor !== null;
-
-      // Collect all participant IDs from splits and paid_by to enrich with participant data
-      const allParticipantIds = new Set<string>();
-      
-      (transactions || []).forEach((tx: TransactionWithSplits) => {
-        if (tx.transaction_splits) {
-          tx.transaction_splits.forEach((split) => {
-            if (split.participant_id) {
-              allParticipantIds.add(split.participant_id);
-            }
-          });
-        }
-        if (tx.paid_by_participant_id) {
-          allParticipantIds.add(tx.paid_by_participant_id);
-        }
-      });
-
-      // Fetch participant data for enrichment
-      let participantMap = new Map<string, Participant>();
-      
-      if (allParticipantIds.size > 0) {
-        const { data: participants, error: participantsError } = await supabase
-          .from('participants')
-          .select('id, group_id, user_id, email, type, role, full_name, avatar_url')
-          .in('id', Array.from(allParticipantIds));
-
-        if (!participantsError && participants) {
-          participants.forEach((p: Participant) => {
-            participantMap.set(p.id, p);
-          });
-        }
-      }
-
-      const parsedTransactions = (transactions || []).map((tx: TransactionWithSplits) => {
-        // Enrich splits with participant data
-        if (tx.transaction_splits) {
-          tx.splits = tx.transaction_splits.map((split) => {
-            const participant = split.participant_id ? participantMap.get(split.participant_id) : null;
-            
-            return {
-              ...split,
-              user_id: participant?.user_id || null,
-              email: participant?.email || null,
-              full_name: participant?.full_name || null,
-              avatar_url: participant?.avatar_url || null,
-            };
-          });
-          delete tx.transaction_splits;
-        }
-
-        // Populate split_among_participant_ids for the frontend
-        if (tx.splits) {
-          tx.split_among_participant_ids = tx.splits
-            .map((s) => s.participant_id)
-            .filter((id): id is string => !!id);
-        }
-
-        return attachReceipts(tx);
-      });
-
-      return createSuccessResponse({
-        items: parsedTransactions,
-        has_more: hasMore,
-        next_cursor: nextCursor,
-      }, 200, 0, req);
+      const loaded = await loadGroupTransactionsPage(supabase, user, parsed);
+      return transactionListHttpResponse(loaded, req);
     }
 
     // Handle POST - Create new transaction

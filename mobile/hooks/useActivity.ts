@@ -1,7 +1,10 @@
-import { useInfiniteQuery } from "@tanstack/react-query";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { ActivityFeedResponse } from "../types";
 import { fetchWithAuth } from "../utils/api";
+import { rememberGroupActivity, seedGroupOpenQueries } from "../utils/groupOpenCache";
 import { activityQueryOptions, ACTIVITY_PAGE_SIZE } from "./activityQuery";
 
 export async function fetchActivityPage(
@@ -28,11 +31,30 @@ export function useActivity(
   options?: UseActivityOptions
 ) {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const enabledOption = options?.enabled;
 
+  const userId = user?.id;
+
+  useEffect(() => {
+    if (!userId || !groupId) return;
+    seedGroupOpenQueries(queryClient, userId, groupId);
+  }, [groupId, queryClient, userId]);
+
+  const fetchPage = useCallback(
+    async (id: string, offset: number, limit: number) => {
+      const page = await fetchActivityPage(id, offset, limit);
+      if (offset === 0 && userId) {
+        void rememberGroupActivity(AsyncStorage, userId, id, page);
+      }
+      return page;
+    },
+    [userId],
+  );
+
   const query = useInfiniteQuery({
-    ...activityQueryOptions(groupId ?? "", fetchActivityPage),
-    enabled: !!user?.id && !!groupId && enabledOption !== false,
+    ...activityQueryOptions(groupId ?? "", fetchPage),
+    enabled: !!userId && !!groupId && enabledOption !== false,
   });
 
   const pages = query.data?.pages || [];

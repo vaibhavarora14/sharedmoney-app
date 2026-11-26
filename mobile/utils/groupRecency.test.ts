@@ -49,7 +49,7 @@ Deno.test("recency stays off the row until last_activity is fetched", () => {
   } as { created_at: string }, NOW), null);
 });
 
-Deno.test("the groups cache drops last activity so recency is not painted from disk", () => {
+Deno.test("groupsWithoutRecency still strips last_activity for callers that need it", () => {
   const stored = groupsWithoutRecency([
     {
       id: "g",

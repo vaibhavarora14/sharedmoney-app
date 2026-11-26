@@ -1,7 +1,7 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { resolveAuthenticatedUser } from './auth-claims.ts';
 import { scheduleBackgroundWork } from './background.ts';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './env.ts';
-import { sessionIsAnonymous } from './guest.ts';
 import { recordLastSeenAppFromRequest } from './last-seen-app.ts';
 import { log } from './logger.ts';
 
@@ -41,12 +41,9 @@ export async function verifyAuth(request: Request): Promise<{
     },
   });
 
-  // Verify the user
-  const { data: { user }, error } = await supabase.auth.getUser();
-
-  if (error || !user) {
-    throw new Error('Unauthorized: Invalid or expired token');
-  }
+  // JWKS-backed getClaims is local on a warm isolate. getUser is a
+  // sequential Auth hop from the caller's region to the project.
+  const user = await resolveAuthenticatedUser(supabase.auth, authHeader);
 
   // Last-seen version is for reminder emails, not the response. Do not
   // add a sequential DB round trip to every authenticated request (#486).
@@ -58,13 +55,10 @@ export async function verifyAuth(request: Request): Promise<{
   return {
     user: {
       id: user.id,
-      email: user.email || null,
+      email: user.email,
     },
     supabase,
-    isAnonymous: sessionIsAnonymous(
-      user as { is_anonymous?: boolean },
-      authHeader,
-    ),
+    isAnonymous: user.isAnonymous,
   };
 }
 
