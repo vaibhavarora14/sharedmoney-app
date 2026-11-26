@@ -41,3 +41,12 @@ export function resolveGroupDetailsReadyTiming({
   }
   return { duration_ms, from_cache, cache_status };
 }
+
+export function resolveGroupLedgerReadyTiming(input: {
+  openStartedAtMs: number;
+  nowMs: number;
+}): { duration_ms: number } {
+  return {
+    duration_ms: Math.max(0, Math.round(input.nowMs - input.openStartedAtMs)),
+  };
+}

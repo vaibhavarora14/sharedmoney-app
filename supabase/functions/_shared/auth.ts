@@ -1,4 +1,5 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { scheduleBackgroundWork } from './background.ts';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './env.ts';
 import { sessionIsAnonymous } from './guest.ts';
 import { recordLastSeenAppFromRequest } from './last-seen-app.ts';
@@ -47,7 +48,12 @@ export async function verifyAuth(request: Request): Promise<{
     throw new Error('Unauthorized: Invalid or expired token');
   }
 
-  await recordLastSeenAppFromRequest(supabase, user.id, request);
+  // Last-seen version is for reminder emails, not the response. Do not
+  // add a sequential DB round trip to every authenticated request (#486).
+  scheduleBackgroundWork(
+    recordLastSeenAppFromRequest(supabase, user.id, request),
+    'last-seen-app',
+  );
 
   return {
     user: {

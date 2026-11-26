@@ -27,5 +27,6 @@ export {
   scrubSentryBreadcrumb,
   scrubSentryErrorEvent,
   scrubSentryTransaction,
+  shouldCreateSentryHttpSpan,
   subscribeSentryRoute,
 } from "./sentryTracingPolicy";

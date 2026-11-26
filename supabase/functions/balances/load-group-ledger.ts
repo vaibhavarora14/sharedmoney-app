@@ -3,6 +3,9 @@
  * Fetches expense transactions, settlements, and participants in parallel
  * so the balances edge function avoids sequential waterfalls and duplicate
  * re-fetches when include_stats=true.
+ *
+ * PostgREST max_rows is 1000. Every table here is paged so a group with
+ * more than 1,000 expenses still has complete balances.
  */
 
 export type LedgerTransactionSplit = {
@@ -12,6 +15,7 @@ export type LedgerTransactionSplit = {
 
 export type LedgerTransaction = {
   id: number;
+  group_id?: string;
   amount: number | string;
   description?: string;
   date?: string;
@@ -23,6 +27,7 @@ export type LedgerTransaction = {
 
 export type LedgerParticipant = {
   id: string;
+  group_id?: string;
   user_id: string | null;
   email: string | null;
   full_name: string | null;
@@ -45,8 +50,11 @@ export type GroupLedgerSnapshot = {
   settlements: LedgerSettlement[];
 };
 
+export const POSTGREST_PAGE_SIZE = 1000;
+
 const BALANCE_TX_SELECT = `
   id,
+  group_id,
   amount,
   paid_by_participant_id,
   currency,
@@ -58,6 +66,7 @@ const BALANCE_TX_SELECT = `
 
 const STATS_TX_SELECT = `
   id,
+  group_id,
   amount,
   description,
   date,
@@ -71,60 +80,135 @@ const STATS_TX_SELECT = `
 `;
 
 /**
- * Count of parallel PostgREST queries issued by loadGroupLedger.
- * Used in tests / PR before-after reasoning (not a runtime metric).
+ * Count of parallel PostgREST queries issued by loadGroupLedger / loadGroupLedgers
+ * (transactions, participants, settlements). Used in tests / PR before-after
+ * reasoning (not a runtime metric).
  */
 export const GROUP_LEDGER_PARALLEL_QUERY_COUNT = 3;
+
+type RangeQuery<T> = {
+  range: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>;
+};
+
+export async function pageAllRows<T>(
+  buildQuery: () => RangeQuery<T>,
+  pageSize = POSTGREST_PAGE_SIZE,
+): Promise<T[]> {
+  const rows: T[] = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await buildQuery().range(from, from + pageSize - 1);
+    if (error) throw error;
+    const page = (data || []) as T[];
+    rows.push(...page);
+    if (page.length < pageSize) break;
+    from += pageSize;
+  }
+  return rows;
+}
 
 export async function loadGroupLedger(
   supabase: any,
   groupId: string,
-  options?: { includeStatsFields?: boolean }
+  options?: { includeStatsFields?: boolean },
 ): Promise<GroupLedgerSnapshot> {
   const includeStatsFields = options?.includeStatsFields === true;
   const txSelect = includeStatsFields ? STATS_TX_SELECT : BALANCE_TX_SELECT;
 
-  let transactionsQuery = supabase
-    .from("transactions")
-    .select(txSelect)
-    .eq("group_id", groupId)
-    .eq("type", "expense");
+  const makeTransactionsQuery = () => {
+    let query = supabase
+      .from("transactions")
+      .select(txSelect)
+      .eq("group_id", groupId)
+      .eq("type", "expense");
+    if (includeStatsFields) {
+      query = query
+        .order("date", { ascending: false })
+        .order("id", { ascending: false });
+    }
+    return query;
+  };
 
-  if (includeStatsFields) {
-    transactionsQuery = transactionsQuery
-      .order("date", { ascending: false })
-      .order("id", { ascending: false });
-  }
-
-  const [transactionsResult, participantsResult, settlementsResult] =
-    await Promise.all([
-      transactionsQuery,
+  const [transactions, participants, settlements] = await Promise.all([
+    pageAllRows<LedgerTransaction>(makeTransactionsQuery),
+    pageAllRows<LedgerParticipant>(() =>
       supabase
         .from("participants")
-        .select("id, user_id, email, full_name, avatar_url, type")
+        .select("id, group_id, user_id, email, full_name, avatar_url, type")
         .eq("group_id", groupId),
+    ),
+    pageAllRows<LedgerSettlement>(() =>
       supabase
         .from("settlements")
         .select(
-          "id, group_id, from_participant_id, to_participant_id, amount, currency"
+          "id, group_id, from_participant_id, to_participant_id, amount, currency",
         )
         .eq("group_id", groupId),
-    ]);
+    ),
+  ]);
 
-  if (transactionsResult.error) {
-    throw transactionsResult.error;
+  return { transactions, participants, settlements };
+}
+
+/**
+ * Home multi-group ledger: a few `in (group_ids)` queries instead of
+ * per-group waterfalls. Pages past 1,000 rows per table.
+ */
+export async function loadGroupLedgers(
+  supabase: any,
+  groupIds: string[],
+  options?: { includeStatsFields?: boolean },
+): Promise<Map<string, GroupLedgerSnapshot>> {
+  const byGroup = new Map<string, GroupLedgerSnapshot>();
+  for (const groupId of groupIds) {
+    byGroup.set(groupId, {
+      transactions: [],
+      participants: [],
+      settlements: [],
+    });
   }
-  if (settlementsResult.error) {
-    throw settlementsResult.error;
+  if (groupIds.length === 0) return byGroup;
+
+  const includeStatsFields = options?.includeStatsFields === true;
+  const txSelect = includeStatsFields ? STATS_TX_SELECT : BALANCE_TX_SELECT;
+
+  const [transactions, participants, settlements] = await Promise.all([
+    pageAllRows<LedgerTransaction>(() =>
+      supabase
+        .from("transactions")
+        .select(txSelect)
+        .in("group_id", groupIds)
+        .eq("type", "expense"),
+    ),
+    pageAllRows<LedgerParticipant>(() =>
+      supabase
+        .from("participants")
+        .select("id, group_id, user_id, email, full_name, avatar_url, type")
+        .in("group_id", groupIds),
+    ),
+    pageAllRows<LedgerSettlement>(() =>
+      supabase
+        .from("settlements")
+        .select(
+          "id, group_id, from_participant_id, to_participant_id, amount, currency",
+        )
+        .in("group_id", groupIds),
+    ),
+  ]);
+
+  for (const transaction of transactions) {
+    const groupId = transaction.group_id;
+    if (!groupId) continue;
+    byGroup.get(groupId)?.transactions.push(transaction);
   }
-  // Participants missing is non-fatal for empty groups; treat as [].
-  if (participantsResult.error) {
-    throw participantsResult.error;
+  for (const participant of participants) {
+    const groupId = participant.group_id;
+    if (!groupId) continue;
+    byGroup.get(groupId)?.participants.push(participant);
+  }
+  for (const settlement of settlements) {
+    byGroup.get(settlement.group_id)?.settlements.push(settlement);
   }
 
-  return {
-    transactions: (transactionsResult.data || []) as LedgerTransaction[],
-    participants: (participantsResult.data || []) as LedgerParticipant[],
-    settlements: (settlementsResult.data || []) as LedgerSettlement[],
-  };
+  return byGroup;
 }

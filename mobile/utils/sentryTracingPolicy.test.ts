@@ -4,6 +4,7 @@ import {
   resolveSentryTracesSampleRate,
   scrubSentryBreadcrumb,
   scrubSentryTransaction,
+  shouldCreateSentryHttpSpan,
 } from "./sentryTracingPolicy.ts";
 
 Deno.test("traces sample rate defaults to 1.0 while traffic is tiny", () => {
@@ -56,6 +57,21 @@ Deno.test("trace propagation targets keep hosts only (no secrets)", () => {
       apiUrl: "https://abc.supabase.co/functions/v1",
     }),
     ["abc.supabase.co", "abc.supabase.co", "localhost", "127.0.0.1"],
+  );
+});
+
+Deno.test("HTTP spans are created for Supabase hosts and skipped elsewhere", () => {
+  const targets = resolveSentryTracePropagationTargets({
+    supabaseUrl: "https://abc.supabase.co",
+    apiUrl: "https://abc.supabase.co/functions/v1",
+  });
+  assertEquals(
+    shouldCreateSentryHttpSpan("https://abc.supabase.co/functions/v1/groups", targets),
+    true,
+  );
+  assertEquals(
+    shouldCreateSentryHttpSpan("https://evil.example/steal", targets),
+    false,
   );
 });
 

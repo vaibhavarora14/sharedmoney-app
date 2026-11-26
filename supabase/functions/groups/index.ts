@@ -1,11 +1,5 @@
 import { recordLastSeenAppIfAuthenticated, verifyAuth } from '../_shared/auth.ts';
 import { createErrorResponse, handleError } from '../_shared/error-handler.ts';
-import {
-  collectActivityNameIds,
-  lastActivityByGroup,
-  type HistoryActivityRow,
-} from '../_shared/groupLastActivity.ts';
-import { log } from '../_shared/logger.ts';
 import { parsePath } from '../_shared/path-parser.ts';
 import { createEmptyResponse, createSuccessResponse } from '../_shared/response.ts';
 import { fetchUserEmails } from '../_shared/user-email.ts';
@@ -16,6 +10,7 @@ import { handleRecurringTemplateRequest, loadRecurringTemplateViews } from '../_
 import { normalizeOptionalCurrency } from '../_shared/rates.ts';
 import { isValidUUID, validateBodySize, validateGroupData } from '../_shared/validation.ts';
 import { requireMinVersion } from '../_shared/version-check.ts';
+import { loadGroupsList } from './list-groups.ts';
 
 /**
  * Groups Edge Function
@@ -66,73 +61,6 @@ interface GroupWithMembers extends Group {
   members?: Array<GroupMember & { email?: string; full_name?: string | null; avatar_url?: string | null }>;
 }
 
-async function attachGroupLastActivity(
-  supabase: any,
-  groups: Array<Record<string, unknown>>,
-  viewerId: string,
-): Promise<Array<Record<string, unknown>>> {
-  const ids = groups
-    .map((group) => group.id)
-    .filter((id): id is string => typeof id === 'string' && isValidUUID(id));
-  if (ids.length === 0) {
-    return groups.map((group) => ({ ...group, last_activity: null }));
-  }
-
-  const { data, error } = await supabase.rpc('latest_group_activity', { p_group_ids: ids });
-  if (error) {
-    log.error('latest group activity failed', 'groups', { error: error.message });
-    return groups;
-  }
-
-  const rows = (data || []) as HistoryActivityRow[];
-  const { userIds, participantIds } = collectActivityNameIds(rows);
-  const names = new Map<string, string | null>();
-  const [profiles, participantsResult] = await Promise.all([
-    fetchUserProfiles(supabase, userIds),
-    participantIds.length > 0
-      ? supabase.from('participants').select('id, full_name').in('id', participantIds)
-      : Promise.resolve({ data: [] }),
-  ]);
-  for (const [id, profile] of profiles) {
-    names.set(id, profile.full_name);
-  }
-  for (const person of participantsResult.data || []) {
-    if (person?.id && !names.has(person.id)) {
-      names.set(person.id, person.full_name ?? null);
-    }
-  }
-
-  const byGroup = lastActivityByGroup(rows, names, viewerId);
-  return groups.map((group) => ({
-    ...group,
-    last_activity: typeof group.id === 'string' ? (byGroup.get(group.id) ?? null) : null,
-  }));
-}
-
-
-async function attachBalanceNudgeMutes<T extends { id: string }>(
-  supabase: { from: (table: string) => any },
-  groups: T[],
-  userId: string,
-): Promise<Array<T & { balance_nudge_muted: boolean }>> {
-  if (groups.length === 0) {
-    return [];
-  }
-  const { data, error } = await supabase
-    .from('group_balance_nudge_mutes')
-    .select('group_id')
-    .eq('user_id', userId)
-    .in('group_id', groups.map((group) => group.id));
-  if (error) {
-    throw error;
-  }
-  const muted = new Set((data || []).map((row: { group_id: string }) => row.group_id));
-  return groups.map((group) => ({
-    ...group,
-    balance_nudge_muted: muted.has(group.id),
-  }));
-}
-
 Deno.serve(async (req: Request) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -176,65 +104,12 @@ Deno.serve(async (req: Request) => {
       // Direct ledgers stay out of the groups list and search unless Home asks
       // for them. Group details by id still work, so "View with Kabir" can open one.
       const includeDirect = url.searchParams.get('include_direct') === '1';
-      let groupsQuery = supabase
-        .from('groups')
-        .select(`
-          id, 
-          name, 
-          description, 
-          created_by, 
-          created_at, 
-          updated_at,
-          kind,
-          settlement_currency,
-          unify_balances,
-          default_split_mode,
-          default_split_weights,
-          balance_nudge_cadence,
-          group_members!inner(status, archived_at, hidden_at)
-        `)
-        .eq('group_members.user_id', user.id)
-        .order('created_at', { ascending: false });
-      if (!includeDirect) {
-        groupsQuery = groupsQuery.neq('kind', 'direct');
-      }
-      const { data: groups, error } = await groupsQuery;
-
-      if (error) {
+      try {
+        const listed = await loadGroupsList(supabase, user.id, includeDirect);
+        return createSuccessResponse(listed, 200, 0, req); // No caching - real-time data
+      } catch (error) {
         return handleError(error, 'fetching groups', req);
       }
-
-      // Flatten the response and extract status / archive state.
-      // Hidden memberships are omitted from the list for this user only.
-      const flattenedGroups = (groups || [])
-        .map((g: any) => {
-          const membership = g.group_members?.[0] || {};
-          return {
-            ...g,
-            user_status: membership.status || 'active',
-            archived_at: membership.archived_at ?? null,
-            hidden_at: membership.hidden_at ?? null,
-            group_members: undefined, // Remove nesting
-          };
-        })
-        .filter((g: any) => !g.hidden_at)
-        .map((g: any) => ({ ...g, hidden_at: null }));
-
-      // Sort: active (non-archived) first, archived next, left (former) last.
-      flattenedGroups.sort((a: any, b: any) => {
-        const rank = (g: any) => {
-          if (g.user_status === 'left') return 2;
-          if (g.archived_at) return 1;
-          return 0;
-        };
-        const diff = rank(a) - rank(b);
-        if (diff !== 0) return diff;
-        return 0; // Keep DB order (created_at DESC) within the same bucket
-      });
-
-      const withMutes = await attachBalanceNudgeMutes(supabase, flattenedGroups, user.id);
-      const withActivity = await attachGroupLastActivity(supabase, withMutes, user.id);
-      return createSuccessResponse(withActivity, 200, 0, req); // No caching - real-time data
     }
 
     // Handle GET /groups/:id - Get group details with members
@@ -244,8 +119,9 @@ Deno.serve(async (req: Request) => {
         return createErrorResponse(400, 'Invalid group_id format. Expected UUID.', 'VALIDATION_ERROR', undefined, req);
       }
 
-      // Fetch group + members in parallel (members query is cheap even if group 404s)
-      const [groupResult, membersResult, muteResult] = await Promise.all([
+      // Fetch group + members + mute + recurring templates in one batch.
+      // Templates are settled separately so a 404 still wins if the group is gone.
+      const [groupResult, membersResult, muteResult, recurringSettled] = await Promise.all([
         supabase
           .from('groups')
           .select(GROUP_COLUMNS)
@@ -262,12 +138,20 @@ Deno.serve(async (req: Request) => {
           .eq('group_id', groupId)
           .eq('user_id', user.id)
           .maybeSingle(),
+        loadRecurringTemplateViews(supabase, groupId).then(
+          (value) => ({ ok: true as const, value }),
+          (error) => ({ ok: false as const, error }),
+        ),
       ]);
 
       const { data: group, error: groupError } = groupResult;
       if (groupError || !group) {
         return createErrorResponse(404, 'Group not found', 'NOT_FOUND', undefined, req);
       }
+      if (!recurringSettled.ok) {
+        throw recurringSettled.error;
+      }
+      const recurringTemplates = recurringSettled.value;
 
       const { data: members, error: membersError } = membersResult;
       if (membersError) {
@@ -311,8 +195,7 @@ Deno.serve(async (req: Request) => {
         members: membersWithEmails,
       };
 
-      const recurring_templates = await loadRecurringTemplateViews(supabase, groupId);
-      return createSuccessResponse({ ...groupWithMembers, recurring_templates }, 200, 0, req); // No caching - real-time data
+      return createSuccessResponse({ ...groupWithMembers, recurring_templates: recurringTemplates }, 200, 0, req); // No caching - real-time data
     }
 
     // Handle POST /groups - Create new group

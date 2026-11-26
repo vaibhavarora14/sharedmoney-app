@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQueryClient } from "@tanstack/react-query";
 import React, { useEffect, useState } from "react";
-import { InteractionManager, Platform, ScrollView, StyleSheet, TouchableOpacity, useWindowDimensions, View } from "react-native";
+import { Platform, ScrollView, StyleSheet, TouchableOpacity, useWindowDimensions, View } from "react-native";
 import {
   ActivityIndicator,
   Appbar,
@@ -199,7 +199,6 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
   const [formerGroupsExpanded, setFormerGroupsExpanded] = useState<boolean>(false);
   const [archivedGroupsExpanded, setArchivedGroupsExpanded] = useState<boolean>(false);
   const [seenGroupIds, setSeenGroupIds] = useState<Set<string> | null>(null);
-  const [balancesEnabled, setBalancesEnabled] = useState(false);
   const theme = useTheme();
   const { fontScale } = useWindowDimensions();
   const expandedText = fontScale > 1;
@@ -218,23 +217,15 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
   const [showLoadingLine, setShowLoadingLine] = useState(false);
   const { data: groups, isLoading: loading, error, refetch } = useGroups();
   const deviceOffline = useIsOffline();
-  // Share App's deferred all-balances enablement: wait for list paint, then badges.
-  useEffect(() => {
-    if (loading && groups.length === 0) return;
-    const task = InteractionManager.runAfterInteractions(() => {
-      setBalancesEnabled(true);
-    });
-    return () => task.cancel();
-  }, [loading, groups.length]);
   const {
     data: balancesData,
     hasData: balancesHaveData,
     refetch: refetchBalances,
-  } = useBalances(undefined, { enabled: balancesEnabled });
+  } = useBalances();
   useEffect(() => {
-    if (!user?.id || !balancesEnabled || !balancesHaveData) return;
+    if (!user?.id || !balancesHaveData) return;
     void rememberAllBalances(AsyncStorage, user.id, balancesData);
-  }, [balancesData, balancesEnabled, balancesHaveData, user?.id]);
+  }, [balancesData, balancesHaveData, user?.id]);
   // A disk-seeded response paints immediately. Missing data is not Even.
   const balancesReady = balancesHaveData;
 

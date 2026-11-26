@@ -479,13 +479,11 @@ function AppContent() {
 
   const prefetchGroupData = React.useCallback(
     async (groupId: string) => {
-      // Balance first, then the first ledger page. Stats and history stay
-      // behind the screens that open them.
-      await queryClientInstance.prefetchQuery({
-        queryKey: queryKeys.balances(groupId),
-        queryFn: () => fetchBalances(groupId, false),
-      });
       await Promise.all([
+        queryClientInstance.prefetchQuery({
+          queryKey: queryKeys.balances(groupId),
+          queryFn: () => fetchBalances(groupId, false),
+        }),
         queryClientInstance.prefetchQuery({
           queryKey: queryKeys.group(groupId),
           queryFn: () => fetchGroupDetails(groupId),

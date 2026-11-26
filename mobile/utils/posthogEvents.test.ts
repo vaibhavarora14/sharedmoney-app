@@ -40,6 +40,10 @@ Deno.test("group details ready latency event name is stable", () => {
   assertEquals(ANALYTICS_EVENTS.GROUP_DETAILS_READY, "group_details_ready");
 });
 
+Deno.test("group ledger ready latency event name is stable", () => {
+  assertEquals(ANALYTICS_EVENTS.GROUP_LEDGER_READY, "group_ledger_ready");
+});
+
 Deno.test("groups home loaded latency event name is stable", () => {
   assertEquals(ANALYTICS_EVENTS.GROUPS_HOME_LOADED, "groups_home_loaded");
 });

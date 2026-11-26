@@ -93,6 +93,29 @@ function otherParty(
   return to ?? from;
 }
 
+/** Columns the Home recency line needs. Extra history fields stay off this path. */
+export const LATEST_ACTIVITY_COLUMNS =
+  "group_id, action, activity_type, changed_by, changed_at, changes, snapshot";
+
+/**
+ * Newest transaction_history row per group using (group_id, changed_at DESC).
+ * One RPC so the index nested-loop is a single round trip, scoped to the
+ * caller's group ids. RLS still applies (SECURITY INVOKER).
+ */
+export async function fetchLatestHistoryRows(
+  supabase: { rpc: (fn: string, args: { p_group_ids: string[] }) => PromiseLike<{ data: HistoryActivityRow[] | null; error: { message?: string } | null }> },
+  groupIds: string[],
+): Promise<HistoryActivityRow[]> {
+  if (groupIds.length === 0) return [];
+  const { data, error } = await supabase.rpc("latest_group_activity", {
+    p_group_ids: groupIds,
+  });
+  if (error) {
+    throw new Error(error.message || "latest group activity failed");
+  }
+  return (data || []) as HistoryActivityRow[];
+}
+
 export function collectActivityNameIds(rows: HistoryActivityRow[]): { userIds: string[]; participantIds: string[] } {
   const userIds = new Set<string>();
   const participantIds = new Set<string>();

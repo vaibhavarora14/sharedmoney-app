@@ -260,6 +260,7 @@ export function useTransactions(
     data: flattenedData,
     isLoading: query.isLoading,
     isFetching: query.isFetching,
+    isFetched: query.isFetched,
     isFetchingNextPage: query.isFetchingNextPage,
     hasNextPage: query.hasNextPage,
     fetchNextPage: query.fetchNextPage,

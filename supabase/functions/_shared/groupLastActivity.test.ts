@@ -1,5 +1,6 @@
 import { assertEquals } from "jsr:@std/assert@1";
 import {
+  fetchLatestHistoryRows,
   lastActivityByGroup,
   type HistoryActivityRow,
 } from "./groupLastActivity.ts";
@@ -61,4 +62,23 @@ Deno.test("activity names do not include an email", () => {
   const activity = mapped.get("group-1");
   assertEquals(activity?.actor, "Someone");
   assertEquals(JSON.stringify(activity).includes("@"), false);
+});
+
+Deno.test("latest activity RPC is scoped to the caller's group ids", async () => {
+  const calls: Array<{ fn: string; args: { p_group_ids: string[] } }> = [];
+  const rows = await fetchLatestHistoryRows({
+    rpc(fn, args) {
+      calls.push({ fn, args });
+      return Promise.resolve({
+        data: [row({ group_id: args.p_group_ids[0] })],
+        error: null,
+      });
+    },
+  }, ["group-1", "group-2"]);
+  assertEquals(calls, [{
+    fn: "latest_group_activity",
+    args: { p_group_ids: ["group-1", "group-2"] },
+  }]);
+  assertEquals(rows[0].group_id, "group-1");
+  assertEquals(await fetchLatestHistoryRows({ rpc: () => Promise.resolve({ data: [], error: null }) }, []), []);
 });

@@ -1,5 +1,8 @@
 import { assertEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
-import { resolveGroupDetailsReadyTiming } from "./groupDetailsReadyTelemetry.ts";
+import {
+  resolveGroupDetailsReadyTiming,
+  resolveGroupLedgerReadyTiming,
+} from "./groupDetailsReadyTelemetry.ts";
 
 Deno.test("warm cache hit reports positive duration from open intent, not zeroed effects", () => {
   const timing = resolveGroupDetailsReadyTiming({
@@ -45,4 +48,15 @@ Deno.test("never emits negative duration_ms", () => {
     sawBalancesLoading: false,
   });
   assertEquals(timing.duration_ms, 0);
+});
+
+Deno.test("group_ledger_ready duration_ms is open intent to first expense-list paint", () => {
+  assertEquals(
+    resolveGroupLedgerReadyTiming({ openStartedAtMs: 1_000, nowMs: 1_420 }).duration_ms,
+    420,
+  );
+  assertEquals(
+    resolveGroupLedgerReadyTiming({ openStartedAtMs: 2_000, nowMs: 1_999 }).duration_ms,
+    0,
+  );
 });
