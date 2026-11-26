@@ -10,7 +10,7 @@ import { handleRecurringTemplateRequest, loadRecurringTemplateViews } from '../_
 import { normalizeOptionalCurrency } from '../_shared/rates.ts';
 import { isValidUUID, validateBodySize, validateGroupData } from '../_shared/validation.ts';
 import { requireMinVersion } from '../_shared/version-check.ts';
-import { attachBalanceNudgeMutes, loadGroupsList } from './list-groups.ts';
+import { attachBalanceNudgeMutes, loadGroupsListFromTables } from './list-groups.ts';
 
 /**
  * Groups Edge Function
@@ -105,7 +105,7 @@ Deno.serve(async (req: Request) => {
       // for them. Group details by id still work, so "View with Kabir" can open one.
       const includeDirect = url.searchParams.get('include_direct') === '1';
       try {
-        const listed = await loadGroupsList(supabase, user.id, includeDirect);
+        const listed = await loadGroupsListFromTables(supabase, user.id, includeDirect);
         return createSuccessResponse(listed, 200, 0, req); // No caching - real-time data
       } catch (error) {
         return handleError(error, 'fetching groups', req);
