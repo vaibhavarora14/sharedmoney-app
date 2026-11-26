@@ -1,5 +1,4 @@
 import { generateActivityDescription } from "../_shared/activityDescriptions.ts";
-import { fetchUserEmails } from "../_shared/user-email.ts";
 import { fetchUserProfiles } from "../_shared/user-profiles.ts";
 import { isValidUUID } from "../_shared/validation.ts";
 import { activityPageMeta } from "./page-meta.ts";
@@ -391,6 +390,13 @@ export function assembleActivityFeed(input: {
   };
 }
 
+/** Injected so repo-root Deno tests never load `jsr:@supabase/supabase-js`. */
+export type FetchUserEmails = (
+  userIds: string[],
+  currentUserId: string,
+  currentUserEmail: string | null,
+) => Promise<Map<string, string>>;
+
 export async function loadActivityFeedFromTables(
   supabase: {
     from: (table: string) => any;
@@ -399,7 +405,7 @@ export async function loadActivityFeedFromTables(
   groupId: string,
   limit: number,
   offset: number,
-  fetchEmails: typeof fetchUserEmails = fetchUserEmails,
+  fetchEmails: FetchUserEmails,
 ): Promise<LoadActivityResult> {
   const [membershipResult, blockedResult] = await Promise.all([
     supabase

@@ -181,6 +181,7 @@ Deno.test("non-members are forbidden on both paths", async () => {
     GROUP,
     50,
     0,
+    async () => new Map(),
   );
   const rpcPath = await loadActivityFeed(
     {
