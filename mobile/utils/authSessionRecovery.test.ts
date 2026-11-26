@@ -4,7 +4,10 @@ import {
   decideSessionRecovery,
   isFatalRefreshFailure,
   parsePersistedAuthSession,
+  planAuthStateChange,
   readPersistedAuthSession,
+  shouldApplyAuthEvent,
+  shouldRefreshAccessTokenOnForeground,
   supabaseAuthStorageKey,
 } from "./authSessionRecovery.ts";
 
@@ -130,6 +133,90 @@ Deno.test("isFatalRefreshFailure matches AuthApiError grant failures", () => {
     true,
   );
   assertEquals(isFatalRefreshFailure(networkError()), false);
+});
+
+Deno.test("INITIAL_SESSION+null while signed in keeps the session and schedules a retry", () => {
+  assertEquals(shouldApplyAuthEvent("INITIAL_SESSION", null, true), false);
+  assertEquals(planAuthStateChange("INITIAL_SESSION", null, true), {
+    apply: false,
+    scheduleRetry: true,
+  });
+});
+
+Deno.test("TOKEN_REFRESHED/other null events while signed in keep the session", () => {
+  assertEquals(shouldApplyAuthEvent("TOKEN_REFRESHED", null, true), false);
+  assertEquals(planAuthStateChange("TOKEN_REFRESHED", null, true), {
+    apply: false,
+    scheduleRetry: true,
+  });
+  assertEquals(shouldApplyAuthEvent("USER_UPDATED", null, true), false);
+  assertEquals(shouldApplyAuthEvent("SIGNED_IN", null, true), false);
+});
+
+Deno.test("SIGNED_OUT clears the session", () => {
+  assertEquals(shouldApplyAuthEvent("SIGNED_OUT", null, true), true);
+  assertEquals(planAuthStateChange("SIGNED_OUT", null, true), {
+    apply: true,
+    scheduleRetry: false,
+  });
+});
+
+Deno.test("INITIAL_SESSION+null with no session stays signed out", () => {
+  assertEquals(shouldApplyAuthEvent("INITIAL_SESSION", null, false), true);
+  assertEquals(planAuthStateChange("INITIAL_SESSION", null, false), {
+    apply: true,
+    scheduleRetry: false,
+  });
+});
+
+Deno.test("foreground skips refresh when access token is still fresh", async () => {
+  let refreshCalls = 0;
+  const now = 1_700_000_000;
+  const controller = createSessionRefreshController({
+    refreshSession: async () => {
+      refreshCalls += 1;
+      return { error: null };
+    },
+    startAutoRefresh: () => {},
+    stopAutoRefresh: () => {},
+    onFatalFailure: () => {
+      throw new Error("should not sign out");
+    },
+    getAccessTokenExpiresAt: () => now + 10 * 60,
+    nowSeconds: () => now,
+  });
+
+  controller.handleAppStateChange("background");
+  controller.handleAppStateChange("active");
+  await flushMicrotasks();
+  assertEquals(refreshCalls, 0);
+  assertEquals(shouldRefreshAccessTokenOnForeground(now + 10 * 60, now), false);
+  controller.stop();
+});
+
+Deno.test("foreground refreshes when access token expires within 5 minutes", async () => {
+  let refreshCalls = 0;
+  const now = 1_700_000_000;
+  const controller = createSessionRefreshController({
+    refreshSession: async () => {
+      refreshCalls += 1;
+      return { error: null };
+    },
+    startAutoRefresh: () => {},
+    stopAutoRefresh: () => {},
+    onFatalFailure: () => {
+      throw new Error("should not sign out");
+    },
+    getAccessTokenExpiresAt: () => now + 4 * 60,
+    nowSeconds: () => now,
+  });
+
+  controller.handleAppStateChange("background");
+  controller.handleAppStateChange("active");
+  await flushMicrotasks();
+  assertEquals(refreshCalls, 1);
+  assertEquals(shouldRefreshAccessTokenOnForeground(now + 4 * 60, now), true);
+  controller.stop();
 });
 
 Deno.test("persisted session is read from the default supabase storage key", async () => {

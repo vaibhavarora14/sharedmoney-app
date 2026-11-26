@@ -69,6 +69,7 @@ import {
   createSessionRefreshController,
   decideSessionRecovery,
   readPersistedAuthSession,
+  shouldApplyAuthEvent,
   type SessionRecoveryDecision,
 } from "../utils/authSessionRecovery";
 // Complete the auth session when browser closes
@@ -421,6 +422,7 @@ const [loading, setLoading] = useState<boolean>(() => !isWebAuthShellActive());
         void supabase.auth.signOut({ scope: "local" });
         updateAuthState(null);
       },
+      getAccessTokenExpiresAt: () => sessionRef.current?.expires_at ?? null,
     });
     refreshControllerRef.current = controller;
 
@@ -441,6 +443,7 @@ const [loading, setLoading] = useState<boolean>(() => !isWebAuthShellActive());
   useEffect(() => {
     let mounted = true;
     let loadingReleased = false;
+    let suppressPersistedSession = false;
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     const oauthCallback = getWebOAuthCallback();
 
@@ -470,6 +473,7 @@ const [loading, setLoading] = useState<boolean>(() => !isWebAuthShellActive());
           }
           return;
         case "sign-out":
+          suppressPersistedSession = true;
           void supabase.auth.signOut({ scope: "local" });
           updateAuthState(null);
           loadingReleased = true;
@@ -488,7 +492,8 @@ const [loading, setLoading] = useState<boolean>(() => !isWebAuthShellActive());
         (key) => AsyncStorage.getItem(key),
         process.env.EXPO_PUBLIC_SUPABASE_URL ?? "",
       ).then((cached) => {
-        if (!mounted || loadingReleased || !cached) return;
+        if (!mounted || !cached || suppressPersistedSession) return;
+        if (sessionRef.current) return;
         updateAuthState(cached as Session);
         loadingReleased = true;
       });
@@ -570,9 +575,20 @@ const [loading, setLoading] = useState<boolean>(() => !isWebAuthShellActive());
     // This includes TOKEN_REFRESHED events from Supabase's automatic token refresh
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_, nextSession) => {
+    } = supabase.auth.onAuthStateChange(async (event, nextSession) => {
       if (!mounted) return;
 
+      if (
+        !shouldApplyAuthEvent(event, nextSession, Boolean(sessionRef.current))
+      ) {
+        refreshControllerRef.current?.scheduleRetryAfterTransientFailure();
+        releaseLoading();
+        return;
+      }
+
+      if (event === "SIGNED_OUT") {
+        suppressPersistedSession = true;
+      }
       updateAuthState(nextSession);
       loadingReleased = true;
     });

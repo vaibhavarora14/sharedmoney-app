@@ -89,6 +89,48 @@ export function isFatalRefreshFailure(error: unknown): boolean {
   return false;
 }
 
+/**
+ * supabase-js 2.117 emits INITIAL_SESSION with a null session on any
+ * initialize error, including a retryable network failure while refreshing
+ * an expired access token. TOKEN_REFRESHED can also arrive with null on a
+ * transient refresh failure. Those must not clear a cached session.
+ * SIGNED_OUT is the only null event that always applies.
+ */
+export function shouldApplyAuthEvent(
+  event: string,
+  session: unknown,
+  hasSession: boolean,
+): boolean {
+  if (event === "SIGNED_OUT") {
+    return true;
+  }
+  if (session == null && hasSession) {
+    return false;
+  }
+  return true;
+}
+
+export function planAuthStateChange(
+  event: string,
+  session: unknown,
+  hasSession: boolean,
+): { apply: boolean; scheduleRetry: boolean } {
+  const apply = shouldApplyAuthEvent(event, session, hasSession);
+  return { apply, scheduleRetry: !apply };
+}
+
+export const ACCESS_TOKEN_FOREGROUND_REFRESH_SKEW_SECONDS = 5 * 60;
+
+export function shouldRefreshAccessTokenOnForeground(
+  expiresAtSeconds: number | null | undefined,
+  nowSeconds: number = Math.floor(Date.now() / 1000),
+): boolean {
+  if (typeof expiresAtSeconds !== "number" || !Number.isFinite(expiresAtSeconds)) {
+    return true;
+  }
+  return expiresAtSeconds <= nowSeconds + ACCESS_TOKEN_FOREGROUND_REFRESH_SKEW_SECONDS;
+}
+
 export function decideSessionRecovery(
   event: SessionRecoveryEvent,
 ): SessionRecoveryDecision {
@@ -186,6 +228,8 @@ export type SessionRefreshControllerDependencies = {
   startAutoRefresh: () => void;
   stopAutoRefresh: () => void;
   onFatalFailure: () => void;
+  getAccessTokenExpiresAt?: () => number | null | undefined;
+  nowSeconds?: () => number;
   backoffMs?: readonly number[];
   setTimeoutFn?: (handler: () => void, timeout: number) => ReturnType<typeof setTimeout>;
   clearTimeoutFn?: (id: ReturnType<typeof setTimeout>) => void;
@@ -260,6 +304,16 @@ export function createSessionRefreshController(
         if (!sawBackground) return;
         attempt = 0;
         clearTimer();
+        const nowSeconds =
+          dependencies.nowSeconds?.() ?? Math.floor(Date.now() / 1000);
+        if (
+          !shouldRefreshAccessTokenOnForeground(
+            dependencies.getAccessTokenExpiresAt?.(),
+            nowSeconds,
+          )
+        ) {
+          return;
+        }
         void runRefresh();
         return;
       }
