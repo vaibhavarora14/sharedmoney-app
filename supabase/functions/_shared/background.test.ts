@@ -42,3 +42,21 @@ Deno.test('scheduleBackgroundWork swallows errors without waitUntil', async () =
     }
   }
 });
+
+Deno.test('scheduleBackgroundWork does not throw when waitUntil throws', () => {
+  const previous = (globalThis as { EdgeRuntime?: unknown }).EdgeRuntime;
+  (globalThis as { EdgeRuntime?: { waitUntil: (promise: Promise<unknown>) => void } }).EdgeRuntime = {
+    waitUntil() {
+      throw new Error('waitUntil unavailable');
+    },
+  };
+  try {
+    scheduleBackgroundWork(Promise.resolve());
+  } finally {
+    if (previous === undefined) {
+      delete (globalThis as { EdgeRuntime?: unknown }).EdgeRuntime;
+    } else {
+      (globalThis as { EdgeRuntime?: unknown }).EdgeRuntime = previous;
+    }
+  }
+});

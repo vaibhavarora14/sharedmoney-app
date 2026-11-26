@@ -125,6 +125,8 @@ export async function loadGroupLedger(
       query = query
         .order("date", { ascending: false })
         .order("id", { ascending: false });
+    } else {
+      query = query.order("id", { ascending: true });
     }
     return query;
   };
@@ -135,7 +137,8 @@ export async function loadGroupLedger(
       supabase
         .from("participants")
         .select("id, group_id, user_id, email, full_name, avatar_url, type")
-        .eq("group_id", groupId),
+        .eq("group_id", groupId)
+        .order("id", { ascending: true }),
     ),
     pageAllRows<LedgerSettlement>(() =>
       supabase
@@ -143,7 +146,8 @@ export async function loadGroupLedger(
         .select(
           "id, group_id, from_participant_id, to_participant_id, amount, currency",
         )
-        .eq("group_id", groupId),
+        .eq("group_id", groupId)
+        .order("id", { ascending: true }),
     ),
   ]);
 
@@ -173,18 +177,27 @@ export async function loadGroupLedgers(
   const txSelect = includeStatsFields ? STATS_TX_SELECT : BALANCE_TX_SELECT;
 
   const [transactions, participants, settlements] = await Promise.all([
-    pageAllRows<LedgerTransaction>(() =>
-      supabase
+    pageAllRows<LedgerTransaction>(() => {
+      let query = supabase
         .from("transactions")
         .select(txSelect)
         .in("group_id", groupIds)
-        .eq("type", "expense"),
-    ),
+        .eq("type", "expense");
+      if (includeStatsFields) {
+        query = query
+          .order("date", { ascending: false })
+          .order("id", { ascending: false });
+      } else {
+        query = query.order("id", { ascending: true });
+      }
+      return query;
+    }),
     pageAllRows<LedgerParticipant>(() =>
       supabase
         .from("participants")
         .select("id, group_id, user_id, email, full_name, avatar_url, type")
-        .in("group_id", groupIds),
+        .in("group_id", groupIds)
+        .order("id", { ascending: true }),
     ),
     pageAllRows<LedgerSettlement>(() =>
       supabase
@@ -192,7 +205,8 @@ export async function loadGroupLedgers(
         .select(
           "id, group_id, from_participant_id, to_participant_id, amount, currency",
         )
-        .in("group_id", groupIds),
+        .in("group_id", groupIds)
+        .order("id", { ascending: true }),
     ),
   ]);
 

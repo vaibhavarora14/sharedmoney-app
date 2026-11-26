@@ -33,8 +33,12 @@ export function scheduleBackgroundWork(
 
   const waitUntil = edgeWaitUntil();
   if (waitUntil) {
-    waitUntil(guarded);
-    return;
+    try {
+      waitUntil(guarded);
+      return;
+    } catch {
+      // waitUntil itself must never throw into verifyAuth (#486).
+    }
   }
   void guarded;
 }

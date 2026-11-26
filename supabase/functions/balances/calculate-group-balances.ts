@@ -29,14 +29,12 @@ export interface HomeMembershipRow {
   hidden_at?: string | null;
 }
 
-export function isHomeVisibleMembership(row: HomeMembershipRow): boolean {
-  if (row.hidden_at) return false;
-  if (row.status === 'left') return false;
-  return true;
-}
-
-export function visibleHomeGroupIds(rows: HomeMembershipRow[]): string[] {
-  return rows.filter(isHomeVisibleMembership).map((row) => row.group_id);
+/**
+ * Home totals include every membership row: active, left, and hidden.
+ * viewerOverallBalances and Former-section badges sum these groups.
+ */
+export function membershipGroupIds(rows: HomeMembershipRow[]): string[] {
+  return rows.map((row) => row.group_id);
 }
 
 function buildParticipantMaps(

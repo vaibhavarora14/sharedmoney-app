@@ -12,8 +12,8 @@ import {
   applyEmailAndProfiles,
   assembleHomeGroupBalances,
   calculateGroupBalancesFromLedger,
+  membershipGroupIds,
   participantUserIdsFromLedgers,
-  visibleHomeGroupIds,
   type Balance,
   type GroupBalance,
   type HomeMembershipRow,
@@ -129,7 +129,7 @@ async function calculateGroupBalances(
   currentUserId: string,
   currentUserEmail: string | null,
   options?: { includeStatsFields?: boolean; ledger?: GroupLedgerSnapshot }
-): Promise<{ balances: Balance[]; ledger: GroupLedgerSnapshot }> {
+): Promise<{ balances: Balance[]; ledger: GroupLedgerSnapshot; userIdToEmail: Map<string, string> }> {
   const ledger = options?.ledger ?? await loadGroupLedger(supabase, groupId, {
     includeStatsFields: options?.includeStatsFields,
   });
@@ -141,6 +141,9 @@ async function calculateGroupBalances(
         .filter((id): id is string => typeof id === 'string' && id.length > 0)
     )
   );
+  if (!participantUserIds.includes(currentUserId)) {
+    participantUserIds.push(currentUserId);
+  }
   const userIdToEmail = await fetchUserEmails(
     participantUserIds,
     currentUserId,
@@ -150,6 +153,7 @@ async function calculateGroupBalances(
   return {
     balances: calculateGroupBalancesFromLedger(ledger, userIdToEmail),
     ledger,
+    userIdToEmail,
   };
 }
 
@@ -485,6 +489,7 @@ Deno.serve(async (req: Request) => {
 
       let balances: Balance[] = [];
       let ledger: GroupLedgerSnapshot | null = null;
+      let userIdToEmail = new Map<string, string>();
       try {
         const result = await calculateGroupBalances(
           supabase,
@@ -495,6 +500,7 @@ Deno.serve(async (req: Request) => {
         );
         balances = result.balances;
         ledger = result.ledger;
+        userIdToEmail = result.userIdToEmail;
       } catch (error) {
         log.error('Error calculating group balances', 'balances', {
           groupId,
@@ -537,11 +543,11 @@ Deno.serve(async (req: Request) => {
       }
 
       if (allUserIds.size > 0) {
-        // Emails were already loaded inside calculateGroupBalances. A second
-        // auth-admin lookup here doubled latency on every group-details open.
+        // Emails were already loaded inside calculateGroupBalances. Reuse that
+        // map so overall_balances still get email without a second lookup.
         const profileMap = await fetchUserProfiles(supabase, Array.from(allUserIds));
-        applyEmailAndProfiles(balances, new Map(), profileMap);
-        applyEmailAndProfiles(overallBalances, new Map(), profileMap);
+        applyEmailAndProfiles(balances, userIdToEmail, profileMap);
+        applyEmailAndProfiles(overallBalances, userIdToEmail, profileMap);
       }
 
       const response: BalancesResponse = {
@@ -562,13 +568,13 @@ Deno.serve(async (req: Request) => {
 
     const { data: memberships, error: membershipError } = await supabase
       .from('group_members')
-      .select('group_id, status, hidden_at')
+      .select('group_id')
       .eq('user_id', currentUserId);
     if (membershipError) {
       return handleError(membershipError, 'fetching group memberships', req);
     }
 
-    const targetGroupIds = visibleHomeGroupIds((memberships || []) as HomeMembershipRow[]);
+    const targetGroupIds = membershipGroupIds((memberships || []) as HomeMembershipRow[]);
 
     if (targetGroupIds.length === 0) {
       return createSuccessResponse({

@@ -15,6 +15,7 @@ type FakeResult = { data: unknown; error: unknown };
 function createFakeSupabase(handlers: Record<string, (from: number, to: number) => FakeResult>) {
   const calls: string[] = [];
   const ranges: Array<{ table: string; from: number; to: number }> = [];
+  const orders: Array<{ table: string; column: string; ascending?: boolean }> = [];
 
   const makeBuilder = (table: string) => {
     let from = 0;
@@ -24,7 +25,10 @@ function createFakeSupabase(handlers: Record<string, (from: number, to: number) 
     builder.select = () => self();
     builder.eq = () => self();
     builder.in = () => self();
-    builder.order = () => self();
+    builder.order = (column: string, opts?: { ascending?: boolean }) => {
+      orders.push({ table, column, ascending: opts?.ascending });
+      return self();
+    };
     builder.range = (nextFrom: number, nextTo: number) => {
       from = nextFrom;
       to = nextTo;
@@ -44,6 +48,7 @@ function createFakeSupabase(handlers: Record<string, (from: number, to: number) 
   return {
     calls,
     ranges,
+    orders,
     from: (table: string) => {
       calls.push(table);
       return makeBuilder(table);
@@ -133,6 +138,51 @@ Deno.test("pageAllRows walks past the 1000-row PostgREST cap", async () => {
   assertEquals(rows.length, POSTGREST_PAGE_SIZE + 1);
   assertEquals(rows[0], 0);
   assertEquals(rows[POSTGREST_PAGE_SIZE], POSTGREST_PAGE_SIZE);
+});
+
+Deno.test("pageAllRows across pages has no duplicate or missing ids", async () => {
+  const expected = Array.from({ length: 7 }, (_unused, index) => ({ id: index + 1 }));
+  const pageSize = 3;
+  const rows = await pageAllRows<{ id: number }>(() => {
+    const builder: Record<string, unknown> = {};
+    builder.range = (from: number, to: number) => {
+      return Promise.resolve({ data: expected.slice(from, to + 1), error: null });
+    };
+    return builder as {
+      range: (from: number, to: number) => PromiseLike<{ data: Array<{ id: number }> | null; error: unknown }>;
+    };
+  }, pageSize);
+  const ids = rows.map((row) => row.id);
+  assertEquals(ids, expected.map((row) => row.id));
+  assertEquals(new Set(ids).size, ids.length);
+});
+
+Deno.test("no-stats ledger queries order by id for stable paging", async () => {
+  const supabase = createFakeSupabase({
+    transactions: () => ({ data: [], error: null }),
+    participants: () => ({ data: [], error: null }),
+    settlements: () => ({ data: [], error: null }),
+  });
+  await loadGroupLedger(supabase, "group-1");
+  const idOrders = supabase.orders.filter((order) => order.column === "id");
+  assertEquals(
+    idOrders.map((order) => `${order.table}:${order.ascending}`).sort(),
+    ["participants:true", "settlements:true", "transactions:true"],
+  );
+});
+
+Deno.test("batched Home ledger queries order by id for stable paging", async () => {
+  const supabase = createFakeSupabase({
+    transactions: () => ({ data: [], error: null }),
+    participants: () => ({ data: [], error: null }),
+    settlements: () => ({ data: [], error: null }),
+  });
+  await loadGroupLedgers(supabase, ["g1", "g2"]);
+  const idOrders = supabase.orders.filter((order) => order.column === "id");
+  assertEquals(
+    idOrders.map((order) => `${order.table}:${order.ascending}`).sort(),
+    ["participants:true", "settlements:true", "transactions:true"],
+  );
 });
 
 Deno.test("loadGroupLedgers batches by group_id instead of per-group queries", async () => {
