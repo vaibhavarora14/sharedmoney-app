@@ -109,7 +109,7 @@ jobs:
           # --environment production loads EAS server-side env vars (incl.
           # EXPO_PUBLIC_SENTRY_DSN, which has no GitHub secret) so OTA bundles
           # match native production builds. Server values override step env.
-          eas update --channel "$OTA_CHANNEL" --message "$OTA_MESSAGE" --environment production --non-interactive
+          eas update --channel "$OTA_CHANNEL" --message "$OTA_MESSAGE" --environment production --rollout-percentage 20 --non-interactive
           echo ""
           echo "✅ Published to channel ${OTA_CHANNEL}"
           echo "   runtimeVersion: ${RUNTIME_VERSION}"
