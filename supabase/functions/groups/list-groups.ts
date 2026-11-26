@@ -18,20 +18,22 @@ export interface GroupMembershipRow {
   hidden_at?: string | null;
 }
 
+export const LIST_MY_VISIBLE_GROUPS_RPC = "list_my_visible_groups";
+
 export interface GroupsListRoundTrips {
-  /** Sequential memberships read before the parallel batch. */
-  memberships: 1;
-  /** groups + mutes + latest activity in one Promise.all. */
-  parallelListBatch: 1;
-  /** profiles + participants for recency names, after activity rows exist. */
-  recencyNames: 1;
+  /** One SECURITY INVOKER RPC: memberships + groups + mutes + activity + names. */
+  listRpc: 1;
 }
 
 export const GROUPS_LIST_SEQUENTIAL_DB_ROUND_TRIPS: GroupsListRoundTrips = {
+  listRpc: 1,
+};
+
+export const GROUPS_LIST_SEQUENTIAL_DB_ROUND_TRIPS_BEFORE = {
   memberships: 1,
   parallelListBatch: 1,
   recencyNames: 1,
-};
+} as const;
 
 export function visibleMemberships(rows: GroupMembershipRow[]): GroupMembershipRow[] {
   return rows.filter((row) => !row.hidden_at);
@@ -122,10 +124,122 @@ export async function attachGroupLastActivity(
   }));
 }
 
+export interface ListedGroupRpcRow {
+  id: string;
+  name: string;
+  description?: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  kind?: string | null;
+  settlement_currency?: string | null;
+  unify_balances?: boolean;
+  default_split_mode?: string;
+  default_split_weights?: Record<string, number>;
+  balance_nudge_cadence?: string;
+  user_status?: string | null;
+  archived_at?: string | null;
+  hidden_at?: string | null;
+  balance_nudge_muted?: boolean;
+  activity_row?: HistoryActivityRow | null;
+  activity_names?: Record<string, string | null> | null;
+}
+
+function namesMap(raw: Record<string, string | null> | null | undefined): Map<string, string | null> {
+  const names = new Map<string, string | null>();
+  if (!raw) return names;
+  for (const [id, name] of Object.entries(raw)) {
+    names.set(id, name ?? null);
+  }
+  return names;
+}
+
+export function groupsFromListRpcRows(
+  rows: ListedGroupRpcRow[],
+  viewerId: string,
+): Array<Record<string, unknown>> {
+  const membershipByGroupId = new Map<string, GroupMembershipRow>();
+  const groups: Array<Record<string, unknown> & { id: string }> = [];
+  const muted: string[] = [];
+
+  for (const row of rows) {
+    membershipByGroupId.set(row.id, {
+      group_id: row.id,
+      status: row.user_status,
+      archived_at: row.archived_at ?? null,
+      hidden_at: null,
+    });
+    if (row.balance_nudge_muted) muted.push(row.id);
+    const history = row.activity_row ?? null;
+    const lastActivity = history
+      ? (lastActivityByGroup([history], namesMap(row.activity_names), viewerId).get(row.id) ?? null)
+      : null;
+    groups.push({
+      id: row.id,
+      name: row.name,
+      description: row.description,
+      created_by: row.created_by,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      kind: row.kind,
+      settlement_currency: row.settlement_currency,
+      unify_balances: row.unify_balances,
+      default_split_mode: row.default_split_mode,
+      default_split_weights: row.default_split_weights,
+      balance_nudge_cadence: row.balance_nudge_cadence,
+      last_activity: lastActivity,
+    });
+  }
+
+  const flattened = flattenListedGroups(groups, membershipByGroupId);
+  return applyBalanceNudgeMutes(
+    flattened as Array<Record<string, unknown> & { id: string }>,
+    muted,
+  );
+}
+
+export async function attachBalanceNudgeMutes<T extends { id: string }>(
+  supabase: { from: (table: string) => any },
+  groups: T[],
+  userId: string,
+): Promise<Array<T & { balance_nudge_muted: boolean }>> {
+  if (groups.length === 0) return [];
+  const { data, error } = await supabase
+    .from("group_balance_nudge_mutes")
+    .select("group_id")
+    .eq("user_id", userId)
+    .in("group_id", groups.map((group) => group.id));
+  if (error) throw error;
+  return applyBalanceNudgeMutes(
+    groups,
+    (data || []).map((row: { group_id: string }) => row.group_id),
+  );
+}
+
 /**
- * Groups list: memberships, then groups + mutes + latest activity together.
+ * Groups list: one RPC (memberships + groups + mutes + latest activity + names).
  */
 export async function loadGroupsList(
+  supabase: {
+    rpc: (
+      fn: string,
+      args: { p_include_direct: boolean },
+    ) => PromiseLike<{ data: ListedGroupRpcRow[] | null; error: unknown }>;
+  },
+  userId: string,
+  includeDirect: boolean,
+): Promise<Array<Record<string, unknown>>> {
+  const { data, error } = await supabase.rpc(LIST_MY_VISIBLE_GROUPS_RPC, {
+    p_include_direct: includeDirect,
+  });
+  if (error) throw error;
+  return groupsFromListRpcRows((data || []) as ListedGroupRpcRow[], userId);
+}
+
+/**
+ * Pre-RPC path kept for equality tests against the same fixtures.
+ */
+export async function loadGroupsListFromTables(
   supabase: any,
   userId: string,
   includeDirect: boolean,

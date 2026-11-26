@@ -5,9 +5,13 @@ import {
 } from "../_shared/groupLastActivity.ts";
 import {
   GROUPS_LIST_SEQUENTIAL_DB_ROUND_TRIPS,
+  GROUPS_LIST_SEQUENTIAL_DB_ROUND_TRIPS_BEFORE,
+  LIST_MY_VISIBLE_GROUPS_RPC,
   applyBalanceNudgeMutes,
   flattenListedGroups,
+  groupsFromListRpcRows,
   loadGroupsList,
+  loadGroupsListFromTables,
   visibleMemberships,
   type GroupMembershipRow,
 } from "./list-groups.ts";
@@ -15,11 +19,14 @@ import {
 const AISHA = "22222222-2222-2222-2222-222222222222";
 const VIEWER = "11111111-1111-1111-1111-111111111111";
 
-Deno.test("groups list sequential round trips stay at memberships + parallel batch + names", () => {
-  assertEquals(GROUPS_LIST_SEQUENTIAL_DB_ROUND_TRIPS, {
+Deno.test("groups list sequential round trips fold into one RPC", () => {
+  assertEquals(GROUPS_LIST_SEQUENTIAL_DB_ROUND_TRIPS_BEFORE, {
     memberships: 1,
     parallelListBatch: 1,
     recencyNames: 1,
+  });
+  assertEquals(GROUPS_LIST_SEQUENTIAL_DB_ROUND_TRIPS, {
+    listRpc: 1,
   });
 });
 
@@ -77,7 +84,7 @@ Deno.test("groups list recency and mute flags stay backward compatible", () => {
   });
 });
 
-Deno.test("loadGroupsList fetches groups, mutes, and latest activity in one parallel batch", async () => {
+Deno.test("loadGroupsList is one RPC and matches the table path", async () => {
   const groupId = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
   const started: string[] = [];
   const chain = (data: unknown) => {
@@ -96,7 +103,7 @@ Deno.test("loadGroupsList fetches groups, mutes, and latest activity in one para
     return builder;
   };
 
-  const supabase = {
+  const tableClient = {
     from(table: string) {
       started.push(table);
       if (table === "group_members") {
@@ -117,11 +124,67 @@ Deno.test("loadGroupsList fetches groups, mutes, and latest activity in one para
     },
   };
 
-  const listed = await loadGroupsList(supabase, VIEWER, true);
-  assertEquals(listed[0].id, groupId);
-  assertEquals(listed[0].balance_nudge_muted, false);
-  assertEquals(listed[0].last_activity, null);
+  const rpcStarted: string[] = [];
+  const rpcClient = {
+    rpc(fn: string, args: { p_include_direct: boolean }) {
+      rpcStarted.push(fn);
+      assertEquals(args.p_include_direct, true);
+      return Promise.resolve({
+        data: [{
+          id: groupId,
+          name: "Trip",
+          created_by: VIEWER,
+          created_at: "2026-11-01T00:00:00Z",
+          updated_at: "2026-11-01T00:00:00Z",
+          user_status: "active",
+          archived_at: null,
+          hidden_at: null,
+          balance_nudge_muted: false,
+          activity_row: null,
+          activity_names: {},
+        }],
+        error: null,
+      });
+    },
+  };
+
+  const fromTables = await loadGroupsListFromTables(tableClient, VIEWER, true);
+  const fromRpc = await loadGroupsList(rpcClient, VIEWER, true);
+  assertEquals(fromRpc[0].id, fromTables[0].id);
+  assertEquals(fromRpc[0].balance_nudge_muted, fromTables[0].balance_nudge_muted);
+  assertEquals(fromRpc[0].last_activity, fromTables[0].last_activity);
+  assertEquals(rpcStarted, [LIST_MY_VISIBLE_GROUPS_RPC]);
   assertEquals(started[0], "group_members");
   const parallel = started.slice(1, 4).sort();
   assertEquals(parallel, ["activity", "group_balance_nudge_mutes", "groups"]);
+});
+
+Deno.test("RPC recency names match lastActivityByGroup", () => {
+  const mapped = groupsFromListRpcRows([
+    {
+      id: "g1",
+      name: "Trip",
+      created_by: VIEWER,
+      created_at: "2026-11-01T00:00:00Z",
+      updated_at: "2026-11-01T00:00:00Z",
+      user_status: "active",
+      balance_nudge_muted: false,
+      activity_row: {
+        group_id: "g1",
+        action: "created",
+        activity_type: "transaction",
+        changed_by: AISHA,
+        changed_at: "2026-11-13 02:00:00",
+        changes: { action: "created", transaction: { description: "Dinner" } },
+        snapshot: { description: "Dinner" },
+      },
+      activity_names: { [AISHA]: "Aisha Kapoor" },
+    },
+  ], VIEWER);
+  assertEquals(mapped[0].last_activity, {
+    actor: "Aisha",
+    action: "added",
+    subject: "Dinner",
+    at: "2026-11-13T02:00:00.000Z",
+  });
 });

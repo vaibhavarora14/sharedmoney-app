@@ -17,6 +17,7 @@ export function activityQueryOptions(
       lastPage.has_more
         ? allPages.reduce((count, page) => count + page.activities.length, 0)
         : undefined,
-    staleTime: 60_000,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 }

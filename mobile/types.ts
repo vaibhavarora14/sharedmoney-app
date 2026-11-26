@@ -105,8 +105,8 @@ export interface Group {
   /** Whether the current user muted balance nudges for this group. */
   balance_nudge_muted?: boolean;
   /**
-   * Present only on a fresh GET /groups. Null means the fetch found no
-   * activity. Omitted on the disk cache so recency is not painted from disk.
+   * Latest ledger line for the groups list. Cached on disk and shown instantly,
+   * then refreshed in the background.
    */
   last_activity?: GroupLastActivity | null;
 }

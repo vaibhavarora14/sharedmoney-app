@@ -70,6 +70,10 @@ import {
   seedGroupOpenQueries,
 } from "./utils/groupOpenCache";
 import {
+  hydrateGroupsListCache,
+  seedGroupsListQuery,
+} from "./utils/groupsListCache";
+import {
   fetchInvitationsForEmail,
   redeemGroupInviteLinkRPC,
 } from "./hooks/useGroupInvitations";
@@ -517,6 +521,9 @@ function AppContent() {
       signedInUserIdRef.current = userId;
       void hydrateGroupOpenCache(userId, AsyncStorage).then(() => {
         seedAllBalancesQuery(queryClientInstance, userId);
+      });
+      void hydrateGroupsListCache(userId, AsyncStorage).then(() => {
+        seedGroupsListQuery(queryClientInstance, userId);
       });
       return;
     }

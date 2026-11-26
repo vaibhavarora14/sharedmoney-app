@@ -6,6 +6,7 @@ import {
   handleUnauthorizedResponse,
   type UnauthorizedPolicy,
 } from "./authenticatedFetchPolicy";
+import { authenticatedRequestHeaders } from "./authenticatedRequestHeaders";
 import { formatNetworkErrorMessage } from "./networkErrors";
 import { requestGuestSignIn } from "./guestGate";
 import { guestSignInCopy, type GuestSignInAction } from "./guestMode";
@@ -117,12 +118,7 @@ export async function fetchWithAuth(
   try {
     response = await fetchWithTimeout(fullUrl, {
       ...options,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-        "X-App-Version": APP_VERSION,
-        ...options.headers,
-      },
+      headers: authenticatedRequestHeaders(token, APP_VERSION, options.headers),
     }, timeoutMs);
   } catch (networkError: any) {
     // Handle network-level errors (connection refused, timeout, DNS failure, etc.)

@@ -26,8 +26,3 @@ export function activityPageMeta(input: {
     has_more: input.offset + input.pageLength < input.count,
   };
 }
-
-export const ACTIVITY_SEQUENTIAL_DB_ROUND_TRIPS = {
-  membershipAndBlocked: 1,
-  historyAndCount: 1,
-} as const;
