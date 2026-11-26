@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Sentry from "@sentry/react-native";
 import { Session, User } from "@supabase/supabase-js";
 import * as AppleAuthentication from "expo-apple-authentication";
@@ -14,7 +15,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Platform } from "react-native";
+import { AppState, Platform } from "react-native";
 import { AUTH_TIMEOUTS } from "../constants/auth";
 import { unregisterCurrentPushToken } from "../services/pushNotifications";
 import { supabase } from "../supabase";
@@ -64,6 +65,13 @@ import {
 } from "../utils/socialAuth";
 import { recordSocialAuthFailure } from "../utils/socialAuthTelemetry";
 import { verifyWhatsAppOtp } from "../utils/whatsappOtpApi";
+import {
+  createSessionRefreshController,
+  decideSessionRecovery,
+  readPersistedAuthSession,
+  shouldApplyAuthEvent,
+  type SessionRecoveryDecision,
+} from "../utils/authSessionRecovery";
 // Complete the auth session when browser closes
 WebBrowser.maybeCompleteAuthSession();
 
@@ -332,10 +340,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 const [loading, setLoading] = useState<boolean>(() => !isWebAuthShellActive());
   const previousAuthUserIdRef = useRef<string | null | undefined>(undefined);
   const pendingAuthMethodRef = useRef<AuthFunnelMethod | null>(null);
+  const sessionRef = useRef<Session | null>(null);
+  const refreshControllerRef = useRef<ReturnType<
+    typeof createSessionRefreshController
+  > | null>(null);
 
   // Helper to update auth state and sync with Sentry
   // Wrapped in useCallback to maintain stable reference for useEffect dependency
   const updateAuthState = useCallback((nextSession: Session | null) => {
+    sessionRef.current = nextSession;
     const previousUserId = previousAuthUserIdRef.current;
     const nextUserId = nextSession?.user?.id ?? null;
     // Skip the very first undefined→value bootstrap crumb flood; still tag later transitions.
@@ -395,10 +408,97 @@ const [loading, setLoading] = useState<boolean>(() => !isWebAuthShellActive());
   }, []);
 
   useEffect(() => {
+    const controller = createSessionRefreshController({
+      refreshSession: async () => {
+        if (!sessionRef.current?.refresh_token) {
+          return { error: null };
+        }
+        const { error } = await supabase.auth.refreshSession();
+        return { error };
+      },
+      startAutoRefresh: () => supabase.auth.startAutoRefresh(),
+      stopAutoRefresh: () => supabase.auth.stopAutoRefresh(),
+      onFatalFailure: () => {
+        void supabase.auth.signOut({ scope: "local" });
+        updateAuthState(null);
+      },
+      getAccessTokenExpiresAt: () => sessionRef.current?.expires_at ?? null,
+    });
+    refreshControllerRef.current = controller;
+
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      controller.handleAppStateChange(nextState);
+    });
+    controller.handleAppStateChange(AppState.currentState);
+
+    return () => {
+      subscription.remove();
+      controller.stop();
+      if (refreshControllerRef.current === controller) {
+        refreshControllerRef.current = null;
+      }
+    };
+  }, [updateAuthState]);
+
+  useEffect(() => {
     let mounted = true;
-    let resolved = false;
+    let loadingReleased = false;
+    let suppressPersistedSession = false;
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     const oauthCallback = getWebOAuthCallback();
+
+    const releaseLoading = () => {
+      if (!mounted || loadingReleased) return;
+      loadingReleased = true;
+      setLoading(false);
+    };
+
+    const applyRecovery = (decision: SessionRecoveryDecision) => {
+      if (!mounted) return;
+      switch (decision.action) {
+        case "use-session": {
+          const nextSession = (decision.session as Session | null) ?? null;
+          if (!nextSession && sessionRef.current) {
+            releaseLoading();
+            return;
+          }
+          updateAuthState(nextSession);
+          loadingReleased = true;
+          return;
+        }
+        case "keep-existing":
+          releaseLoading();
+          if (sessionRef.current) {
+            refreshControllerRef.current?.scheduleRetryAfterTransientFailure();
+          }
+          return;
+        case "sign-out":
+          suppressPersistedSession = true;
+          void supabase.auth.signOut({ scope: "local" });
+          updateAuthState(null);
+          loadingReleased = true;
+          return;
+        default: {
+          const _exhaustive: never = decision;
+          throw new Error(
+            `Unhandled session recovery action: ${String(_exhaustive)}`,
+          );
+        }
+      }
+    };
+
+    if (!oauthCallback) {
+      void readPersistedAuthSession(
+        (key) => AsyncStorage.getItem(key),
+        process.env.EXPO_PUBLIC_SUPABASE_URL ?? "",
+      ).then((cached) => {
+        if (!mounted || !cached || suppressPersistedSession) return;
+        if (sessionRef.current) return;
+        updateAuthState(cached as Session);
+        loadingReleased = true;
+      });
+    }
+
     const initialSessionPromise =
       oauthCallback?.status === "tokens"
         ? supabase.auth
@@ -415,13 +515,10 @@ const [loading, setLoading] = useState<boolean>(() => !isWebAuthShellActive());
 
     // Get initial session. On web, also consume OAuth hash callbacks such as
     // /app#access_token=... when Supabase does not auto-detect them in time.
+    // Timeouts and network errors must not clear a stored session.
     initialSessionPromise
-      .then(({ data: { session }, error }) => {
-        // Check resolved BEFORE setting it to prevent race condition
-        if (resolved || !mounted) return;
-        resolved = true;
-
-        // Clear timeout since we resolved early
+      .then(({ data: { session: nextSession }, error }) => {
+        if (!mounted) return;
         if (timeoutId) {
           clearTimeout(timeoutId);
           timeoutId = null;
@@ -432,18 +529,18 @@ const [loading, setLoading] = useState<boolean>(() => !isWebAuthShellActive());
             context: "getSession",
             errorType: "session_error",
           });
-          updateAuthState(null);
-          return;
         }
 
-        updateAuthState(session);
+        applyRecovery(
+          decideSessionRecovery({
+            source: "resolved",
+            session: nextSession,
+            error,
+          }),
+        );
       })
       .catch((err) => {
-        // Check resolved BEFORE setting it to prevent race condition
-        if (resolved || !mounted) return;
-        resolved = true;
-
-        // Clear timeout since we resolved early
+        if (!mounted) return;
         if (timeoutId) {
           clearTimeout(timeoutId);
           timeoutId = null;
@@ -456,34 +553,44 @@ const [loading, setLoading] = useState<boolean>(() => !isWebAuthShellActive());
               : "getSession",
           errorType: "exception",
         });
-        // Log out on exception - can't get session means auth is broken
-        supabase.auth.signOut({ scope: "local" });
-        updateAuthState(null);
+        applyRecovery(
+          decideSessionRecovery({
+            source: "exception",
+            error: err,
+          }),
+        );
       });
 
-    // Fallback: If getSession doesn't resolve in time, log out
     timeoutId = setTimeout(() => {
-      if (!resolved && mounted) {
-        resolved = true; // Mark as resolved to prevent race condition
-        log(
-          "getSession timeout - logging out",
-          { context: "getSession" },
-          "warn"
-        );
-        supabase.auth.signOut({ scope: "local" });
-        updateAuthState(null);
-      }
+      if (!mounted || loadingReleased) return;
+      log(
+        "getSession timeout - keeping existing session",
+        { context: "getSession" },
+        "warn",
+      );
+      applyRecovery(decideSessionRecovery({ source: "timeout" }));
     }, AUTH_TIMEOUTS.SESSION_FETCH_TIMEOUT);
 
     // Listen for auth changes - this is the primary source of truth
     // This includes TOKEN_REFRESHED events from Supabase's automatic token refresh
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_, session) => {
-      // Check mounted flag to prevent state updates after unmount
+    } = supabase.auth.onAuthStateChange(async (event, nextSession) => {
       if (!mounted) return;
 
-      updateAuthState(session);
+      if (
+        !shouldApplyAuthEvent(event, nextSession, Boolean(sessionRef.current))
+      ) {
+        refreshControllerRef.current?.scheduleRetryAfterTransientFailure();
+        releaseLoading();
+        return;
+      }
+
+      if (event === "SIGNED_OUT") {
+        suppressPersistedSession = true;
+      }
+      updateAuthState(nextSession);
+      loadingReleased = true;
     });
 
     return () => {
