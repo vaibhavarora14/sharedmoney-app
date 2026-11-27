@@ -1,15 +1,17 @@
 import { assertEquals } from "jsr:@std/assert@1";
 import {
   INVITE_PROMPT_DISMISS_LABEL,
-  INVITE_PROMPT_MESSAGE,
   INVITE_PROMPT_SHARE_LABEL,
-  INVITE_PROMPT_TITLE,
+  INVITE_PROMPT_TITLE_FALLBACK,
+  invitePromptBody,
   invitePromptShownKey,
+  invitePromptTitle,
   isFirstExpenseInFeed,
   isInvitePromptShownValue,
   resolveInvitePromptGroupContext,
   shouldShowInvitePrompt,
 } from "./invitePromptEligibility.ts";
+import { formatShareCurrency } from "./settleShareMessage.ts";
 
 const eligible = {
   transactionType: "expense" as const,
@@ -140,10 +142,21 @@ Deno.test("once-per-group storage key is scoped to the group id", () => {
   assertEquals(isInvitePromptShownValue(null), false);
 });
 
-Deno.test("prompt copy is dismissible share CTA, not a join token", () => {
-  assertEquals(INVITE_PROMPT_TITLE, "Invite people to this group");
+Deno.test("prompt copy uses the group name and formatted amount", () => {
+  assertEquals(invitePromptTitle("Flat 4B"), "Invite people to Flat 4B");
+  assertEquals(invitePromptTitle("  Flat 4B  "), "Invite people to Flat 4B");
+  assertEquals(invitePromptTitle(""), INVITE_PROMPT_TITLE_FALLBACK);
+  assertEquals(invitePromptTitle(undefined), INVITE_PROMPT_TITLE_FALLBACK);
+  assertEquals(
+    invitePromptBody(formatShareCurrency(840, "INR")),
+    "Send a link so they can split ₹840 with you.",
+  );
+  assertEquals(
+    invitePromptBody("₹840").includes("You're the only one here."),
+    false,
+  );
   assertEquals(INVITE_PROMPT_SHARE_LABEL, "Share invite");
   assertEquals(INVITE_PROMPT_DISMISS_LABEL, "Not now");
-  assertEquals(INVITE_PROMPT_MESSAGE.includes("http"), false);
-  assertEquals(INVITE_PROMPT_MESSAGE.includes("token"), false);
+  assertEquals(invitePromptBody("₹840").includes("http"), false);
+  assertEquals(invitePromptBody("₹840").includes("token"), false);
 });

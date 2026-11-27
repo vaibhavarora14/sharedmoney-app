@@ -108,6 +108,9 @@ export function InvitePromptHost() {
     <InvitePromptDialog
       visible={state != null}
       sharing={sharing}
+      groupName={state?.request.groupName}
+      amount={state?.request.amount}
+      currency={state?.request.currency}
       onShare={() => {
         void handleShare();
       }}

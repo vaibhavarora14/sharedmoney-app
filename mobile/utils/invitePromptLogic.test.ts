@@ -20,11 +20,21 @@ function createDeps(
   events: Array<{ event: string; props?: Record<string, unknown> }>;
   flush: () => Promise<void>;
   choices: { next: InvitePromptChoice };
-  presented: Array<{ groupId: string; groupName?: string }>;
+  presented: Array<{
+    groupId: string;
+    groupName?: string;
+    amount?: number;
+    currency?: string;
+  }>;
 } {
   const pending: Array<() => void | Promise<void>> = [];
   const events: Array<{ event: string; props?: Record<string, unknown> }> = [];
-  const presented: Array<{ groupId: string; groupName?: string }> = [];
+  const presented: Array<{
+    groupId: string;
+    groupName?: string;
+    amount?: number;
+    currency?: string;
+  }> = [];
   const choices: { next: InvitePromptChoice } = { next: "share" };
   const storage = overrides.storage ?? memoryStorage();
 
@@ -65,6 +75,8 @@ const firstSoloExpense = {
   userId: "user-1",
   groupId: "group-1",
   groupName: "Flat 4B",
+  amount: 840,
+  currency: "INR",
   transactionType: "expense",
   isFirstExpense: true,
   activeMemberCount: 1,
@@ -80,7 +92,12 @@ Deno.test("shows once, shares, and records shown then shared with no PII", async
     "1",
   );
   await deps.flush();
-  assertEquals(deps.presented, [{ groupId: "group-1", groupName: "Flat 4B" }]);
+  assertEquals(deps.presented, [{
+    groupId: "group-1",
+    groupName: "Flat 4B",
+    amount: 840,
+    currency: "INR",
+  }]);
   assertEquals(deps.events.map((e) => e.event), [
     "invite_prompt_shown",
     "invite_prompt_shared",
@@ -176,4 +193,54 @@ Deno.test("a cancelled presentPrompt still leaves the once-flag set", async () =
     await deps.storage.getItem("@sharedmoney/invite_prompt_shown:group-1"),
     "1",
   );
+});
+
+Deno.test("never shows again after Share, including a later first-expense retry", async () => {
+  const storage = memoryStorage();
+  const deps = createDeps({ storage });
+  deps.choices.next = "share";
+  assertEquals(await maybeShowInvitePromptAfterExpense(firstSoloExpense, deps), true);
+  await deps.flush();
+  assertEquals(
+    await maybeShowInvitePromptAfterExpense(firstSoloExpense, deps),
+    false,
+  );
+  assertEquals(
+    await maybeShowInvitePromptAfterExpense(
+      { ...firstSoloExpense, isFirstExpense: false },
+      deps,
+    ),
+    false,
+  );
+  await deps.flush();
+  assertEquals(deps.presented.length, 1);
+  assertEquals(deps.events.map((e) => e.event), [
+    "invite_prompt_shown",
+    "invite_prompt_shared",
+  ]);
+});
+
+Deno.test("never shows again after Not now, and not on the second expense", async () => {
+  const storage = memoryStorage();
+  const deps = createDeps({ storage });
+  deps.choices.next = "dismiss";
+  assertEquals(await maybeShowInvitePromptAfterExpense(firstSoloExpense, deps), true);
+  await deps.flush();
+  assertEquals(
+    await maybeShowInvitePromptAfterExpense(firstSoloExpense, deps),
+    false,
+  );
+  assertEquals(
+    await maybeShowInvitePromptAfterExpense(
+      { ...firstSoloExpense, isFirstExpense: false, amount: 200 },
+      deps,
+    ),
+    false,
+  );
+  await deps.flush();
+  assertEquals(deps.presented.length, 1);
+  assertEquals(deps.events.map((e) => e.event), [
+    "invite_prompt_shown",
+    "invite_prompt_dismissed",
+  ]);
 });

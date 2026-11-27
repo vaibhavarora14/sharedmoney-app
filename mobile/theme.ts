@@ -75,7 +75,7 @@ const darkColors = {
   elevation: {
     level0: "transparent",
     level1: "#1A2530",
-    level2: "#1E2A36",
+    level2: darkThemeTokens.surfaceElevated,
     level3: "#23313E",
     level4: "#283744",
     level5: "#2D3C4A",

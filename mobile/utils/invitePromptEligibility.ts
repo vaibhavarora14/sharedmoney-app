@@ -10,11 +10,27 @@ import { countActiveMembers } from "./transactionsEmptyCopy";
 /** Delay after a successful save so the expense form overlay has dismissed. */
 export const INVITE_PROMPT_SETTLE_DELAY_MS = 1200;
 
-export const INVITE_PROMPT_TITLE = "Invite people to this group";
-export const INVITE_PROMPT_MESSAGE =
-  "You're the only one here. Send a link so others can join and split this expense with you.";
+export const INVITE_PROMPT_TITLE_FALLBACK = "Invite people to this group";
 export const INVITE_PROMPT_SHARE_LABEL = "Share invite";
 export const INVITE_PROMPT_DISMISS_LABEL = "Not now";
+
+/** Title: "Invite people to {group name}". */
+export function invitePromptTitle(groupName?: string | null): string {
+  const trimmed = groupName?.trim();
+  return trimmed ? `Invite people to ${trimmed}` : INVITE_PROMPT_TITLE_FALLBACK;
+}
+
+/**
+ * Body: "Send a link so they can split {amount} with you."
+ * `formattedAmount` is already run through the existing currency formatter.
+ */
+export function invitePromptBody(formattedAmount?: string | null): string {
+  const amount = formattedAmount?.trim();
+  if (amount) {
+    return `Send a link so they can split ${amount} with you.`;
+  }
+  return "Send a link so they can split this expense with you.";
+}
 
 export type InvitePromptPlatform = "ios" | "android" | "web" | string;
 

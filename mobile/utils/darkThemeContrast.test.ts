@@ -47,3 +47,17 @@ Deno.test("dark primary stays readable and stronger than a disabled wash", () =>
     `primary luminance ${luminance.toFixed(3)} is still a pale tint`,
   );
 });
+
+Deno.test("dark primary button label on primary fill meets WCAG AA", () => {
+  const { primary, onPrimary, surfaceElevated } = darkThemeTokens;
+  const label = contrastRatio(onPrimary, primary);
+  const notNowOnElevated = contrastRatio(primary, surfaceElevated);
+  assert(
+    label >= 4.5,
+    `contained button onPrimary on primary is ${label.toFixed(2)}, need >= 4.5`,
+  );
+  assert(
+    notNowOnElevated >= 4.5,
+    `Not now primary on elevated surface is ${notNowOnElevated.toFixed(2)}, need >= 4.5`,
+  );
+});

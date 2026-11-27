@@ -34,6 +34,8 @@ export type MaybeShowInvitePromptInput = {
   userId: string | null | undefined;
   groupId: string | null | undefined;
   groupName?: string;
+  amount?: number;
+  currency?: string;
   transactionType: string | null | undefined;
   isFirstExpense: boolean;
   activeMemberCount: number;
@@ -128,6 +130,8 @@ async function runInvitePromptAfterSettle(args: {
     choice = await deps.presentPrompt({
       groupId,
       groupName: input.groupName,
+      amount: input.amount,
+      currency: input.currency,
     });
   } catch {
     // Presentation is best-effort; the shown event and once-flag already stuck.

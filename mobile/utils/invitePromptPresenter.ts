@@ -1,11 +1,13 @@
 /**
- * Bridge from the after-save invite-prompt logic (non-React) to the Paper
- * dialog host mounted in the app shell. Mirrors {@link setGuestGateListener}.
+ * Bridge from the after-save invite-prompt logic (non-React) to the sheet
+ * host mounted in the app shell. Mirrors {@link setGuestGateListener}.
  */
 
 export type InvitePromptRequest = {
   groupId: string;
   groupName?: string;
+  amount?: number;
+  currency?: string;
 };
 
 export type InvitePromptChoice = "share" | "dismiss";

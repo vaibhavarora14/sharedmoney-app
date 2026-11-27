@@ -458,6 +458,8 @@ export function useCreateTransaction(onSuccess?: () => void) {
           userId: user?.id,
           groupId,
           groupName: inviteContext.groupName,
+          amount: variables.amount,
+          currency: variables.currency,
           transactionType: variables.type,
           isFirstExpense: isFirstExpenseInFeed(context?.previous),
           activeMemberCount: inviteContext.activeMemberCount,
