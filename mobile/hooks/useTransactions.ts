@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import type { InfiniteData, QueryClient } from "@tanstack/react-query";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../contexts/AuthContext";
-import { Participant, Transaction } from "../types";
+import { GroupWithMembers, Participant, Transaction } from "../types";
 import { fetchWithAuth } from "../utils/api";
 import { getDefaultCurrency } from "../utils/currency";
 import {
@@ -16,6 +16,11 @@ import {
 import { countActiveGroupMembers } from "../utils/inAppReviewEligibility";
 import { maybeRequestInAppReviewAfterExpense } from "../utils/inAppReviewPrompt";
 import { maybePromptAppUpdateAfterExpense } from "../utils/inAppUpdatePrompt";
+import { maybeShowInvitePromptAfterExpense } from "../utils/invitePrompt";
+import {
+  isFirstExpenseInFeed,
+  resolveInvitePromptGroupContext,
+} from "../utils/invitePromptEligibility";
 import { guestEventProps } from "../utils/guestMode";
 import { captureIdentifiedAnalyticsEvent } from "../utils/posthogAnalytics";
 import { ANALYTICS_EVENTS } from "../utils/posthogEvents";
@@ -183,6 +188,19 @@ function resolveActiveGroupMemberCount(
     queryKeys.participants(groupId),
   );
   return countActiveGroupMembers(participants);
+}
+
+function resolveInvitePromptContext(
+  queryClient: QueryClient,
+  groupId: string | undefined,
+) {
+  if (!groupId) {
+    return resolveInvitePromptGroupContext(undefined);
+  }
+  const group = queryClient.getQueryData<GroupWithMembers>(
+    queryKeys.group(groupId),
+  );
+  return resolveInvitePromptGroupContext(group);
 }
 
 export function useGroupLastTransactionCurrency(groupId?: string | null) {
@@ -430,10 +448,24 @@ export function useCreateTransaction(onSuccess?: () => void) {
         ...guestEventProps(user),
       });
       onSuccess?.();
-      // After save UI settles, maybe offer an update, then maybe a review.
-      // Never blocks the mutation; never throws. Skip review if an update
-      // prompt was scheduled so the two sheets do not stack.
+      // After save UI settles: solo first-expense invite, then maybe an
+      // update, then maybe a review. Never blocks the mutation; never throws.
+      // Skip later prompts when an earlier one was scheduled so sheets do
+      // not stack.
       void (async () => {
+        const inviteContext = resolveInvitePromptContext(queryClient, groupId);
+        const invitePromptScheduled = await maybeShowInvitePromptAfterExpense({
+          userId: user?.id,
+          groupId,
+          groupName: inviteContext.groupName,
+          amount: variables.amount,
+          currency: variables.currency,
+          transactionType: variables.type,
+          isFirstExpense: isFirstExpenseInFeed(context?.previous),
+          activeMemberCount: inviteContext.activeMemberCount,
+          groupKind: inviteContext.groupKind,
+        });
+        if (invitePromptScheduled) return;
         const updatePromptScheduled = await maybePromptAppUpdateAfterExpense({
           userId: user?.id,
           transactionType: variables.type,

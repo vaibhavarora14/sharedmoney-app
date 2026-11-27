@@ -7,7 +7,6 @@ import {
   Platform,
   Pressable,
   ScrollView,
-  Share,
   StyleSheet,
   View,
   type LayoutChangeEvent,
@@ -32,6 +31,11 @@ import { useCreateGroupShareLink } from "../hooks/useGroupInvitations";
 import { useExistingPeople } from "../hooks/useParticipants";
 import { useProfile } from "../hooks/useProfile";
 import { getInviteLinkUrl } from "../utils/inviteLinks";
+import {
+  INVITE_LINK_MAX_USES,
+  INVITE_LINK_VALID_DAYS,
+} from "../utils/inviteShare";
+import { shareInviteLink } from "../utils/inviteShareAction";
 import { showErrorAlert } from "../utils/errorHandling";
 import {
   type CountryCode,
@@ -81,25 +85,6 @@ type FollowerGap = {
   before: AddPersonField;
   height: number;
 };
-
-const LINK_MAX_USES = 10;
-const LINK_VALID_DAYS = 30;
-
-function buildInviteShareMessage(url: string, groupName?: string): string {
-  const trimmedName = groupName?.trim();
-  if (trimmedName) {
-    return `I started '${trimmedName}' on SharedMoney to track who paid and who owes. No bank link needed. Join here: ${url}`;
-  }
-  return `I started a SharedMoney group for us to track who paid and who owes. No bank link needed. Join here: ${url}`;
-}
-
-function buildInviteShareTitle(groupName?: string): string {
-  const trimmedName = groupName?.trim();
-  if (trimmedName) {
-    return `I started '${trimmedName}' on SharedMoney`;
-  }
-  return "I started a SharedMoney group";
-}
 
 export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
   visible,
@@ -220,8 +205,8 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
     if (inviteLink) return inviteLink;
     const token = await createShareLink.mutateAsync({
       groupId,
-      maxUses: LINK_MAX_USES,
-      validDays: LINK_VALID_DAYS,
+      maxUses: INVITE_LINK_MAX_USES,
+      validDays: INVITE_LINK_VALID_DAYS,
     });
     const url = getInviteLinkUrl(token);
     setInviteLink(url);
@@ -231,8 +216,8 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
       {
         group_id: groupId,
         invite_type: "share_link",
-        max_uses: LINK_MAX_USES,
-        valid_days: LINK_VALID_DAYS,
+        max_uses: INVITE_LINK_MAX_USES,
+        valid_days: INVITE_LINK_VALID_DAYS,
       },
     );
     return url;
@@ -246,31 +231,8 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
     setLoading(true);
     try {
       const url = await generateInviteLink();
-      let shared = false;
-      if (Platform.OS === "web") {
-        if (typeof navigator !== "undefined" && navigator.share) {
-          await navigator.share({
-            title: buildInviteShareTitle(groupName),
-            text: buildInviteShareMessage(url, groupName),
-            url,
-          });
-          shared = true;
-        } else if (typeof navigator !== "undefined" && navigator.clipboard) {
-          await navigator.clipboard.writeText(url);
-          Alert.alert(
-            "Invite link copied",
-            "Share it with the people you want to invite.",
-          );
-          shared = true;
-        }
-      } else {
-        await Share.share({
-          message: buildInviteShareMessage(url, groupName),
-          url,
-        });
-        shared = true;
-      }
-      if (shared) {
+      const result = await shareInviteLink(url, groupName);
+      if (result === "shared") {
         captureIdentifiedAnalyticsEvent(
           user?.id,
           ANALYTICS_EVENTS.INVITE_LINK_SHARED,
@@ -292,28 +254,8 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
   };
 
   const sharePhoneInviteLink = async (url: string) => {
-    if (Platform.OS === "web") {
-      if (typeof navigator !== "undefined" && navigator.share) {
-        await navigator.share({
-          title: buildInviteShareTitle(groupName),
-          text: buildInviteShareMessage(url, groupName),
-          url,
-        });
-        return;
-      }
-      if (typeof navigator !== "undefined" && navigator.clipboard) {
-        await navigator.clipboard.writeText(url);
-        Alert.alert(
-          "Invite link copied",
-          "Share it by SMS, WhatsApp, or any app you prefer.",
-        );
-        return;
-      }
-    }
-
-    await Share.share({
-      message: buildInviteShareMessage(url, groupName),
-      url,
+    await shareInviteLink(url, groupName, {
+      copiedMessage: "Share it by SMS, WhatsApp, or any app you prefer.",
     });
   };
 
@@ -748,7 +690,7 @@ export const AddMemberScreen: React.FC<AddMemberScreenProps> = ({
                           color: theme.colors.onSurfaceVariant,
                         }]}
                       >
-                        {`Anyone with this link can join. Works for up to ${LINK_MAX_USES} people for ${LINK_VALID_DAYS} days.`}
+                        {`Anyone with this link can join. Works for up to ${INVITE_LINK_MAX_USES} people for ${INVITE_LINK_VALID_DAYS} days.`}
                       </Text>
                     </View>
                   )
