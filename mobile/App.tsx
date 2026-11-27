@@ -140,9 +140,11 @@ import {
 import { ProfileBootSkeleton, ProfileSetupScreen } from "./screens/ProfileSetupScreen";
 import { SplitwiseImportScreen } from "./screens/SplitwiseImportScreen";
 import { GuestSessionHost } from "./components/guest/GuestSessionHost";
+import { InvitePromptHost } from "./components/InvitePromptHost";
 import { TermsAcceptanceScreen } from "./screens/TermsAcceptanceScreen";
 import { GuestNameScreen } from "./screens/GuestNameScreen";
 import { GuestModePreviewScreen } from "./screens/GuestModePreviewScreen";
+import { InvitePromptPreviewScreen } from "./screens/InvitePromptPreviewScreen";
 import { TodayRefinedPreviewScreen } from "./screens/TodayRefinedPreviewScreen";
 import { TransactionFormScreen } from "./screens/TransactionFormScreen";
 import {
@@ -1498,6 +1500,10 @@ function AppContent() {
     );
   }
 
+  if (__DEV__ && previewParam === "invite-prompt") {
+    return <InvitePromptPreviewScreen />;
+  }
+
   if (__DEV__ && previewParam === "quick-settle") {
     const href = Platform.OS === "web" && typeof window !== "undefined" ? window.location.href : "";
     return (
@@ -2206,6 +2212,7 @@ function ThemedAppShell() {
             <AuthProvider>
               <SentryScreenLoadProbe />
               <GuestSessionHost />
+              <InvitePromptHost />
               <AppFrame />
             </AuthProvider>
           </UpgradeProvider>

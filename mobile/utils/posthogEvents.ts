@@ -41,6 +41,10 @@
  * - `invite_link_created` — shareable link token minted
  * - `invite_link_shared` — system share sheet / clipboard copy of the link
  * - `member_invited` — email invite sent via participants invite API
+ * - `invite_prompt_shown` — first-expense solo-group invite prompt displayed
+ * - `invite_prompt_shared` — user shared from that prompt
+ * - `invite_prompt_dismissed` — user dismissed that prompt
+ *   Props: `group_id`, `platform`. Never token, email, name, or phone.
  *
  * Logged-out web invite landing (`/app/join/:token` shell). Never include the
  * token, group name, member names, balances, emails, or phone numbers:
@@ -80,6 +84,12 @@ export const ANALYTICS_EVENTS = {
   MEMBER_INVITED: "member_invited",
   INVITE_LANDING_VIEWED: "invite_landing_viewed",
   INVITE_LANDING_CTA_CLICKED: "invite_landing_cta_clicked",
+  /** First-expense prompt in a single-member group. Props: group_id, platform. */
+  INVITE_PROMPT_SHOWN: "invite_prompt_shown",
+  /** User shared the invite link from the first-expense prompt. */
+  INVITE_PROMPT_SHARED: "invite_prompt_shared",
+  /** User dismissed the first-expense invite prompt. */
+  INVITE_PROMPT_DISMISSED: "invite_prompt_dismissed",
   MOBILE_APP_OPENED: "mobile_app_opened",
   MOBILE_SCREEN_VIEWED: "mobile_screen_viewed",
   GROUP_ARCHIVED: "group_archived",
