@@ -58,6 +58,8 @@ import {
   sendWhatsAppOtp,
   WhatsAppOtpApiError,
 } from "../utils/whatsappOtpApi";
+import { userMessageForWhatsAppOtpError } from "../utils/whatsappOtpErrors";
+import { recordWhatsAppOtpFailure } from "../utils/whatsappOtpTelemetry";
 import {
   mapAuthFailureReason,
   type AuthFunnelMethod,
@@ -380,11 +382,16 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     }, 0);
   };
 
-  const applyOtpApiError = (err: unknown, fallback: string) => {
-    captureAuthFailed(
-      "whatsapp",
-      mapAuthFailureReason(err instanceof Error ? err : fallback),
-    );
+  const applyOtpApiError = (
+    err: unknown,
+    fallback: string,
+    step: "send" | "verify",
+  ) => {
+    const mapped = err instanceof Error ? err : new Error(fallback);
+    captureAuthFailed("whatsapp", mapAuthFailureReason(mapped));
+    if (step === "send") {
+      recordWhatsAppOtpFailure({ step, error: mapped });
+    }
     if (err instanceof WhatsAppOtpApiError) {
       switch (err.code) {
         case "WHATSAPP_SEND_FAILED":
@@ -400,7 +407,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           return;
         case "OTP_EXPIRED":
           setOtpIssue("expired");
-          setFormError(err.message || "This code has expired.");
+          setFormError(err.message || "This code has expired. Request a new one.");
           setOtpCode("");
           return;
         case "OTP_LOCKED": {
@@ -423,10 +430,11 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           } else {
             setOtpIssue(null);
           }
-          setFormError(err.message || fallback);
+          setFormError(userMessageForWhatsAppOtpError(err, fallback));
           setOtpCode("");
           return;
         case "RATE_LIMITED":
+        case "RATE_LIMIT":
           setOtpIssue(null);
           setFormError(err.message || fallback);
           if (
@@ -441,15 +449,15 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         case "METHOD_NOT_ALLOWED":
         case "WHATSAPP_BUDGET_EXHAUSTED":
           setOtpIssue(null);
-          setFormError(err.message || fallback);
+          setFormError(userMessageForWhatsAppOtpError(err, fallback));
           return;
-        default: {
-          const _exhaustive: never = err.code;
-          return _exhaustive;
-        }
+        default:
+          setOtpIssue(null);
+          setFormError(userMessageForWhatsAppOtpError(err, fallback));
+          return;
       }
     }
-    const message = err instanceof Error ? err.message : fallback;
+    const message = userMessageForWhatsAppOtpError(err, fallback);
     if (/couldn't send|could not send/i.test(message)) {
       logWhatsAppSendDevHint(err);
       setOtpIssue("send_failed");
@@ -654,7 +662,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       );
       setAuthStep("otp");
     } catch (err) {
-      applyOtpApiError(err, "Couldn't send WhatsApp code.");
+      applyOtpApiError(err, "Couldn't send WhatsApp code.", "send");
     } finally {
       setWhatsappLoading(null);
     }
@@ -686,10 +694,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     try {
       const { error } = await signInWithWhatsAppOtp(phoneE164, trimmed);
       if (error) {
-        applyOtpApiError(error, "Incorrect code. Try again.");
+        applyOtpApiError(error, "Incorrect code. Try again.", "verify");
       }
     } catch (err) {
-      applyOtpApiError(err, "Couldn't verify the code. Try again.");
+      applyOtpApiError(err, "Couldn't verify the code. Try again.", "verify");
     } finally {
       otpSubmitLockRef.current = false;
       setWhatsappLoading(null);
@@ -724,7 +732,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       );
       focusOtpInput();
     } catch (err) {
-      applyOtpApiError(err, "Couldn't send a new code.");
+      applyOtpApiError(err, "Couldn't send a new code.", "send");
     } finally {
       setWhatsappLoading(null);
     }

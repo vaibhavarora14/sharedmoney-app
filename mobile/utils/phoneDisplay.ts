@@ -167,6 +167,13 @@ export const WHATSAPP_SEND_FAILED_USER_MESSAGE =
 
 export const WHATSAPP_SEND_FAILED_LINK_LABEL = "use another sign-in method";
 
+/** 5xx / unclassified server failures — try again, or pick another method. */
+export const WHATSAPP_TEMPORARY_PROBLEM_USER_MESSAGE =
+  "WhatsApp sign-in hit a temporary problem. Please try again, or use another sign-in method.";
+
+export const WHATSAPP_TIMEOUT_USER_MESSAGE =
+  "Request timed out. Check your connection and try again.";
+
 /** Dev/preview-only hint — never show in production user copy. */
 export const WHATSAPP_SEND_FAILED_DEV_HINT =
   "Confirm the number is a Meta allowlisted test recipient and (for text delivery) has opened the 24h window.";

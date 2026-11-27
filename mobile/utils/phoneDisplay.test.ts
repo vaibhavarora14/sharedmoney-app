@@ -5,6 +5,8 @@ import {
   formatResendCountdown,
   formatTryAgainCountdown,
   WHATSAPP_SEND_FAILED_USER_MESSAGE,
+  WHATSAPP_TEMPORARY_PROBLEM_USER_MESSAGE,
+  WHATSAPP_TIMEOUT_USER_MESSAGE,
 } from "./phoneDisplay.ts";
 
 Deno.test("formatE164ForDisplay formats India mobiles as +91 XXXXX XXXXX", () => {
@@ -51,5 +53,21 @@ Deno.test("send-failed copy never mentions Meta test recipients", () => {
   assertEquals(
     WHATSAPP_SEND_FAILED_USER_MESSAGE,
     "We couldn't send a code to this number. Check it's on WhatsApp, or use another sign-in method.",
+  );
+});
+
+Deno.test("temporary-problem copy does not mention Meta, phones, or OTPs", () => {
+  assertEquals(
+    WHATSAPP_TEMPORARY_PROBLEM_USER_MESSAGE.includes("Meta"),
+    false,
+  );
+  assertEquals(WHATSAPP_TEMPORARY_PROBLEM_USER_MESSAGE.includes("+"), false);
+  assertEquals(
+    WHATSAPP_TEMPORARY_PROBLEM_USER_MESSAGE,
+    "WhatsApp sign-in hit a temporary problem. Please try again, or use another sign-in method.",
+  );
+  assertEquals(
+    WHATSAPP_TIMEOUT_USER_MESSAGE,
+    "Request timed out. Check your connection and try again.",
   );
 });

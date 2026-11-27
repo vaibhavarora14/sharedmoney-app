@@ -65,6 +65,7 @@ import {
 } from "../utils/socialAuth";
 import { recordSocialAuthFailure } from "../utils/socialAuthTelemetry";
 import { verifyWhatsAppOtp } from "../utils/whatsappOtpApi";
+import { recordWhatsAppOtpFailure } from "../utils/whatsappOtpTelemetry";
 import {
   createSessionRefreshController,
   decideSessionRecovery,
@@ -1086,6 +1087,7 @@ const [loading, setLoading] = useState<boolean>(() => !isWebAuthShellActive());
         });
         if (sessionError) {
           pendingAuthMethodRef.current = null;
+          recordWhatsAppOtpFailure({ step: "verify", error: sessionError });
           return { error: sessionError };
         }
         const {
@@ -1094,22 +1096,21 @@ const [loading, setLoading] = useState<boolean>(() => !isWebAuthShellActive());
         } = await supabase.auth.getSession();
         if (verifyError || !verifySession) {
           pendingAuthMethodRef.current = null;
-          return {
-            error:
-              verifyError ||
-              new Error("Session was not created after WhatsApp OTP sign-in"),
-          };
+          const error =
+            verifyError ||
+            new Error("Session was not created after WhatsApp OTP sign-in");
+          recordWhatsAppOtpFailure({ step: "verify", error });
+          return { error };
         }
         return { error: null };
       } catch (err) {
         pendingAuthMethodRef.current = null;
-        logError(err, { context: "signInWithWhatsAppOtp" });
-        return {
-          error:
-            err instanceof Error
-              ? err
-              : new Error("WhatsApp sign-in failed. Please try again."),
-        };
+        const error =
+          err instanceof Error
+            ? err
+            : new Error("WhatsApp sign-in failed. Please try again.");
+        recordWhatsAppOtpFailure({ step: "verify", error });
+        return { error };
       }
     },
     [],
