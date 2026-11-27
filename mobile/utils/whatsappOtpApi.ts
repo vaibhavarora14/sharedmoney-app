@@ -1,5 +1,23 @@
 import { APP_VERSION } from "../constants/version";
 import { formatNetworkErrorMessage } from "./networkErrors";
+import {
+  parseWhatsAppOtpFailure,
+  WhatsAppOtpApiError,
+  type WhatsAppOtpErrorBody,
+} from "./whatsappOtpApiError";
+
+export {
+  isWhatsAppOtpErrorCode,
+  parseRetryAfterSeconds,
+  parseWhatsAppOtpFailure,
+  resolveWhatsAppOtpErrorCode,
+  WHATSAPP_OTP_ERROR_CODES,
+  WhatsAppOtpApiError,
+} from "./whatsappOtpApiError";
+export type {
+  WhatsAppOtpErrorBody,
+  WhatsAppOtpErrorCode,
+} from "./whatsappOtpApiError";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
@@ -27,53 +45,19 @@ export interface WhatsAppOtpVerifyResult {
   };
 }
 
-const WHATSAPP_OTP_ERROR_CODES = [
-  "WHATSAPP_SEND_FAILED",
-  "OTP_MISMATCH",
-  "OTP_EXPIRED",
-  "OTP_LOCKED",
-  "OTP_INVALID",
-  "RATE_LIMITED",
-  "FEATURE_DISABLED",
-  "VALIDATION_ERROR",
-  "METHOD_NOT_ALLOWED",
-  "WHATSAPP_BUDGET_EXHAUSTED",
-] as const;
-
-export type WhatsAppOtpErrorCode = (typeof WHATSAPP_OTP_ERROR_CODES)[number];
-
-function isWhatsAppOtpErrorCode(code: string): code is WhatsAppOtpErrorCode {
-  return (WHATSAPP_OTP_ERROR_CODES as readonly string[]).includes(code);
-}
-
-export class WhatsAppOtpApiError extends Error {
-  readonly code: WhatsAppOtpErrorCode;
-  readonly retryAfterSeconds?: number;
-
-  constructor(
-    message: string,
-    code: WhatsAppOtpErrorCode,
-    retryAfterSeconds?: number,
-  ) {
-    super(message);
-    this.name = "WhatsAppOtpApiError";
-    this.code = code;
-    this.retryAfterSeconds = retryAfterSeconds;
-  }
-}
-
-function parseRetryAfterSeconds(details: string | undefined): number | undefined {
-  if (!details) return undefined;
-  const match = /retry_after=(\d+)/i.exec(details);
-  if (!match) return undefined;
-  const value = Number.parseInt(match[1], 10);
-  return Number.isFinite(value) ? value : undefined;
+function isTimeoutNetworkFailure(errorName: string, errorMessage: string): boolean {
+  return (
+    errorMessage.toLowerCase().includes("timeout") ||
+    errorName === "TimeoutError" ||
+    errorName === "AbortError"
+  );
 }
 
 async function postWhatsAppOtp(body: Record<string, unknown>): Promise<unknown> {
   if (!API_URL) {
-    throw new Error(
+    throw new WhatsAppOtpApiError(
       "Unable to connect to the server. Please check your app configuration and try again.",
+      "NETWORK_ERROR",
     );
   }
 
@@ -89,17 +73,21 @@ async function postWhatsAppOtp(body: Record<string, unknown>): Promise<unknown> 
     });
   } catch (networkError: unknown) {
     const err = networkError as { name?: string; message?: string };
-    throw new Error(
+    const errorName = err?.name || "Unknown";
+    const errorMessage = err?.message || "Network request failed";
+    throw new WhatsAppOtpApiError(
       formatNetworkErrorMessage({
         apiUrl: API_URL,
-        errorName: err?.name || "Unknown",
-        errorMessage: err?.message || "Network request failed",
+        errorName,
+        errorMessage,
         isDevelopment: __DEV__,
       }),
+      isTimeoutNetworkFailure(errorName, errorMessage)
+        ? "TIMEOUT_ERROR"
+        : "NETWORK_ERROR",
     );
   }
 
-  type ErrorBody = { error?: string; code?: string; details?: string };
   let payload: unknown = null;
   try {
     payload = await response.json();
@@ -110,27 +98,8 @@ async function postWhatsAppOtp(body: Record<string, unknown>): Promise<unknown> 
   if (!response.ok) {
     const errBody = (payload && typeof payload === "object"
       ? payload
-      : {}) as ErrorBody;
-    if (response.status === 404 || errBody.code === "FEATURE_DISABLED") {
-      throw new WhatsAppOtpApiError(
-        "WhatsApp login is not available in this build.",
-        "FEATURE_DISABLED",
-      );
-    }
-    const message =
-      errBody.error || `Request failed (${response.status})`;
-    const code =
-      typeof errBody.code === "string" && isWhatsAppOtpErrorCode(errBody.code)
-        ? errBody.code
-        : null;
-    if (!code) {
-      throw new Error(message);
-    }
-    throw new WhatsAppOtpApiError(
-      message,
-      code,
-      parseRetryAfterSeconds(errBody.details),
-    );
+      : null) as WhatsAppOtpErrorBody | null;
+    throw parseWhatsAppOtpFailure(response.status, errBody);
   }
 
   return payload;

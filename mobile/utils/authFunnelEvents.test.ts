@@ -135,7 +135,7 @@ Deno.test("maps each auth failure family to a reason_code", () => {
       code: "OTP_EXPIRED",
       message: "This code has expired.",
     }),
-    "otp_invalid",
+    "otp_expired",
   );
   assertEquals(
     mapAuthFailureReason({
@@ -232,6 +232,102 @@ Deno.test("maps each auth failure family to a reason_code", () => {
   assertEquals(
     mapAuthFailureReason({ code: "VALIDATION_ERROR", message: "bad input" }),
     "unknown",
+  );
+});
+
+Deno.test("maps WhatsApp OTP failures that previously fell through to unknown", () => {
+  assertEquals(
+    mapAuthFailureReason({
+      code: "INTERNAL_ERROR",
+      status: 500,
+      message: "Internal server error",
+    }),
+    "server_error",
+  );
+  assertEquals(
+    mapAuthFailureReason({
+      code: "UNKNOWN_ERROR",
+      status: 500,
+      message: "Internal server error",
+    }),
+    "server_error",
+  );
+  assertEquals(
+    mapAuthFailureReason({
+      code: "GATEWAY_ERROR",
+      status: 502,
+      message: "Request failed (502)",
+    }),
+    "server_error",
+  );
+  assertEquals(
+    mapAuthFailureReason({
+      status: 502,
+      message: "Request failed (502)",
+    }),
+    "server_error",
+  );
+  assertEquals(
+    mapAuthFailureReason({
+      status: 504,
+      message: "Request failed (504)",
+    }),
+    "timeout",
+  );
+  assertEquals(
+    mapAuthFailureReason({
+      code: "TIMEOUT_ERROR",
+      message: "Request timed out. Check your connection and try again.",
+    }),
+    "timeout",
+  );
+  assertEquals(
+    mapAuthFailureReason({
+      code: "NETWORK_ERROR",
+      message: "Unable to connect. Check your internet connection and try again.",
+    }),
+    "network",
+  );
+  assertEquals(
+    mapAuthFailureReason({
+      code: "RATE_LIMIT",
+      status: 429,
+      message: "Too many requests",
+    }),
+    "rate_limited",
+  );
+  assertEquals(
+    mapAuthFailureReason({
+      code: "METHOD_NOT_ALLOWED",
+      message: "Method not allowed",
+    }),
+    "provider_configuration",
+  );
+  assertEquals(
+    mapAuthFailureReason({
+      code: "SESSION_MINT_FAILED",
+      message: "Failed to create session",
+    }),
+    "server_error",
+  );
+  assertEquals(
+    mapAuthFailureReason(
+      new Error("Session was not created after WhatsApp OTP sign-in"),
+    ),
+    "server_error",
+  );
+  assertEquals(
+    mapAuthFailureReason({
+      code: "VALIDATION_ERROR",
+      message: "WhatsApp sign-in is only available for supported country codes.",
+    }),
+    "unsupported_country",
+  );
+  assertEquals(
+    mapAuthFailureReason(
+      new Error("This code has expired. Request a new one."),
+    ),
+    "otp_expired",
   );
 });
 
