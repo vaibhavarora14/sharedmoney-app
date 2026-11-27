@@ -24,10 +24,14 @@ export const AUTH_FAILURE_REASON_CODES = [
   "weak_password",
   "network",
   "otp_invalid",
+  "otp_expired",
   "otp_send_failed",
   "rate_limited",
   "apple_unknown",
   "interrupted",
+  "timeout",
+  "server_error",
+  "unsupported_country",
   "unknown",
 ] as const;
 
@@ -98,33 +102,52 @@ function normalizeMessage(message: string): string {
  * Structured WhatsApp OTP codes. Unknown codes return null so message
  * heuristics can still classify the error.
  */
-function reasonFromOtpCode(code: string): AuthFailureReasonCode | null {
+function reasonFromOtpCode(
+  code: string,
+  message: string,
+): AuthFailureReasonCode | null {
   switch (code) {
     case "WHATSAPP_SEND_FAILED":
     case "WHATSAPP_BUDGET_EXHAUSTED":
       return "otp_send_failed";
     case "OTP_MISMATCH":
-    case "OTP_EXPIRED":
     case "OTP_INVALID":
       return "otp_invalid";
+    case "OTP_EXPIRED":
+      return "otp_expired";
     case "OTP_LOCKED":
     case "RATE_LIMITED":
+    case "RATE_LIMIT":
       return "rate_limited";
     case "FEATURE_DISABLED":
+    case "METHOD_NOT_ALLOWED":
+    case "AUTH_ERROR":
+    case "PERMISSION_DENIED":
+    case "NOT_FOUND":
       return "provider_configuration";
     case "VALIDATION_ERROR":
-    case "METHOD_NOT_ALLOWED":
-      return "unknown";
+      return message.includes("country")
+        ? "unsupported_country"
+        : "unknown";
+    case "INTERNAL_ERROR":
+    case "UNKNOWN_ERROR":
+    case "GATEWAY_ERROR":
+    case "SESSION_MINT_FAILED":
+      return "server_error";
+    case "TIMEOUT_ERROR":
+      return "timeout";
+    case "NETWORK_ERROR":
+      return "network";
     default:
       return null;
   }
 }
 
 function reasonFromSignals(shape: ErrorShape): AuthFailureReasonCode {
-  const otpReason = shape.code ? reasonFromOtpCode(shape.code) : null;
+  const message = normalizeMessage(shape.message);
+  const otpReason = shape.code ? reasonFromOtpCode(shape.code, message) : null;
   if (otpReason) return otpReason;
 
-  const message = normalizeMessage(shape.message);
   const code = shape.code ?? "";
 
   if (
@@ -214,12 +237,44 @@ function reasonFromSignals(shape: ErrorShape): AuthFailureReasonCode {
   }
 
   if (
-    message.includes("incorrect code") ||
     message.includes("code has expired") ||
-    message.includes("invalid code") ||
     message.includes("expired code")
   ) {
+    return "otp_expired";
+  }
+
+  if (
+    message.includes("incorrect code") ||
+    message.includes("invalid code")
+  ) {
     return "otp_invalid";
+  }
+
+  if (
+    message.includes("supported country") ||
+    message.includes("country code")
+  ) {
+    return "unsupported_country";
+  }
+
+  if (
+    shape.status === 408 ||
+    shape.status === 504 ||
+    message.includes("timed out") ||
+    message.includes("timeout")
+  ) {
+    return "timeout";
+  }
+
+  if (
+    shape.status === 500 ||
+    shape.status === 502 ||
+    shape.status === 503 ||
+    message.includes("internal server error") ||
+    message.includes("request failed (5") ||
+    message.includes("session was not created")
+  ) {
+    return "server_error";
   }
 
   if (

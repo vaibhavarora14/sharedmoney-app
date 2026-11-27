@@ -24,6 +24,7 @@ import { isWhatsAppOtpLoginEnabled } from "../../utils/whatsappOtpLogin";
 import { aliasAnalyticsUser, captureAnalyticsEvent } from "../../utils/posthogAnalytics";
 import { ANALYTICS_EVENTS } from "../../utils/posthogEvents";
 import { sendWhatsAppOtp } from "../../utils/whatsappOtpApi";
+import { recordWhatsAppOtpFailure } from "../../utils/whatsappOtpTelemetry";
 import { supabase } from "../../supabase";
 import { GuestMergeSheet, GuestSignInSheet, GuestSnackbar } from "./GuestChrome";
 
@@ -248,6 +249,8 @@ export function GuestSessionHost() {
     if (!code.trim()) {
       try {
         await sendWhatsAppOtp(phone.trim());
+      } catch (err) {
+        recordWhatsAppOtpFailure({ step: "send", error: err });
       } finally {
         setBusy(false);
       }
