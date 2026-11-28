@@ -4,6 +4,7 @@
  * bare sign. Payments are an unsigned amount with no "Payment" subtitle.
  */
 import { groupListBalanceWords } from "./balanceRowLabels";
+import { formatPayerLine, viewerPaidAmount } from "./expensePayers";
 import { formatShareCurrency } from "./settleShareMessage";
 
 export const NOT_IN_SPLIT_LABEL = "Not in split";
@@ -58,19 +59,34 @@ export function buildExpenseRowModel(input: {
   amount: number;
   currency: string;
   payerName: string;
+  payerNames?: string[];
   paidByParticipantId?: string | null;
   paidByUserId?: string | null;
+  payers?: SplitRef[] | null;
   splits?: SplitRef[] | null;
   viewer: ViewerRef;
   saving?: boolean;
 }): ExpenseRowModel {
-  const viewerPaid = samePerson(
-    { participantId: input.paidByParticipantId, userId: input.paidByUserId },
-    input.viewer,
-  );
+  const resolvedPayers: SplitRef[] = input.payers && input.payers.length > 0
+    ? input.payers
+    : (input.paidByParticipantId || input.paidByUserId)
+      ? [{
+        participant_id: input.paidByParticipantId ?? "",
+        user_id: input.paidByUserId,
+        amount: input.amount,
+      }]
+      : [];
+  const paidAmount = viewerPaidAmount(resolvedPayers, input.viewer);
+  const viewerPaid = paidAmount > 0.005;
   const payerLine = input.saving
     ? SAVING_PAYER_LINE
-    : `${input.payerName} paid ${formatShareCurrency(input.amount, input.currency)}`;
+    : formatPayerLine({
+      payerNames: input.payerNames && input.payerNames.length > 0
+        ? input.payerNames
+        : [input.payerName],
+      amount: input.amount,
+      currency: input.currency,
+    });
 
   if (!input.splits) {
     return {
@@ -101,7 +117,7 @@ export function buildExpenseRowModel(input: {
     };
   }
 
-  const net = (viewerPaid ? input.amount : 0) - (share?.amount ?? 0);
+  const net = paidAmount - (share?.amount ?? 0);
   const amountText = formatShareCurrency(Math.abs(net), input.currency);
   const impactText = groupListBalanceWords(net, amountText);
   const material = Math.abs(net) > 0.01;

@@ -87,6 +87,12 @@ export function densePeopleForExpense(input: {
   payerName: string;
   paidByParticipantId?: string | null;
   paidByUserId?: string | null;
+  payers?: Array<{
+    participant_id: string;
+    user_id?: string | null;
+    full_name?: string | null;
+    avatar_url?: string | null;
+  }> | null;
   splits?: Array<{
     participant_id: string;
     user_id?: string | null;
@@ -97,6 +103,8 @@ export function densePeopleForExpense(input: {
   members?: LedgerNameSource[];
 }): DensePerson[] {
   const sources = [...(input.participants ?? []), ...(input.members ?? [])];
+  const fromPayers = densePeopleFromBalances(input.payers ?? []);
+  if (fromPayers.length >= 2) return fromPayers;
   const fromSplits = densePeopleFromBalances(input.splits ?? []);
   if (fromSplits.length >= 2) return fromSplits;
   const payer = lookupPerson(input.paidByParticipantId, input.paidByUserId, [

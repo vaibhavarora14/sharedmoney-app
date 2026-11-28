@@ -50,6 +50,17 @@ interface SplitAmongEditorProps {
   requiredIds?: string[];
   modeTestID?: string;
   showEqualSummary?: boolean;
+  title?: string;
+  hideEqual?: boolean;
+  editorTestID?: string;
+  remainingTestID?: string;
+  leftoverTestID?: string;
+  chipTestIDPrefix?: string;
+  amountTestIDPrefix?: string;
+  exactLabel?: string;
+  leftLabel?: string;
+  overLabel?: string;
+  equalSummaryPrefix?: string;
 }
 
 function displayName(participant: Participant): string {
@@ -80,6 +91,17 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
   requiredIds = [],
   modeTestID = "split-mode-dropdown",
   showEqualSummary = true,
+  title = "Split among",
+  hideEqual = false,
+  editorTestID = "split-among-editor",
+  remainingTestID = "split-remaining-label",
+  leftoverTestID = "split-leftover-button",
+  chipTestIDPrefix = "split-among-chip",
+  amountTestIDPrefix = "split-amount-input",
+  exactLabel = "Splits add up: ",
+  leftLabel = "Left to assign: ",
+  overLabel = "Over by: ",
+  equalSummaryPrefix = "Each person pays: ",
 }) => {
   const theme = useTheme();
   const [modeMenuVisible, setModeMenuVisible] = useState(false);
@@ -147,12 +169,27 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
     ? "Select at least one person"
     : roundingError);
 
+  const modeOptions = hideEqual
+    ? ([
+      { value: "unequal", label: "Amounts" },
+      { value: "shares", label: "Shares" },
+    ] as const)
+    : ([
+      { value: "equal", label: "Equal" },
+      { value: "unequal", label: "Amounts" },
+      { value: "shares", label: "Shares" },
+    ] as const);
+
   return (
-    <View testID="split-among-editor">
+    <View testID={editorTestID}>
       <View style={styles.sectionHeaderWithAction}>
-        <Text variant="labelLarge" style={{ color: theme.colors.onSurfaceVariant }}>
-          Split among
-        </Text>
+        {title ? (
+          <Text variant="labelLarge" style={{ color: theme.colors.onSurfaceVariant }}>
+            {title}
+          </Text>
+        ) : (
+          <View />
+        )}
         <View style={styles.headerActions}>
           <Menu
             nativeModal
@@ -177,11 +214,7 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
               </TouchableRipple>
             }
           >
-            {([
-              { value: "equal", label: "Equal" },
-              { value: "unequal", label: "Amounts" },
-              { value: "shares", label: "Shares" },
-            ] as const).map((option) => (
+            {modeOptions.map((option) => (
               <Menu.Item
                 key={option.value}
                 title={option.label}
@@ -232,7 +265,7 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
               theme={selectionTheme}
               disabled={chipDisabled}
               showSelectedCheck={showCheck}
-              testID={`split-among-chip-${participant.email || participant.id}`}
+              testID={`${chipTestIDPrefix}-${participant.email || participant.id}`}
             >
               {isRequired ? "You" : displayName(participant)}
               {!isRequired && isFormer ? " (Former)" : ""}
@@ -244,7 +277,7 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
       {showEqualSummary && mode === "equal" && hasTotal && selectedIds.length > 0 ? (
         <View style={[styles.summary, { backgroundColor: theme.colors.surfaceVariant }]}>
           <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
-            Each person pays:{" "}
+            {equalSummaryPrefix}
             <Text style={{ color: theme.colors.primary, fontWeight: "600" }}>
               {formatCurrency(totalAmount / selectedIds.length, currency)}
             </Text>
@@ -302,7 +335,7 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
                     outlineColor={theme.colors.outline}
                     activeOutlineColor={theme.colors.primary}
                     placeholder="0.00"
-                    testID={`split-amount-input-${participant.email || participant.id}`}
+                    testID={`${amountTestIDPrefix}-${participant.email || participant.id}`}
                   />
                 ) : (
                   <View style={styles.shareStepper}>
@@ -364,14 +397,14 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
       {mode !== "equal" && hasTotal && effectiveIds.length > 0 ? (
         <View
           style={[styles.summary, { backgroundColor: theme.colors.surfaceVariant }]}
-          testID="split-remaining-label"
+          testID={remainingTestID}
         >
           <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant, textAlign: "center" }}>
             {exact
-              ? "Splits add up: "
+              ? exactLabel
               : leftover
-                ? "Left to assign: "
-                : "Over by: "}
+                ? leftLabel
+                : overLabel}
             <Text style={{ color: statusColor, fontWeight: "600" }}>
               {exact
                 ? formatCurrency(totalAmount, currency)
@@ -387,7 +420,7 @@ export const SplitAmongEditor: React.FC<SplitAmongEditorProps> = ({
               compact
               onPress={onSplitRemaining}
               disabled={disabled}
-              testID="split-leftover-button"
+              testID={leftoverTestID}
             >
               Split leftover
             </Button>

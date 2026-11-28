@@ -87,6 +87,23 @@ Deno.test("unequal split keeps per-person amounts with You first", () => {
   assertEquals(detail.split.people[1].amountText, "₹1,000");
 });
 
+Deno.test("two payers are named together on the paid-by line", () => {
+  const detail = buildExpenseDetailModel({
+    transaction: expense({
+      payers: [
+        { participant_id: "p-rahul", user_id: "rahul", amount: 3000 },
+        { participant_id: "p-meera", user_id: "meera", amount: 1800 },
+      ],
+    }),
+    viewerUserId: viewer,
+    viewerParticipantId: "p-me",
+    participants,
+    now,
+  });
+  assertEquals(detail.paidBy, "Rahul and Meera");
+  assertEquals(detail.yourLine, "You borrowed ₹1,200");
+});
+
 Deno.test("not in split stays a secondary line", () => {
   const detail = buildExpenseDetailModel({
     transaction: expense({

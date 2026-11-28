@@ -20,6 +20,10 @@ import {
   scaleSplitsToTotal,
   type SplitShare,
 } from '../_shared/splits.ts';
+import {
+  buildTransactionPayerRows,
+  parseCustomPayers,
+} from '../_shared/payers.ts';
 import { broadcastToGroup } from '../_shared/realtime-broadcast.ts';
 
 /**
@@ -52,6 +56,7 @@ interface Transaction {
   paid_by_participant_id?: string; // Participant who paid
   split_among_participant_ids?: string[]; // Array of participant IDs to split among
   splits?: SplitShare[]; // Optional exact amounts; omit to split equally
+  payers?: SplitShare[]; // Optional paid allocations; omit for a single paid_by_participant_id
 }
 
 interface TransactionSplit {
@@ -75,9 +80,78 @@ interface Participant {
   avatar_url?: string | null;
 }
 
-interface TransactionWithSplits extends Omit<Transaction, 'splits'> {
+interface TransactionWithSplits extends Omit<Transaction, 'splits' | 'payers'> {
   transaction_splits?: TransactionSplit[];
   splits?: TransactionSplit[];
+  transaction_payers?: TransactionSplit[];
+  payers?: TransactionSplit[];
+}
+
+const TRANSACTION_DETAIL_SELECT = `
+            *,
+            transaction_splits (
+              id,
+              participant_id,
+              amount,
+              created_at
+            ),
+            transaction_payers (
+              id,
+              participant_id,
+              amount,
+              created_at
+            ),
+            transaction_receipts (
+              id,
+              transaction_id,
+              group_id,
+              storage_path,
+              content_type,
+              byte_size,
+              sort_order,
+              created_at
+            )
+          `;
+
+function attachPayersToResponse<T extends {
+  transaction_payers?: TransactionSplit[];
+  payers?: TransactionSplit[];
+}>(tx: T): T {
+  if (tx.transaction_payers) {
+    tx.payers = tx.transaction_payers;
+    delete tx.transaction_payers;
+  }
+  return tx;
+}
+
+function resolveWritePayers(
+  transactionData: Partial<Transaction>,
+  amount: number,
+): { present: boolean; payers: SplitShare[]; paidBy?: string; error?: string } {
+  const parsed = parseCustomPayers(transactionData.payers);
+  if (parsed.present && 'error' in parsed) {
+    return { present: true, payers: [], error: parsed.error };
+  }
+  if (parsed.present && 'splits' in parsed) {
+    const built = buildTransactionPayerRows(0, amount, parsed.splits.map((p) => p.participant_id), parsed.splits);
+    if (built.error) return { present: true, payers: [], error: built.error };
+    return {
+      present: true,
+      payers: parsed.splits,
+      paidBy: parsed.splits[0]?.participant_id,
+    };
+  }
+  if (transactionData.paid_by_participant_id) {
+    return {
+      present: true,
+      payers: [{
+        participant_id: transactionData.paid_by_participant_id,
+        amount,
+      }],
+      paidBy: transactionData.paid_by_participant_id,
+    };
+  }
+  return { present: false, payers: [] };
 }
 
 interface TransactionCursor {
@@ -214,6 +288,15 @@ Deno.serve(async (req: Request) => {
         }
       }
 
+      const writePayers = resolveWritePayers(
+        transactionData,
+        Number(transactionData.amount),
+      );
+      if (writePayers.error) {
+        return createErrorResponse(400, writePayers.error, 'VALIDATION_ERROR', undefined, req);
+      }
+      const payerParticipantIds = writePayers.payers.map((payer) => payer.participant_id);
+
       if (transactionData.group_id && transactionData.type === 'expense') {
         // Validate paid_by_participant_id
         if (transactionData.paid_by_participant_id) {
@@ -226,6 +309,23 @@ Deno.serve(async (req: Request) => {
 
           if (participantError || !participant) {
             return createErrorResponse(400, 'paid_by_participant_id must be a valid participant in the group', 'VALIDATION_ERROR', undefined, req);
+          }
+        }
+
+        if (payerParticipantIds.length > 0) {
+          const { data: payerPeople, error: payerPeopleError } = await supabase
+            .from('participants')
+            .select('id')
+            .eq('group_id', transactionData.group_id)
+            .in('id', payerParticipantIds);
+
+          if (payerPeopleError) {
+            return createErrorResponse(400, 'Failed to validate payers', 'VALIDATION_ERROR', undefined, req);
+          }
+          const foundPayerIds = new Set((payerPeople || []).map((p: { id: string }) => p.id));
+          const invalidPayerIds = payerParticipantIds.filter((id) => !foundPayerIds.has(id));
+          if (invalidPayerIds.length > 0) {
+            return createErrorResponse(400, `Invalid payer participant_ids: ${invalidPayerIds.join(', ')}`, 'VALIDATION_ERROR', undefined, req);
           }
         }
 
@@ -260,7 +360,7 @@ Deno.serve(async (req: Request) => {
           category: transactionData.category || null,
           group_id: transactionData.group_id || null,
           currency: transactionData.currency,
-          paid_by_participant_id: transactionData.paid_by_participant_id || null,
+          paid_by_participant_id: writePayers.paidBy || transactionData.paid_by_participant_id || null,
           ...(requestId.id ? { client_request_id: requestId.id } : {}),
         })
         .select()
@@ -334,34 +434,63 @@ Deno.serve(async (req: Request) => {
         }
       }
 
+      if (transaction && writePayers.present && writePayers.payers.length > 0) {
+        const builtPayers = buildTransactionPayerRows(
+          transaction.id,
+          transaction.amount,
+          writePayers.payers.map((payer) => payer.participant_id),
+          writePayers.payers,
+        );
+        if (builtPayers.error) {
+          const { error: rollbackError } = await supabase
+            .from('transactions')
+            .delete()
+            .eq('id', transaction.id);
+          if (rollbackError) {
+            log.error('Failed to rollback transaction after payer validation failure', 'transaction-creation', {
+              transactionId: transaction.id,
+              error: rollbackError.message,
+              code: rollbackError.code,
+            });
+          }
+          return createErrorResponse(400, builtPayers.error, 'VALIDATION_ERROR', undefined, req);
+        }
+
+        const { error: payersError } = await supabase
+          .from('transaction_payers')
+          .insert(builtPayers.payers);
+
+        if (payersError) {
+          log.error('Failed to create transaction_payers, rolling back transaction', 'transaction-creation', {
+            transactionId: transaction.id,
+            error: payersError.message,
+            code: payersError.code,
+          });
+          const { error: rollbackError } = await supabase
+            .from('transactions')
+            .delete()
+            .eq('id', transaction.id);
+          if (rollbackError) {
+            log.error('Failed to rollback transaction after payer insert failure', 'transaction-creation', {
+              transactionId: transaction.id,
+              error: rollbackError.message,
+              code: rollbackError.code,
+            });
+          }
+          return createErrorResponse(500, 'Failed to create transaction payers', 'TRANSACTION_PAYER_ERROR', undefined, req);
+        }
+      }
+
       let responseTransaction = transaction;
       try {
         const { data: transactionWithSplits, error: fetchError } = await supabase
           .from('transactions')
-          .select(`
-            *,
-            transaction_splits (
-              id,
-              participant_id,
-              amount,
-              created_at
-            ),
-            transaction_receipts (
-              id,
-              transaction_id,
-              group_id,
-              storage_path,
-              content_type,
-              byte_size,
-              sort_order,
-              created_at
-            )
-          `)
+          .select(TRANSACTION_DETAIL_SELECT)
           .eq('id', transaction.id)
           .single();
 
         if (!fetchError && transactionWithSplits) {
-          responseTransaction = transactionWithSplits;
+          responseTransaction = attachPayersToResponse(transactionWithSplits);
           if (responseTransaction.transaction_splits) {
             responseTransaction.splits = responseTransaction.transaction_splits;
             delete responseTransaction.transaction_splits;
@@ -466,6 +595,19 @@ Deno.serve(async (req: Request) => {
         : null;
       const replacingSplits = parsedSplits.present
         || transactionData.split_among_participant_ids !== undefined;
+      const nextAmount = Number(
+        transactionData.amount !== undefined
+          ? transactionData.amount
+          : existingTransaction.amount,
+      );
+      const writePayers = resolveWritePayers(
+        transactionData,
+        Number.isFinite(nextAmount) ? nextAmount : Number(existingTransaction.amount),
+      );
+      if (writePayers.error) {
+        return createErrorResponse(400, writePayers.error, 'VALIDATION_ERROR', undefined, req);
+      }
+      const replacingPayers = writePayers.present;
       let nextSplitParticipantIds: string[] | null = null;
       if (replacingSplits) {
         const resolvedSplits = resolveParticipantIdsForSplits(
@@ -531,6 +673,23 @@ Deno.serve(async (req: Request) => {
             return createErrorResponse(400, `Invalid participant_ids: ${invalidParticipantIds.join(', ')}`, 'VALIDATION_ERROR', undefined, req);
           }
         }
+
+        if (replacingPayers && writePayers.payers.length > 0) {
+          const payerIds = writePayers.payers.map((payer) => payer.participant_id);
+          const { data: payerPeople, error: payerPeopleError } = await supabase
+            .from('participants')
+            .select('id')
+            .eq('group_id', groupId)
+            .in('id', payerIds);
+          if (payerPeopleError) {
+            return createErrorResponse(400, 'Failed to validate payers', 'VALIDATION_ERROR', undefined, req);
+          }
+          const foundPayerIds = new Set((payerPeople || []).map((p: { id: string }) => p.id));
+          const invalidPayerIds = payerIds.filter((id) => !foundPayerIds.has(id));
+          if (invalidPayerIds.length > 0) {
+            return createErrorResponse(400, `Invalid payer participant_ids: ${invalidPayerIds.join(', ')}`, 'VALIDATION_ERROR', undefined, req);
+          }
+        }
       }
 
       const updateData: Partial<Transaction> = {};
@@ -540,7 +699,11 @@ Deno.serve(async (req: Request) => {
       if (transactionData.type !== undefined) updateData.type = transactionData.type;
       if (transactionData.category !== undefined) updateData.category = transactionData.category || undefined;
       if (transactionData.currency !== undefined) updateData.currency = transactionData.currency;
-      if (transactionData.paid_by_participant_id !== undefined) updateData.paid_by_participant_id = transactionData.paid_by_participant_id || undefined;
+      if (writePayers.paidBy) {
+        updateData.paid_by_participant_id = writePayers.paidBy;
+      } else if (transactionData.paid_by_participant_id !== undefined) {
+        updateData.paid_by_participant_id = transactionData.paid_by_participant_id || undefined;
+      }
 
       const { data: transaction, error } = await supabase
         .from('transactions')
@@ -634,31 +797,82 @@ Deno.serve(async (req: Request) => {
         }
       }
 
+      if (replacingPayers && writePayers.payers.length > 0) {
+        await supabase
+          .from('transaction_payers')
+          .delete()
+          .eq('transaction_id', transactionData.id);
+
+        const builtPayers = buildTransactionPayerRows(
+          transaction.id,
+          transaction.amount,
+          writePayers.payers.map((payer) => payer.participant_id),
+          writePayers.payers,
+        );
+        if (builtPayers.error) {
+          return createErrorResponse(400, builtPayers.error, 'VALIDATION_ERROR', undefined, req);
+        }
+        const { error: payersError } = await supabase
+          .from('transaction_payers')
+          .insert(builtPayers.payers);
+        if (payersError) {
+          log.error('Failed to update transaction_payers', 'transaction-update', {
+            transactionId: transaction.id,
+            error: payersError.message,
+            code: payersError.code,
+          });
+          return createErrorResponse(500, 'Failed to update transaction payers', 'TRANSACTION_PAYER_ERROR', undefined, req);
+        }
+      } else if (transactionData.amount !== undefined) {
+        const { data: existingPayers, error: payersFetchError } = await supabase
+          .from('transaction_payers')
+          .select('participant_id, amount')
+          .eq('transaction_id', transactionData.id);
+
+        if (!payersFetchError && existingPayers && existingPayers.length > 0) {
+          const scaled = scaleSplitsToTotal(
+            existingPayers
+              .filter((s: { participant_id: string | null; amount: number }) => !!s.participant_id)
+              .map((s: { participant_id: string; amount: number }) => ({
+                participant_id: s.participant_id,
+                amount: Number(s.amount),
+              })),
+            transactionData.amount,
+          );
+          const builtPayers = buildTransactionPayerRows(
+            transaction.id,
+            transactionData.amount,
+            scaled.map((payer) => payer.participant_id),
+            scaled,
+          );
+          if (builtPayers.error) {
+            return createErrorResponse(400, builtPayers.error, 'VALIDATION_ERROR', undefined, req);
+          }
+          await supabase
+            .from('transaction_payers')
+            .delete()
+            .eq('transaction_id', transactionData.id);
+          const { error: insertPayersError } = await supabase
+            .from('transaction_payers')
+            .insert(builtPayers.payers);
+          if (insertPayersError) {
+            log.error('Failed to insert recalculated payers', 'transaction-update', {
+              transactionId: transaction.id,
+              error: insertPayersError.message,
+              code: insertPayersError.code,
+            });
+            return createErrorResponse(500, 'Failed to update transaction payers', 'TRANSACTION_PAYER_ERROR', undefined, req);
+          }
+        }
+      }
+
       const { data: transactionWithSplits } = await supabase
         .from('transactions')
-        .select(`
-          *,
-          transaction_splits (
-            id,
-            participant_id,
-            amount,
-            created_at
-          ),
-          transaction_receipts (
-            id,
-            transaction_id,
-            group_id,
-            storage_path,
-            content_type,
-            byte_size,
-            sort_order,
-            created_at
-          )
-        `)
+        .select(TRANSACTION_DETAIL_SELECT)
         .eq('id', transaction.id)
         .single();
 
-      const responseTransaction = transactionWithSplits || transaction;
+      const responseTransaction = attachPayersToResponse(transactionWithSplits || transaction);
       if (responseTransaction.transaction_splits) {
         responseTransaction.splits = responseTransaction.transaction_splits;
         delete responseTransaction.transaction_splits;

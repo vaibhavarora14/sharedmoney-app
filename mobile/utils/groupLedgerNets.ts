@@ -2,7 +2,7 @@
  * Group net balances from a ledger of expenses and settlements.
  *
  * This is the same update rule as `calculateGroupBalancesFromLedger` in
- * `supabase/functions/balances/index.ts`: the payer is credited the full
+ * `supabase/functions/balances/index.ts`: each payer is credited their paid
  * amount, each split is debited its share, and a settlement credits the
  * payer and debits the payee. Do not add a second formula here.
  */
@@ -16,6 +16,8 @@ export type LedgerNetExpense = {
   amount: number | string;
   currency?: string | null;
   paid_by_participant_id?: string | null;
+  payers?: LedgerNetSplit[] | null;
+  transaction_payers?: LedgerNetSplit[] | null;
   splits?: LedgerNetSplit[] | null;
   transaction_splits?: LedgerNetSplit[] | null;
   type?: string | null;
@@ -122,6 +124,19 @@ function expenseSplits(expense: LedgerNetExpense): LedgerNetSplit[] {
   return [];
 }
 
+function expensePayers(expense: LedgerNetExpense): LedgerNetSplit[] {
+  if (Array.isArray(expense.payers) && expense.payers.length > 0) {
+    return expense.payers;
+  }
+  if (Array.isArray(expense.transaction_payers) && expense.transaction_payers.length > 0) {
+    return expense.transaction_payers;
+  }
+  if (expense.paid_by_participant_id) {
+    return [{ participant_id: expense.paid_by_participant_id, amount: expense.amount }];
+  }
+  return [];
+}
+
 /**
  * Apply one expense using the balances edge-function rule.
  * Deleted expenses are simply absent from the input list.
@@ -132,11 +147,15 @@ export function applyExpenseToNets(
   canonical: (participantId: string) => string,
 ) {
   if (expense.type && expense.type !== "expense") return;
-  const total = parseAmount(expense.amount);
   const currency = (expense.currency || "").trim() || "USD";
-  if (!Number.isFinite(total)) return;
-  const paidByPid = expense.paid_by_participant_id;
-  if (!paidByPid) return;
+
+  const payers = expensePayers(expense)
+    .map((payer) => {
+      const amount = parseAmount(payer.amount);
+      if (!payer.participant_id || !Number.isFinite(amount)) return undefined;
+      return { pid: canonical(payer.participant_id), amount };
+    })
+    .filter((payer): payer is { pid: string; amount: number } => !!payer);
 
   const splits = expenseSplits(expense)
     .map((split) => {
@@ -146,9 +165,11 @@ export function applyExpenseToNets(
     })
     .filter((split): split is { pid: string; amount: number } => !!split);
 
-  if (splits.length === 0) return;
+  if (payers.length === 0 || splits.length === 0) return;
 
-  updateBalance(nets, canonical(paidByPid), currency, total);
+  for (const payer of payers) {
+    updateBalance(nets, payer.pid, currency, payer.amount);
+  }
   for (const split of splits) {
     updateBalance(nets, split.pid, currency, -split.amount);
   }

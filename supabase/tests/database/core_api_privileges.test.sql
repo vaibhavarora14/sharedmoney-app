@@ -13,6 +13,7 @@ SELECT is_empty(
       'participants',
       'transactions',
       'transaction_splits',
+      'transaction_payers',
       'settlements',
       'transaction_history',
       'transaction_history_archive'
@@ -36,6 +37,7 @@ SELECT is_empty(
       'participants',
       'transactions',
       'transaction_splits',
+      'transaction_payers',
       'settlements',
       'transaction_history',
       'transaction_history_archive'
@@ -59,6 +61,7 @@ SELECT is_empty(
       'participants',
       'transactions',
       'transaction_splits',
+      'transaction_payers',
       'settlements'
     ]) AS tables(table_name)
     WHERE NOT has_table_privilege(
@@ -80,6 +83,7 @@ SELECT is_empty(
       'participants',
       'transactions',
       'transaction_splits',
+      'transaction_payers',
       'settlements',
       'transaction_history',
       'transaction_history_archive'
@@ -103,6 +107,7 @@ SELECT is_empty(
       'participants',
       'transactions',
       'transaction_splits',
+      'transaction_payers',
       'settlements',
       'transaction_history',
       'transaction_history_archive'

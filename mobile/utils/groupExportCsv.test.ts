@@ -137,6 +137,31 @@ Deno.test("csv keeps each expense in its original currency", () => {
   const rows = linesOf(csv);
   assertEquals(rows[1], "2026-04-01,Groceries,Food,Aisha,1250.5,INR,625.25,625.25,0");
   assertEquals(rows[2], "2026-04-02,Taxi,Transport,Dev,40,USD,20,20,0");
+});
+
+Deno.test("csv names two payers in the payer column", () => {
+  const csv = document([
+    expense({
+      id: 1,
+      date: "2026-04-01",
+      description: "Dinner",
+      category: "Food",
+      amount: 4800,
+      payers: [
+        { participant_id: AISHA, amount: 3000 },
+        { participant_id: DEV, amount: 1800 },
+      ],
+      splits: [
+        { participant_id: AISHA, amount: 1600 },
+        { participant_id: DEV, amount: 1600 },
+        { participant_id: CARA, amount: 1600 },
+      ],
+    }),
+  ]);
+  assertEquals(
+    linesOf(csv)[1],
+    "2026-04-01,Dinner,Food,Aisha and Dev,4800,INR,1600,1600,1600",
+  );
   assertEquals(csv.includes("3320"), false);
   assertEquals(csv.includes("₹"), false);
   assertEquals(csv.includes("$"), false);

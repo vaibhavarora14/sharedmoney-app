@@ -39,6 +39,24 @@ Deno.test("expense rows stack split people when there are two or more", () => {
   assertEquals(people[1].name, "Rohan Iyer");
 });
 
+Deno.test("expense rows stack payers when two or more people paid", () => {
+  const people = densePeopleForExpense({
+    payerName: "Asha",
+    paidByParticipantId: "p-asha",
+    payers: [
+      { participant_id: "p-asha", user_id: "u-asha", full_name: "Asha Rao" },
+      { participant_id: "p-rohan", user_id: "u-rohan", full_name: "Rohan Iyer" },
+    ],
+    splits: [
+      { participant_id: "p-me", user_id: "me", full_name: "You" },
+      { participant_id: "p-asha", user_id: "u-asha", full_name: "Asha Rao" },
+      { participant_id: "p-rohan", user_id: "u-rohan", full_name: "Rohan Iyer" },
+      { participant_id: "p-meera", user_id: "u-meera", full_name: "Meera Shah" },
+    ],
+  });
+  assertEquals(people.map((person) => person.name), ["Asha Rao", "Rohan Iyer"]);
+});
+
 Deno.test("expense row falls back to the payer when splits are missing", () => {
   const people = densePeopleForExpense({
     payerName: "Meera",

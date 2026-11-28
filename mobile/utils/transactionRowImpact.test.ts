@@ -109,6 +109,29 @@ Deno.test("saving rows replace the payer line and still keep the impact", () => 
   assertEquals(row.impactText, "You're owed ₹600");
 });
 
+Deno.test("a co-payer is owed only the extra they fronted", () => {
+  const row = buildExpenseRowModel({
+    amount: 100,
+    currency: "INR",
+    payerName: "You",
+    payerNames: ["You", "Rahul"],
+    payers: [
+      { participant_id: "p-me", user_id: "me", amount: 60 },
+      { participant_id: "p-rahul", amount: 40 },
+    ],
+    splits: [
+      { participant_id: "p-me", user_id: "me", amount: 50 },
+      { participant_id: "p-rahul", amount: 30 },
+      { participant_id: "p-meera", amount: 20 },
+    ],
+    viewer,
+  });
+  assertEquals(row.payerLine, "You + 1 paid ₹100");
+  assertEquals(row.net, 10);
+  assertEquals(row.impactText, "You're owed ₹10");
+  assertEquals(row.involvesViewer, true);
+});
+
 Deno.test("unknown splits do not invent an impact", () => {
   const row = buildExpenseRowModel({
     amount: 100,

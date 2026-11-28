@@ -172,6 +172,10 @@ async function fetchReminderInputs(supabase: SupabaseClient) {
           transaction_splits (
             participant_id,
             amount
+          ),
+          transaction_payers (
+            participant_id,
+            amount
           )
         `)
         .eq('type', 'expense')

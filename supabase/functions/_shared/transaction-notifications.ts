@@ -22,6 +22,10 @@ interface TransactionRow {
     participant_id: string | null;
     amount: number | string;
   }>;
+  transaction_payers?: Array<{
+    participant_id: string | null;
+    amount: number | string;
+  }>;
 }
 
 interface FanoutInput {
@@ -61,7 +65,8 @@ export async function loadExpenseSnapshot(
       amount,
       currency,
       paid_by_participant_id,
-      transaction_splits(participant_id, amount)
+      transaction_splits(participant_id, amount),
+      transaction_payers(participant_id, amount)
     `)
     .eq('id', transactionId)
     .single();
@@ -75,6 +80,9 @@ export async function loadExpenseSnapshot(
   if (row.paid_by_participant_id) participantIds.add(row.paid_by_participant_id);
   for (const split of row.transaction_splits ?? []) {
     if (split.participant_id) participantIds.add(split.participant_id);
+  }
+  for (const payer of row.transaction_payers ?? []) {
+    if (payer.participant_id) participantIds.add(payer.participant_id);
   }
 
   const [{ data: group }, participantsResult] = await Promise.all([
@@ -101,6 +109,14 @@ export async function loadExpenseSnapshot(
     );
   }
 
+  const payers = (row.transaction_payers ?? [])
+    .filter((payer): payer is { participant_id: string; amount: number | string } => !!payer.participant_id)
+    .map((payer) => ({
+      participantId: payer.participant_id,
+      amount: Number(payer.amount),
+    }))
+    .filter((payer) => Number.isFinite(payer.amount));
+
   return {
     id: row.id,
     groupId,
@@ -109,7 +125,8 @@ export async function loadExpenseSnapshot(
     type: row.type,
     amount: Number(row.amount),
     currency: row.currency || 'USD',
-    payerParticipantId: row.paid_by_participant_id,
+    payerParticipantId: payers[0]?.participantId ?? row.paid_by_participant_id,
+    payers,
     participants: [...participantIds].map((participantId) => ({
       participantId,
       userId: userByParticipant.get(participantId) ?? null,
@@ -200,6 +217,7 @@ async function ensureHistorySource(
         amount: canonical.amount,
         currency: canonical.currency,
         paid_by_participant_id: canonical.payerParticipantId,
+        payers: canonical.payers ?? [],
       },
     })
     .select('id')

@@ -78,6 +78,62 @@ Deno.test("single-group dinner split is +50 / -50", () => {
   ]);
 });
 
+Deno.test("legacy single-payer rows without transaction_payers keep the same nets", () => {
+  const withRows = dinnerLedger();
+  withRows.transactions[0].transaction_payers = [
+    { participant_id: "p-alice", amount: 100 },
+  ];
+  assertEquals(sortedBalances(dinnerLedger()), sortedBalances(withRows));
+});
+
+Deno.test("two payers and two splitters, including a person who both pays and owes", () => {
+  const CHARLIE = "33333333-3333-3333-3333-333333333333";
+  const ledger: GroupLedgerSnapshot = {
+    transactions: [
+      {
+        id: 3,
+        group_id: "g3",
+        amount: 100,
+        paid_by_participant_id: "p-alice",
+        currency: "INR",
+        transaction_payers: [
+          { participant_id: "p-alice", amount: 60 },
+          { participant_id: "p-bob", amount: 40 },
+        ],
+        transaction_splits: [
+          { participant_id: "p-alice", amount: 50 },
+          { participant_id: "p-bob", amount: 30 },
+          { participant_id: "p-charlie", amount: 20 },
+        ],
+      },
+    ],
+    participants: [
+      { id: "p-alice", group_id: "g3", user_id: ALICE, email: "alice@test.com", full_name: "Alice", avatar_url: null, type: "member" },
+      { id: "p-bob", group_id: "g3", user_id: BOB, email: "bob@test.com", full_name: "Bob", avatar_url: null, type: "member" },
+      { id: "p-charlie", group_id: "g3", user_id: CHARLIE, email: "charlie@test.com", full_name: "Charlie", avatar_url: null, type: "member" },
+    ],
+    settlements: [],
+  };
+  const balances = calculateGroupBalancesFromLedger(
+    ledger,
+    new Map([
+      [ALICE, "alice@test.com"],
+      [BOB, "bob@test.com"],
+      [CHARLIE, "charlie@test.com"],
+    ]),
+  ).map((row) => ({
+    user_id: row.user_id,
+    amount: row.amount,
+    currency: row.currency,
+  })).sort((a, b) => a.user_id.localeCompare(b.user_id));
+  // Alice paid 60 owe 50 => +10; Bob paid 40 owe 30 => +10; Charlie paid 0 owe 20 => -20.
+  assertEquals(balances, [
+    { user_id: ALICE, amount: 10, currency: "INR" },
+    { user_id: BOB, amount: 10, currency: "INR" },
+    { user_id: CHARLIE, amount: -20, currency: "INR" },
+  ]);
+});
+
 Deno.test("batched Home ledgers match per-group math", () => {
   const emails = new Map([
     [ALICE, "alice@test.com"],

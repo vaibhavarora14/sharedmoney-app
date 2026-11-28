@@ -24,6 +24,12 @@ const TRANSACTION_LIST_SELECT = `
               amount,
               created_at
             ),
+            transaction_payers (
+              id,
+              participant_id,
+              amount,
+              created_at
+            ),
             transaction_receipts (
               id,
               transaction_id,
@@ -67,6 +73,8 @@ interface TransactionWithSplits {
   split_among_participant_ids?: string[];
   transaction_splits?: TransactionSplit[];
   splits?: TransactionSplit[];
+  transaction_payers?: TransactionSplit[];
+  payers?: TransactionSplit[];
   transaction_receipts?: unknown;
   receipts?: unknown;
 }
@@ -133,6 +141,21 @@ export function enrichTransactionsWithParticipants(
       tx.split_among_participant_ids = tx.splits
         .map((s) => s.participant_id)
         .filter((id): id is string => !!id);
+    }
+    if (tx.transaction_payers) {
+      tx.payers = tx.transaction_payers.map((payer) => {
+        const participant = payer.participant_id
+          ? participantMap.get(payer.participant_id)
+          : null;
+        return {
+          ...payer,
+          user_id: participant?.user_id || null,
+          email: participant?.email || null,
+          full_name: participant?.full_name || null,
+          avatar_url: participant?.avatar_url || null,
+        };
+      });
+      delete tx.transaction_payers;
     }
     return attachReceipts(tx);
   });
@@ -240,7 +263,8 @@ export async function loadGroupTransactionsPage(
     }
     if (isFormerParticipant && formerParticipantId) {
       const formerVisible = pageRows.filter((tx) => {
-        const isPayer = tx.paid_by_participant_id === formerParticipantId;
+        const isPayer = tx.paid_by_participant_id === formerParticipantId
+          || tx.transaction_payers?.some((payer) => payer.participant_id === formerParticipantId);
         const isInSplits = tx.transaction_splits?.some(
           (s) => s.participant_id === formerParticipantId,
         );

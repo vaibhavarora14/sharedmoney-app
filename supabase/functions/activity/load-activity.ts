@@ -226,6 +226,19 @@ export function collectParticipantIdsFromHistory(
           }
         }
       });
+      if (diff.payers) {
+        const collectPayerIds = (value: unknown) => {
+          if (!Array.isArray(value)) return;
+          for (const entry of value) {
+            if (typeof entry === "string") participantIds.add(entry);
+            if (entry && typeof entry === "object" && typeof (entry as { participant_id?: unknown }).participant_id === "string") {
+              participantIds.add((entry as { participant_id: string }).participant_id);
+            }
+          }
+        };
+        collectPayerIds(diff.payers.old);
+        collectPayerIds(diff.payers.new);
+      }
     }
 
     const extracted = extractSnapshot(h);
@@ -241,6 +254,13 @@ export function collectParticipantIdsFromHistory(
       participantIds.add(snapshot.paid_by_participant_id as string);
     }
     if (snapshot.paid_by) participantIds.add(snapshot.paid_by as string);
+    if (Array.isArray(snapshot.payers)) {
+      for (const payer of snapshot.payers) {
+        if (payer && typeof payer === "object" && typeof (payer as { participant_id?: unknown }).participant_id === "string") {
+          participantIds.add((payer as { participant_id: string }).participant_id);
+        }
+      }
+    }
     if (Array.isArray(snapshot.split_among_participant_ids)) {
       snapshot.split_among_participant_ids.forEach((id: string) => participantIds.add(id));
     }

@@ -152,6 +152,7 @@ import {
 } from "../utils/transactionsLedger";
 import { TransactionSearchField } from "../components/TransactionSearchField";
 import { groupByLedgerDateSection } from "../utils/ledgerDateSections";
+import { resolveExpensePayers } from "../utils/expensePayers";
 import { resolveLedgerParticipantName } from "../utils/ledgerNames";
 import {
   buildExpenseRowModel,
@@ -568,6 +569,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
         if (item.details?.transaction) {
           const t = item.details.transaction;
           if (t.paid_by_participant_id === activityFilterParticipantId) return true;
+          if (t.payers?.some((payer) => payer.participant_id === activityFilterParticipantId)) return true;
           if (t.split_among_participant_ids?.includes(activityFilterParticipantId)) return true;
           if (t.splits?.some(s => s.participant_id === activityFilterParticipantId)) return true;
         }
@@ -813,19 +815,27 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
       };
     }
     const transaction = item.transaction;
-    const payerName = resolveLedgerParticipantName({
-      participantId: transaction.paid_by_participant_id,
-      userId: transaction.paid_by,
+    const payers = resolveExpensePayers(transaction);
+    const payerNames = (payers.length > 0 ? payers : [{
+      participant_id: transaction.paid_by_participant_id ?? "",
+      user_id: transaction.paid_by,
+      amount: transaction.amount,
+    }]).map((payer) => resolveLedgerParticipantName({
+      participantId: payer.participant_id,
+      userId: payer.user_id,
       currentUserId: viewerUserId,
       participants,
       members: group.members,
-    });
+    }));
+    const payerName = payerNames[0] || "Someone";
     const model = buildExpenseRowModel({
       amount: transaction.amount,
       currency: transaction.currency || getDefaultCurrency(),
       payerName,
+      payerNames,
       paidByParticipantId: transaction.paid_by_participant_id,
       paidByUserId: transaction.paid_by,
+      payers,
       splits: transaction.splits,
       viewer: { userId: viewerUserId, participantId: viewerParticipantId },
       saving: isOptimisticTransactionId(transaction.id),

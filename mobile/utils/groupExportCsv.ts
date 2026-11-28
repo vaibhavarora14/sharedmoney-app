@@ -1,4 +1,5 @@
 import type { Participant, Settlement, Transaction } from "../types";
+import { formatPaidByLabel, resolveExpensePayers } from "./expensePayers";
 import { exportPersonName } from "./groupExportNames";
 
 export type GroupCsvMember = {
@@ -139,6 +140,7 @@ function columnParticipants(input: {
   for (const transaction of input.transactions) {
     if (transaction.type === "income") continue;
     consider(transaction.paid_by_participant_id);
+    for (const payer of resolveExpensePayers(transaction)) consider(payer.participant_id);
     for (const split of transaction.splits ?? []) consider(split.participant_id);
   }
   for (const settlement of input.settlements) {
@@ -172,7 +174,13 @@ export function buildGroupCsvDocument(input: {
       date: isoDate(transaction.date),
       description: transaction.description ?? "",
       category: transaction.category?.trim() || "",
-      payer: payerName(
+      payer: formatPaidByLabel(
+        resolveExpensePayers(transaction).map((payer) => payerName(
+          input.participants,
+          payer.participant_id,
+          payer.user_id,
+        )),
+      ) || payerName(
         input.participants,
         transaction.paid_by_participant_id,
         transaction.paid_by,

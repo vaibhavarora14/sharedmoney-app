@@ -17,6 +17,7 @@ import { DENSE_STACK_AVATAR_SIZE, DENSE_TX_STACK_MAX } from "../utils/denseListT
 import { useAuth } from "../contexts/AuthContext";
 import { Participant, Settlement, Transaction } from "../types";
 import { balanceAmountColor } from "../utils/balanceRowLabels";
+import { resolveExpensePayers } from "../utils/expensePayers";
 import { resolveLedgerParticipantName } from "../utils/ledgerNames";
 import { isOptimisticTransactionId } from "../utils/transactionOptimisticCache";
 import { openTransactionWithHighlightConsumption } from "../utils/transactionHighlight";
@@ -157,16 +158,21 @@ export const LedgerRow: React.FC<LedgerRowProps> = ({
   const transaction = item.transaction;
   const isHighlighted = transaction.id === highlightedTransactionId;
   const currency = transaction.currency || getDefaultCurrency();
-  const payerName = resolveParticipantName(
-    transaction.paid_by_participant_id,
-    transaction.paid_by,
-  );
+  const payers = resolveExpensePayers(transaction);
+  const payerNames = (payers.length > 0 ? payers : [{
+    participant_id: transaction.paid_by_participant_id ?? "",
+    user_id: transaction.paid_by,
+    amount: transaction.amount,
+  }]).map((payer) => resolveParticipantName(payer.participant_id, payer.user_id));
+  const payerName = payerNames[0] || "Someone";
   const model = buildExpenseRowModel({
     amount: transaction.amount,
     currency,
     payerName,
+    payerNames,
     paidByParticipantId: transaction.paid_by_participant_id,
     paidByUserId: transaction.paid_by,
+    payers,
     splits: transaction.splits,
     viewer: { userId: currentUserId, participantId: viewerParticipantId },
     saving: isOptimisticTransactionId(transaction.id),
@@ -179,6 +185,7 @@ export const LedgerRow: React.FC<LedgerRowProps> = ({
     payerName,
     paidByParticipantId: transaction.paid_by_participant_id,
     paidByUserId: transaction.paid_by,
+    payers,
     splits: transaction.splits,
     participants,
     members,

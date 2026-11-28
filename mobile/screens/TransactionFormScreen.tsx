@@ -61,6 +61,7 @@ import {
   storedExpenseSplitState,
 } from "../utils/groupSplit";
 import { getWebHeroAmountInputWidth } from "../utils/heroAmountLayout";
+import { resolveExpensePayers } from "../utils/expensePayers";
 import {
     amountsFromShares,
     calculateEqualSplits,
@@ -68,6 +69,7 @@ import {
     defaultShareMap,
     distributeRemaining,
     equalSplitAmountMap,
+    formatAmountInput,
     remainingSplitAmount,
     sharesAreUnequal,
     splitsFromAmountMap,
@@ -172,6 +174,11 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [paidBy, setPaidBy] = useState<string>("");
+  const [payerMode, setPayerMode] = useState<"single" | "multiple">("single");
+  const [paidAmong, setPaidAmong] = useState<string[]>([]);
+  const [payerSplitMode, setPayerSplitMode] = useState<SplitMode>("unequal");
+  const [payerAmounts, setPayerAmounts] = useState<Record<string, string>>({});
+  const [payerShares, setPayerShares] = useState<Record<string, number>>({});
   const [splitAmong, setSplitAmong] = useState<string[]>([]);
   const [splitMode, setSplitMode] = useState<SplitMode>("equal");
   const [splitAmounts, setSplitAmounts] = useState<Record<string, string>>({});
@@ -231,6 +238,12 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
           }
         }
       }
+      for (const payer of resolveExpensePayers(transaction)) {
+        if (payer.participant_id && !combined.some((c) => c.id === payer.participant_id)) {
+          const person = (participants || []).find((entry) => entry.id === payer.participant_id);
+          if (person) combined.push(person);
+        }
+      }
       // 2. Check all split members
       if (Array.isArray(transaction.splits)) {
         transaction.splits.forEach(split => {
@@ -283,6 +296,11 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     setUseCustomCategoryInput(false);
     setCurrency(effectiveDefaultCurrency);
     setPaidBy("");
+    setPayerMode("single");
+    setPaidAmong([]);
+    setPayerSplitMode("unequal");
+    setPayerAmounts({});
+    setPayerShares({});
     setSplitAmong([]);
     setSplitMode("equal");
     setSplitAmounts({});
@@ -314,10 +332,25 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
       );
       setRemovedReceiptIds([]);
 
-      if (tx.paid_by_participant_id) {
-        setPaidBy(tx.paid_by_participant_id);
+      const storedPayers = resolveExpensePayers(tx);
+      if (storedPayers.length >= 2) {
+        const ids = storedPayers.map((payer) => payer.participant_id);
+        setPayerMode("multiple");
+        setPaidAmong(ids);
+        setPaidBy(ids[0] ?? "");
+        setPayerSplitMode("unequal");
+        setPayerAmounts(Object.fromEntries(
+          storedPayers.map((payer) => [payer.participant_id, formatAmountInput(payer.amount)]),
+        ));
+        setPayerShares(defaultShareMap(ids));
       } else {
-        setPaidBy("");
+        const singleId = storedPayers[0]?.participant_id || tx.paid_by_participant_id || "";
+        setPayerMode("single");
+        setPaidBy(singleId);
+        setPaidAmong(singleId ? [singleId] : []);
+        setPayerSplitMode("unequal");
+        setPayerAmounts({});
+        setPayerShares(singleId ? { [singleId]: 1 } : {});
       }
 
       // Saved expenses keep their own splits. The group default is not consulted.
@@ -529,6 +562,104 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     if (splitAmongError) setSplitAmongError("");
   };
 
+  const areAllPayersSelected = useMemo(() => {
+    return availableParticipants.length > 0
+      && availableParticipants.every((person) => paidAmong.includes(person.id));
+  }, [availableParticipants, paidAmong]);
+
+  const handleTogglePayer = (participantId: string) => {
+    const uniquePrev = [...new Set(paidAmong)];
+    setPaidAmong(uniquePrev.includes(participantId)
+      ? uniquePrev.filter((id) => id !== participantId)
+      : [...uniquePrev, participantId]);
+    if (paidByError) setPaidByError("");
+  };
+
+  const handleToggleAllPayers = () => {
+    setPaidAmong(areAllPayersSelected ? [] : [...new Set(allParticipantIds)]);
+    if (paidByError) setPaidByError("");
+  };
+
+  const handlePayerModeChange = (mode: SplitMode) => {
+    setPayerSplitMode(mode);
+    const selectedIds = [...new Set(paidAmong)];
+    if (mode === "unequal" && parsedTotalAmount && selectedIds.length > 0) {
+      setPayerAmounts((current) => {
+        const hasAny = selectedIds.some((id) => (current[id] || "").length > 0);
+        if (hasAny) return current;
+        if (payerSplitMode === "shares") {
+          return amountsFromShares(parsedTotalAmount, selectedIds, payerShares);
+        }
+        return equalSplitAmountMap(parsedTotalAmount, selectedIds);
+      });
+    }
+    if (mode === "shares" && selectedIds.length > 0) {
+      setPayerShares((current) => {
+        const missing = selectedIds.some((id) => current[id] == null);
+        return missing ? { ...defaultShareMap(selectedIds), ...current } : current;
+      });
+    }
+    if (paidByError) setPaidByError("");
+  };
+
+  const handlePayerAmountChange = (participantId: string, text: string) => {
+    setPayerAmounts((current) => ({ ...current, [participantId]: text }));
+    if (paidByError) setPaidByError("");
+  };
+
+  const handlePayerShareChange = (participantId: string, nextShares: number) => {
+    setPayerShares((current) => ({ ...current, [participantId]: nextShares }));
+    if (paidByError) setPaidByError("");
+  };
+
+  const handlePayerRemaining = () => {
+    const selectedIds = [...new Set(paidAmong)];
+    if (!parsedTotalAmount || selectedIds.length === 0) return;
+    setPayerAmounts((current) =>
+      distributeRemaining(current, selectedIds, parsedTotalAmount),
+    );
+    if (paidByError) setPaidByError("");
+  };
+
+  const switchToMultiplePayers = () => {
+    const seed = paidBy || paidAmong[0] || "";
+    setPayerMode("multiple");
+    setPaidAmong(seed ? [seed] : []);
+    setPayerSplitMode("unequal");
+    setPayerAmounts(seed && parsedTotalAmount
+      ? { [seed]: formatAmountInput(parsedTotalAmount) }
+      : {});
+    setPayerShares(seed ? { [seed]: 1 } : {});
+    if (paidByError) setPaidByError("");
+  };
+
+  const switchToSinglePayer = () => {
+    const seed = paidAmong[0] || paidBy;
+    setPayerMode("single");
+    setPaidBy(seed);
+    setPaidAmong(seed ? [seed] : []);
+    if (paidByError) setPaidByError("");
+  };
+
+  const customPayersForSave = () => {
+    if (!isGroupExpense || !parsedTotalAmount) return undefined;
+    if (payerMode === "single") {
+      return paidBy ? [{ participant_id: paidBy, amount: parsedTotalAmount }] : undefined;
+    }
+    switch (payerSplitMode) {
+      case "unequal":
+        return splitsFromAmountMap(payerAmounts, paidAmong) ?? undefined;
+      case "shares":
+        return calculateShareSplits(parsedTotalAmount, paidAmong, payerShares);
+      case "equal":
+        return calculateEqualSplits(parsedTotalAmount, paidAmong);
+      default: {
+        const _exhaustive: never = payerSplitMode;
+        return _exhaustive;
+      }
+    }
+  };
+
   const customSplitsForSave = () => {
     if (!isGroupExpense || !parsedTotalAmount) return undefined;
     if (splitMode === "unequal") {
@@ -588,9 +719,43 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     }
 
     if (isGroupExpense) {
-      if (!paidBy) {
-        setPaidByError("Please select who paid for this expense");
+      if (payerMode === "single") {
+        if (!paidBy) {
+          setPaidByError("Please select who paid for this expense");
+          isValid = false;
+        }
+      } else if (paidAmong.length === 0) {
+        setPaidByError("Please select at least one person who paid");
         isValid = false;
+      } else if (payerSplitMode === "unequal") {
+        const customPayers = splitsFromAmountMap(payerAmounts, paidAmong);
+        if (!customPayers) {
+          setPaidByError("Enter an amount greater than 0 for each payer");
+          isValid = false;
+        } else {
+          const leftover = remainingSplitAmount(
+            parseFloat(amount),
+            sumSelectedAmounts(payerAmounts, paidAmong),
+          );
+          if (Math.abs(leftover) > 0.01) {
+            setPaidByError("Payer amounts must add up to the expense total");
+            isValid = false;
+          }
+        }
+      } else if (payerSplitMode === "equal" && parsedTotalAmount) {
+        const ready = calculateEqualSplits(parsedTotalAmount, paidAmong)
+          .every((row) => row.amount > 0);
+        if (!ready) {
+          setPaidByError("Each payer's amount must round to more than 0");
+          isValid = false;
+        }
+      } else if (payerSplitMode === "shares" && parsedTotalAmount) {
+        const ready = calculateShareSplits(parsedTotalAmount, paidAmong, payerShares)
+          .every((row) => row.amount > 0);
+        if (!ready) {
+          setPaidByError("Each payer's share must round to an amount greater than 0");
+          isValid = false;
+        }
       }
       if (effectiveSplitIds.length === 0) {
         setSplitAmongError("Please select at least one person to split the expense among");
@@ -635,7 +800,10 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
         type,
         category: category.trim() || undefined,
         currency: currency || effectiveDefaultCurrency,
-        paid_by_participant_id: isGroupExpense ? paidBy : undefined,
+        paid_by_participant_id: isGroupExpense
+          ? (customPayersForSave()?.[0]?.participant_id ?? paidBy)
+          : undefined,
+        payers: isGroupExpense ? customPayersForSave() : undefined,
         split_among_participant_ids: isGroupExpense ? effectiveSplitIds : undefined,
         splits: customSplitsForSave(),
       });
@@ -684,11 +852,34 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
     )) <= 0.01
   );
 
+  const unequalPayersReady = payerMode !== "multiple" || payerSplitMode !== "unequal" || (
+    !!parsedTotalAmount &&
+    !!splitsFromAmountMap(payerAmounts, paidAmong) &&
+    Math.abs(remainingSplitAmount(
+      parsedTotalAmount,
+      sumSelectedAmounts(payerAmounts, paidAmong),
+    )) <= 0.01
+  );
+  const sharePayersReady = payerMode !== "multiple" || payerSplitMode !== "shares" || (
+    !!parsedTotalAmount && paidAmong.length > 0 &&
+    calculateShareSplits(parsedTotalAmount, paidAmong, payerShares)
+      .every((row) => row.amount > 0)
+  );
+  const equalPayersReady = payerMode !== "multiple" || payerSplitMode !== "equal" || (
+    !!parsedTotalAmount && paidAmong.length > 0 &&
+    calculateEqualSplits(parsedTotalAmount, paidAmong)
+      .every((row) => row.amount > 0)
+  );
+
   const isSaveDisabled = loading
     || (isGroupExpense && effectiveSplitIds.length === 0)
     || (isGroupExpense && !unequalSplitsReady)
     || (isGroupExpense && !equalSplitsReady)
-    || (isGroupExpense && !sharesReady);
+    || (isGroupExpense && !sharesReady)
+    || (isGroupExpense && payerMode === "multiple" && paidAmong.length === 0)
+    || (isGroupExpense && !unequalPayersReady)
+    || (isGroupExpense && !sharePayersReady)
+    || (isGroupExpense && !equalPayersReady);
 
   const filteredCurrencies = useMemo(
     () => filterCurrencies(currencySearch),
@@ -1064,18 +1255,57 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
             <Card style={styles.card} mode="outlined">
               <Card.Content>
                 {/* Paid By Section */}
-                <View style={styles.sectionHeader}>
+                <View style={styles.sectionHeaderWithAction}>
                   <Text variant="labelLarge" style={{ color: theme.colors.onSurfaceVariant }}>
                     Paid by
                   </Text>
+                  <Button
+                    mode="text"
+                    compact
+                    onPress={payerMode === "single" ? switchToMultiplePayers : switchToSinglePayer}
+                    disabled={loading}
+                    testID="paid-by-mode-toggle"
+                  >
+                    {payerMode === "single" ? "Multiple people" : "One person"}
+                  </Button>
                 </View>
                 {paidByError && (
                   <Text variant="bodySmall" accessibilityLiveRegion="polite" style={{ color: theme.colors.error, marginBottom: 8 }}>
                     {paidByError}
                   </Text>
                 )}
-                
-                {useInlineChipsForPaidBy ? (
+
+                {payerMode === "multiple" ? (
+                  <SplitAmongEditor
+                    title=""
+                    hideEqual
+                    editorTestID="paid-by-editor"
+                    remainingTestID="paid-by-remaining-label"
+                    leftoverTestID="paid-by-leftover-button"
+                    chipTestIDPrefix="paid-by-chip"
+                    amountTestIDPrefix="paid-by-amount-input"
+                    modeTestID="paid-by-mode-dropdown"
+                    exactLabel="Payers add up: "
+                    leftLabel="Left to assign: "
+                    overLabel="Over by: "
+                    participants={availableParticipants}
+                    selectedIds={paidAmong}
+                    amounts={payerAmounts}
+                    shares={payerShares}
+                    mode={payerSplitMode === "equal" ? "unequal" : payerSplitMode}
+                    totalAmount={parsedTotalAmount}
+                    currency={currency}
+                    error={paidByError}
+                    disabled={loading}
+                    areAllSelected={areAllPayersSelected}
+                    onToggleMember={handleTogglePayer}
+                    onToggleAll={handleToggleAllPayers}
+                    onModeChange={handlePayerModeChange}
+                    onAmountChange={handlePayerAmountChange}
+                    onShareChange={handlePayerShareChange}
+                    onSplitRemaining={handlePayerRemaining}
+                  />
+                ) : useInlineChipsForPaidBy ? (
                   <ScrollView 
                     horizontal 
                     showsHorizontalScrollIndicator={false}
@@ -1653,6 +1883,12 @@ const styles = StyleSheet.create({
   // Section Headers
   sectionHeader: {
     marginBottom: 12,
+  },
+  sectionHeaderWithAction: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
   },
 
   // Chips

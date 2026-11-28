@@ -70,6 +70,31 @@ export function calculateEqualSplits(
   }));
 }
 
+export const MAX_SHARE_COUNT = 99;
+
+export function clampShareCount(value: number): number {
+  if (!Number.isFinite(value)) return 1;
+  return Math.min(MAX_SHARE_COUNT, Math.max(1, Math.floor(value)));
+}
+
+export function calculateShareSplits(
+  totalAmount: number,
+  selectedIds: string[],
+  shares: Record<string, number>,
+): SplitShare[] {
+  const uniqueIds = [...new Set(selectedIds)];
+  if (uniqueIds.length === 0) return [];
+
+  const weights = uniqueIds.map((id) => clampShareCount(shares[id] ?? 1));
+  const cents = allocateLargestRemainderCents(toCents(totalAmount), weights);
+  if (cents.length === 0) return [];
+
+  return uniqueIds.map((participantId, index) => ({
+    participant_id: participantId,
+    amount: fromCents(cents[index]),
+  }));
+}
+
 export function scaleSplitsToTotal(
   splits: SplitShare[],
   newTotal: number,

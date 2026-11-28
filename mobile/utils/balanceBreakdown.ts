@@ -5,6 +5,7 @@
  */
 
 import type { Balance, Participant, Settlement, Transaction } from "../types";
+import { formatPaidByLabel, resolveExpensePayers } from "./expensePayers";
 import {
   applyExpenseToNets,
   applySettlementToNets,
@@ -275,15 +276,15 @@ export function buildBalanceBreakdown(input: {
 
     if (event.kind === "expense") {
       const expense = event.expense;
-      const payerId = expense.paid_by_participant_id
-        ? canonical(expense.paid_by_participant_id)
-        : "";
-      const payer = findParticipant(input.participants, payerId, canonical);
-      const payerIsViewer = viewerId ? payerId === viewerId : false;
-      const payerIsOther = otherId ? payerId === otherId : false;
-      const paidByName = payerIsViewer
-        ? viewerLabel
-        : participantName(payer, "Someone");
+      const payers = resolveExpensePayers(expense);
+      const payerIds = payers.map((payer) => canonical(payer.participant_id));
+      const payerIsViewer = viewerId ? payerIds.includes(viewerId) : false;
+      const payerIsOther = otherId ? payerIds.includes(otherId) : false;
+      const paidByName = formatPaidByLabel(payers.map((payer) => {
+        const id = canonical(payer.participant_id);
+        if (viewerId && id === viewerId) return viewerLabel;
+        return participantName(findParticipant(input.participants, id, canonical), "Someone");
+      }));
       const otherShare = otherId ? splitAmountFor(expense, otherId, canonical) : 0;
       const viewerShare = viewerId ? splitAmountFor(expense, viewerId, canonical) : 0;
       const shareAmount = payerIsViewer

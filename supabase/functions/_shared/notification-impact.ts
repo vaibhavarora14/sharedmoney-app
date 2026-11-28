@@ -6,6 +6,11 @@ export interface ExpenseParticipantSnapshot {
   share: number;
 }
 
+export interface ExpensePayerSnapshot {
+  participantId: string;
+  amount: number;
+}
+
 export interface ExpenseSnapshot {
   id: number;
   groupId: string;
@@ -15,6 +20,7 @@ export interface ExpenseSnapshot {
   amount: number;
   currency: string;
   payerParticipantId: string | null;
+  payers?: ExpensePayerSnapshot[];
   participants: ExpenseParticipantSnapshot[];
 }
 
@@ -45,6 +51,15 @@ function toMinorUnits(amount: number): number {
   return Math.round((Number.isFinite(amount) ? amount : 0) * 100);
 }
 
+function paidAmountFor(snapshot: ExpenseSnapshot, participantId: string): number {
+  if (snapshot.payers && snapshot.payers.length > 0) {
+    return snapshot.payers
+      .filter((payer) => payer.participantId === participantId)
+      .reduce((sum, payer) => sum + payer.amount, 0);
+  }
+  return participantId === snapshot.payerParticipantId ? snapshot.amount : 0;
+}
+
 function buildPositions(
   snapshot: ExpenseSnapshot | null,
 ): Map<string, FinancialPosition> {
@@ -53,9 +68,10 @@ function buildPositions(
 
   for (const participant of snapshot.participants) {
     if (!participant.userId) continue;
-    const isPayer = participant.participantId === snapshot.payerParticipantId;
+    const paid = paidAmountFor(snapshot, participant.participantId);
+    const isPayer = paid > 0;
     const shareMinor = toMinorUnits(participant.share);
-    const paidMinor = isPayer ? toMinorUnits(snapshot.amount) : 0;
+    const paidMinor = toMinorUnits(paid);
     positions.set(participant.userId, {
       participantId: participant.participantId,
       currency: snapshot.currency,

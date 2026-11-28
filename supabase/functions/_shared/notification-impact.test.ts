@@ -116,6 +116,31 @@ Deno.test("payer changes notify split participants even when their share is unch
   assertEquals(result.map((item) => item.userId), ["u-alex", "u-priya"]);
 });
 
+Deno.test("multi-payer expenses credit each person's paid amount", () => {
+  const result = buildNotificationImpacts({
+    actorUserId: "u-other",
+    action: "created",
+    before: null,
+    after: {
+      ...base,
+      payers: [
+        { participantId: "p-alex", amount: 700 },
+        { participantId: "p-priya", amount: 500 },
+      ],
+      participants: [
+        { participantId: "p-alex", userId: "u-alex", share: 600 },
+        { participantId: "p-priya", userId: "u-priya", share: 600 },
+      ],
+    },
+  });
+
+  const byUser = Object.fromEntries(result.map((item) => [item.userId, item.after]));
+  assertEquals(byUser["u-alex"]?.paidMinor, 70000);
+  assertEquals(byUser["u-alex"]?.netMinor, 10000);
+  assertEquals(byUser["u-priya"]?.paidMinor, 50000);
+  assertEquals(byUser["u-priya"]?.netMinor, -10000);
+});
+
 Deno.test("a linked payer with no share is still a financial participant", () => {
   const result = buildNotificationImpacts({
     actorUserId: "u-other",
