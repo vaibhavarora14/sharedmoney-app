@@ -160,6 +160,7 @@ import {
   paymentRowTitle,
 } from "../utils/transactionRowImpact";
 import { isOptimisticTransactionId } from "../utils/transactionOptimisticCache";
+import { resolveExpenseDetailTransaction } from "../utils/transactionDetail";
 import {
   involvingMeFilterLabel,
   ledgerRowMatchesSearch,
@@ -2105,9 +2106,12 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   }
 
   if (detailItem) {
+    const liveExpense = detailItem.kind === "expense"
+      ? resolveExpenseDetailTransaction(detailItem.transaction, transactions)
+      : null;
     return (
       <TransactionDetailScreen
-        transaction={detailItem.kind === "expense" ? detailItem.transaction : null}
+        transaction={liveExpense}
         settlement={detailItem.kind === "payment" ? detailItem.settlement : null}
         groupId={group.id}
         viewerUserId={session?.user?.id}
@@ -2119,7 +2123,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
         rateBook={rateBook}
         onBack={() => setDetailItem(null)}
         onEdit={isActiveMember ? () => {
-          if (detailItem.kind === "expense") onEditTransaction(detailItem.transaction);
+          if (detailItem.kind === "expense") onEditTransaction(liveExpense ?? detailItem.transaction);
           else handleEditSettlement(detailItem.settlement);
         } : undefined}
       />
