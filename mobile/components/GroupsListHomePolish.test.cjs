@@ -33,8 +33,9 @@ function loadStyles(filename) {
       styles = new Function(
         "StyleSheet",
         "GROUP_BALANCE_SLOT_WIDTH",
+        "DENSE_CARD_GAP",
         `return (${node.initializer.arguments[0].getText(source)});`
-      )({ hairlineWidth: 1 }, 152);
+      )({ hairlineWidth: 1 }, 152, 8);
     }
     ts.forEachChild(node, visit);
   }
@@ -62,8 +63,9 @@ test("Archived and Former children stay compact divider rows, not cards", () => 
   assert.equal(styles.nestedGroupRow.borderBottomWidth, 1);
   assert.equal(styles.nestedGroupRow.borderRadius, undefined);
   assert.equal(styles.nestedGroupName.fontWeight, "600");
-  assert.equal(styles.groupItem.borderRadius, undefined);
-  assert.equal(styles.groupItem.borderBottomWidth, 1);
+  assert.equal(styles.denseList.gap, 8);
+  assert.equal(styles.groupItem.borderRadius, 14);
+  assert.equal(styles.groupItem.borderBottomWidth, undefined);
   assert.equal(styles.groupItem.marginBottom, undefined);
   assert.notEqual(styles.nestedGroupRow.borderRadius, 14);
   assert.equal(styles.positionNumber.fontSize, 40);
@@ -125,6 +127,7 @@ function harnessWithFormer(loading = false) {
   Object.assign(paper, {
     useTheme: () => theme,
     Appbar: { Header: "Header", Content: "Content" },
+    Avatar: { Text: "Avatar.Text", Image: "Avatar.Image", Icon: "Avatar.Icon" },
   });
   const overrides = {
     "@tanstack/react-query": { useQueryClient: () => ({}) },
@@ -146,6 +149,7 @@ function harnessWithFormer(loading = false) {
             },
           ],
         },
+        hasData: true,
         isLoading: false,
       }),
     },
@@ -198,6 +202,35 @@ function harnessWithFormer(loading = false) {
     "../components/Skeleton": { Skeleton: "Skeleton", SkeletonGroup: "SkeletonGroup" },
     "./SplitBillScreen": { SplitBillScreen: "SplitBillScreen" },
     "../components/GroupBalanceBadge": { GroupBalanceBadge: "GroupBalanceBadge" },
+    "../components/GroupDenseCard": {
+      GroupDenseCard: (props) =>
+        React.createElement("View", {
+          testID: `group-card-${props.group.id}`,
+        }, React.createElement("GroupBalanceBadge", { loading: props.loading })),
+    },
+    "../components/SettledFoldRow": { SettledFoldRow: "SettledFoldRow" },
+    "../components/DenseListCard": { DenseListCard: "DenseListCard" },
+    "../components/PersonAvatar": { PersonAvatar: "PersonAvatar" },
+    "../utils/groupListBalanceDisplay": {
+      partitionActiveGroupsBySettlement: (groups) => ({
+        openGroups: groups,
+        settledGroups: [],
+      }),
+    },
+    "../utils/denseListPeople": {
+      fallbackDensePerson: (key, name) => ({ key, name, avatarUrl: null }),
+    },
+    "../utils/denseListTokens": { DENSE_AVATAR_SIZE: 40 },
+    "../components/guest/GuestChrome": {
+      GuestCleanupBanner: "GuestCleanupBanner",
+      GuestDeviceLine: "GuestDeviceLine",
+      GuestSaveChip: "GuestSaveChip",
+      GuestSnackbar: "GuestSnackbar",
+    },
+    "../components/QuickSettleSheet": { QuickSettleSheet: "QuickSettleSheet" },
+    "../hooks/useGuestFlags": { useGuestFlags: () => ({ cleanupEnabled: false }) },
+    "../hooks/useProfile": { useProfile: () => ({ data: null }) },
+    "../supabase": { supabase: { from: () => ({ select: () => ({ eq: async () => ({ count: 0 }) }) }) } },
     "./CreateGroupScreen": { CreateGroupScreen: "CreateGroupScreen" },
   };
 
@@ -243,6 +276,7 @@ function harnessWithFormer(loading = false) {
               },
             },
             Platform: { OS: "android" },
+            Pressable: "Pressable",
             useWindowDimensions: () => ({
               width: 393,
               height: 851,
@@ -259,7 +293,8 @@ function harnessWithFormer(loading = false) {
         if (id in overrides) return overrides[id];
         if (id.startsWith(".")) {
           const resolved = path.resolve(path.dirname(filename), id);
-          return load(existsSync(resolved) ? resolved : `${resolved}.ts`);
+          const hit = [resolved, `${resolved}.tsx`, `${resolved}.ts`].find((candidate) => existsSync(candidate));
+          return load(hit || `${resolved}.ts`);
         }
         return require(id);
       },
@@ -283,9 +318,9 @@ function harnessWithFormer(loading = false) {
       return load(path.join(__dirname, "../screens/GroupsListScreen.tsx")).GroupsHomeSkeletonRows();
     },
     setFormerExpanded(expanded) {
-      // showCreateGroup, showSplitBill, splitBillToken, recentBills,
-      // formerGroupsExpanded (index 4), archivedGroupsExpanded…
-      state[4] = expanded;
+      // showCreateGroup, quickSettleOpen, quickSettleSource, showSplitBill,
+      // splitBillToken, recentBills, formerGroupsExpanded
+      state[6] = expanded;
     },
   };
 }
@@ -398,6 +433,7 @@ test("Home empty state: Create a group primary + tertiary one-time split link", 
   Object.assign(paper, {
     useTheme: () => theme,
     Appbar: { Header: "Header", Content: "Content" },
+    Avatar: { Text: "Avatar.Text", Image: "Avatar.Image", Icon: "Avatar.Icon" },
   });
   const module = { exports: {} };
   const code = ts.transpileModule(readFileSync(overridesPath, "utf8"), {
@@ -431,6 +467,7 @@ test("Home empty state: Create a group primary + tertiary one-time split link", 
           TouchableOpacity: "TouchableOpacity",
           InteractionManager: { runAfterInteractions: (cb) => ({ cancel: () => {}, ...(cb(), {}) }) },
           Platform: { OS: "android" },
+          Pressable: "Pressable",
           useWindowDimensions: () => ({ width: 393, height: 851, fontScale: 1 }),
           StyleSheet: { create: (x) => x, flatten, hairlineWidth: 1 },
         };
@@ -478,6 +515,9 @@ test("Home empty state: Create a group primary + tertiary one-time split link", 
         return {
           homePosition: () => ({ kind: "unknown" }),
           countGroupsWithViewerBalance: () => 0,
+          viewerOverallBalances: () => [],
+          homeBothPartsMutedLine: () => null,
+          homeDirectionParts: () => null,
         };
       }
       if (id === "../utils/groupRecency") {
@@ -500,11 +540,48 @@ test("Home empty state: Create a group primary + tertiary one-time split link", 
       if (id === "../components/NotificationBell") return { NotificationBell: "NotificationBell" };
       if (id === "../components/Skeleton") return { Skeleton: "Skeleton", SkeletonGroup: "SkeletonGroup" };
       if (id === "../components/GroupBalanceBadge") return { GroupBalanceBadge: "GroupBalanceBadge" };
+      if (id === "../components/GroupDenseCard") {
+        return {
+          GroupDenseCard: (props) =>
+            React.createElement("View", { testID: `group-card-${props.group.id}` }),
+        };
+      }
+      if (id === "../components/SettledFoldRow") return { SettledFoldRow: "SettledFoldRow" };
+      if (id === "../components/DenseListCard") return { DenseListCard: "DenseListCard" };
+      if (id === "../components/PersonAvatar") return { PersonAvatar: "PersonAvatar" };
+      if (id === "../utils/groupListBalanceDisplay") {
+        return {
+          partitionActiveGroupsBySettlement: (groups) => ({
+            openGroups: groups,
+            settledGroups: [],
+          }),
+        };
+      }
+      if (id === "../utils/denseListPeople") {
+        return { fallbackDensePerson: (key, name) => ({ key, name, avatarUrl: null }) };
+      }
+      if (id === "../utils/denseListTokens") return { DENSE_AVATAR_SIZE: 40 };
+      if (id === "../components/guest/GuestChrome") {
+        return {
+          GuestCleanupBanner: "GuestCleanupBanner",
+          GuestDeviceLine: "GuestDeviceLine",
+          GuestSaveChip: "GuestSaveChip",
+          GuestSnackbar: "GuestSnackbar",
+        };
+      }
+      if (id === "../utils/quickSettle") {
+        return { buildDirectHomeRows: () => [], directPeopleForHome: () => undefined };
+      }
+      if (id === "../components/QuickSettleSheet") return { QuickSettleSheet: "QuickSettleSheet" };
+      if (id === "../hooks/useGuestFlags") return { useGuestFlags: () => ({ cleanupEnabled: false }) };
+      if (id === "../hooks/useProfile") return { useProfile: () => ({ data: null }) };
+      if (id === "../supabase") return { supabase: { from: () => ({ select: () => ({ eq: async () => ({ count: 0 }) }) }) } };
       if (id === "./SplitBillScreen") return { SplitBillScreen: "SplitBillScreen" };
       if (id === "./CreateGroupScreen") return { CreateGroupScreen: "CreateGroupScreen" };
       if (id.startsWith(".")) {
         const resolved = path.resolve(path.dirname(overridesPath), id);
-        return require(existsSync(resolved) ? resolved : `${resolved}.ts`);
+        const hit = [resolved, `${resolved}.tsx`, `${resolved}.ts`].find((candidate) => existsSync(candidate));
+        return require(hit || `${resolved}.ts`);
       }
       return require(id);
     },

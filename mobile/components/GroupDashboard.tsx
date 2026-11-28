@@ -6,6 +6,10 @@ import {
   TouchableRipple,
   useTheme
 } from "react-native-paper";
+import { DenseListCard } from "./DenseListCard";
+import { PersonAvatar } from "./PersonAvatar";
+import { balanceAmountColor } from "../utils/balanceRowLabels";
+import { DENSE_CARD_GAP } from "../utils/denseListTokens";
 import { resolveGroupDashboardSlots } from "../utils/groupDashboardReservation";
 import { resolveGroupPosition } from "../utils/groupPosition";
 import { Balance, GroupStatsResponse, Participant } from "../types";
@@ -28,6 +32,7 @@ import {
 import {
   findParticipantForBalance,
   resolveSettlementPresence,
+  settlementCounterpartyDisplayName,
   settlementCounterpartyShortName,
   settlementPresenceCaption,
   type SettlementPresence,
@@ -238,9 +243,8 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
   const settlementRows = position.kind === "ready" ? position.rows : [];
 
 
-  const formatSignedBalance = (amount: number, currency: string, isOwed: boolean) => {
-    const bare = formatShareCurrency(Math.abs(amount), currency);
-    return isOwed ? `+${bare}` : `-${bare}`;
+  const formatSignedBalance = (amount: number, currency: string) => {
+    return formatShareCurrency(Math.abs(amount), currency);
   };
 
   const isSettled = !balanceError && !dashboardLoading && Boolean(currentUserId)
@@ -336,18 +340,17 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
       const rowKey =
         balance.participant_id || balance.user_id || `${name}-${balance.currency}`;
       const currency = balance.currency || defaultCurrency;
-      const amountColor = isOwed
-        ? theme.colors.onTertiaryContainer
-        : theme.colors.onSecondaryContainer;
+      const amountColor = balanceAmountColor(balance.amount, theme.colors, {
+        dark: theme.dark,
+      });
       const isConverted = !unifyEnabled || balance.currency.toUpperCase() === settlementCurrency.toUpperCase();
       const rowAction = onBalancePress ?? onSettlePress;
-      const Row = rowAction ? TouchableRipple : View;
       const a11yName = isFormer ? `${name} (Former)` : name;
       const a11yPresence = presenceCaption ? `, ${presenceCaption}` : "";
       const a11yOwes = isOwed
         ? `${a11yName} owes you${a11yPresence}`
         : `You owe ${a11yName}${a11yPresence}`;
-      const signedAmount = formatSignedBalance(balance.amount, currency, isOwed);
+      const signedAmount = formatSignedBalance(balance.amount, currency);
       const nameColor = isFormer
         ? theme.colors.onSurfaceVariant
         : theme.colors.onSurface;
@@ -356,27 +359,24 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
         : onSettlePress
           ? "Opens the payment record form. No payment is recorded until confirmed."
           : undefined;
+      const counterpartyAvatar = balance.avatar_url
+        || findParticipantForBalance(balance, participants)?.avatar_url
+        || null;
+      const avatarName = settlementCounterpartyDisplayName(balance, participants);
       return (
-        <View
+        <DenseListCard
           key={`${rowKey}-${currency}-${index}`}
-          style={{ borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.colors.outlineVariant }}
+          testID={`settlement-row-${rowKey}-${currency}`}
+          onPress={rowAction ? () => rowAction(balance) : undefined}
+          accessibilityRole={rowAction ? "button" : undefined}
+          accessibilityLabel={`${a11yOwes}, ${signedAmount}`}
+          accessibilityHint={a11yHint}
         >
-          <Row
-            testID={`settlement-row-${rowKey}-${currency}`}
-            onPress={rowAction ? () => rowAction(balance) : undefined}
-            accessible
-            accessibilityRole={rowAction ? "button" : undefined}
-            accessibilityLabel={`${a11yOwes}, ${signedAmount}`}
-            accessibilityHint={a11yHint}
-            style={styles.settlementRow}
-          >
-            {/* Avatar + chevron centre on the full (1- or 2-line) block. */}
-            <View style={styles.settlementRowContent}>
-              {/*
-                Line 1: name (only shrink) + owes you + amount (flexShrink 0).
-                Line 2 (no-account / invited only): muted caption.
-                Amount top-aligns with line 1 so mixed rows keep a straight column.
-              */}
+              <PersonAvatar
+                name={avatarName}
+                uri={counterpartyAvatar}
+                personKey={rowKey}
+              />
               <View style={styles.settlementDetails}>
                 <View style={styles.settlementLabelColumn} testID="settlement-label-column">
                   <View style={styles.settlementNameRow} testID="settlement-row-line1">
@@ -466,9 +466,7 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
                 size={22}
                 color={theme.colors.onSurfaceVariant}
               /> : null}
-            </View>
-          </Row>
-        </View>
+        </DenseListCard>
       );
     });
   };
@@ -533,7 +531,21 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
           </Text>
         ) : null}
         {position.numberText ? (
-          <Text testID="group-position-number" style={styles.positionNumber}>
+          <Text
+            testID="group-position-number"
+            style={[
+              styles.positionNumber,
+              {
+                color: position.label === "You're owed" || position.label === "You owe"
+                  ? balanceAmountColor(
+                    position.label === "You're owed" ? 1 : -1,
+                    theme.colors,
+                    { dark: theme.dark },
+                  )
+                  : theme.colors.onSurface,
+              },
+            ]}
+          >
             {position.numberText}
           </Text>
         ) : null}
@@ -546,17 +558,6 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
             style={{ color: theme.colors.onSurfaceVariant }}
           >
             Show in one currency ›
-          </Text>
-        ) : null}
-        {position.sentence ? (
-          <Text
-            variant="bodySmall"
-            testID="group-position-sentence"
-            onPress={onOpenSettle}
-            accessibilityRole={onOpenSettle ? "button" : undefined}
-            style={{ color: theme.colors.onSurface }}
-          >
-            {position.sentence}
           </Text>
         ) : null}
         {position.showSettle ? (
@@ -647,7 +648,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   settlementList: {
-    overflow: "hidden",
+    gap: DENSE_CARD_GAP,
   },
   settlementRow: {
     minHeight: 48,

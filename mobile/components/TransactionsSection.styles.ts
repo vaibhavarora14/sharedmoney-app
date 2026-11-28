@@ -1,4 +1,5 @@
 import { StyleSheet } from "react-native";
+import { DENSE_CARD_GAP, DENSE_CARD_RADIUS } from "../utils/denseListTokens";
 
 
 export const styles = StyleSheet.create({
@@ -6,7 +7,12 @@ export const styles = StyleSheet.create({
     paddingTop: 8,
   },
   list: {
-    gap: 4, // Tighter rows; whitespace comes from row padding, not card chrome
+    gap: DENSE_CARD_GAP,
+  },
+  cardWrap: {
+    marginHorizontal: 16,
+    marginBottom: DENSE_CARD_GAP,
+    position: "relative",
   },
   card: {
     borderRadius: 0,
@@ -15,7 +21,7 @@ export const styles = StyleSheet.create({
   },
   highlightOverlay: {
     ...StyleSheet.absoluteFill,
-    borderRadius: 8,
+    borderRadius: DENSE_CARD_RADIUS,
     borderWidth: 2,
   },
   pressable: {
@@ -58,6 +64,7 @@ export const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+    minWidth: 0,
     justifyContent: 'center',
     display: 'flex',
     flexDirection: 'column',
@@ -69,10 +76,24 @@ export const styles = StyleSheet.create({
     width: '100%',
   },
   title: {
+    fontWeight: "700",
+  },
+  titleSlot: {
     flexGrow: 1,
-    flexShrink: 1,
-    marginRight: 8,
-    fontWeight: '600', // MD3 Title Medium is 500/Medium or 600/SemiBold
+    minWidth: 0,
+  },
+  subline: {
+    marginTop: 2,
+    minWidth: 0,
+  },
+  amountCol: {
+    flexShrink: 0,
+    alignItems: "flex-end",
+    justifyContent: "center",
+  },
+  amountValue: {
+    fontWeight: "600",
+    flexShrink: 0,
   },
   subRow: {
     flexDirection: "row",

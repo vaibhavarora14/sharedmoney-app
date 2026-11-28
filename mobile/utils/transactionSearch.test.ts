@@ -12,7 +12,7 @@ const dinner: LedgerSearchFields = {
   kind: "expense",
   title: "Taxi to airport",
   payerLine: "Meera paid ₹900",
-  amountText: "not in split",
+  amountText: "Not in split",
   amount: 900,
   involvesViewer: false,
 };

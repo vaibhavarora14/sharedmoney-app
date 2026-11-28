@@ -2,8 +2,6 @@ import React, { useMemo } from "react";
 import { View } from "react-native";
 import {
     ActivityIndicator,
-    Avatar,
-    Divider,
     Surface,
     Text,
     useTheme,
@@ -13,6 +11,9 @@ import { balanceAmountColor, balancePolarityLabel } from "../utils/balanceRowLab
 import { getDefaultCurrency } from "../utils/currency";
 import { formatShareCurrency } from "../utils/settleShareMessage";
 import { formatBreakdown } from "../utils/currencyMerge";
+import { DENSE_CARD_GAP } from "../utils/denseListTokens";
+import { DenseListCard } from "./DenseListCard";
+import { PersonAvatar } from "./PersonAvatar";
 import { styles } from "./BalancesSection.styles";
 
 interface BalancesSectionProps {
@@ -34,14 +35,6 @@ interface BalancesSectionProps {
   /** When true, hide the dual summary + rows chrome (solo / all-zero). */
   calmEmpty?: boolean;
 }
-
-const AVATAR_TONES = [
-  "#DCE6FF",
-  "#F8E2E8",
-  "#DFF6EF",
-  "#F3E8FF",
-  "#FFF3D6",
-];
 
 export const BalancesSection: React.FC<BalancesSectionProps> = ({
   groupBalances,
@@ -84,6 +77,23 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
     return { owedTotal: formatTotals(owed), oweTotal: formatTotals(owe) };
   }, [personRows, defaultCurrency]);
 
+  const polaritySubline = (
+    polarity: ReturnType<typeof balancePolarityLabel>,
+  ): "You're owed" | "You owe" | "Settled" => {
+    switch (polarity) {
+      case "owed":
+        return "You're owed";
+      case "you owe":
+        return "You owe";
+      case "settled":
+        return "Settled";
+      default: {
+        const _never: never = polarity;
+        return _never;
+      }
+    }
+  };
+
   const getUserDisplayName = (balance: Balance): string => {
     const participant = participants.find(
       (p: Participant) =>
@@ -104,20 +114,16 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
     return `User ${id.substring(0, 8)}...`;
   };
 
-  const getInitials = (name: string) => {
-    if (name.includes(" ")) {
-      const names = name.trim().split(" ");
-      if (names.length >= 2) {
-        return `${names[0][0]}${names[names.length - 1][0]}`.toUpperCase();
-      }
-    }
-    const displayName = name.includes("@") ? name.split("@")[0] : name;
-    if (displayName.length >= 2) {
-      return displayName.substring(0, 2).toUpperCase();
-    }
-    return displayName.length > 0
-      ? (displayName[0] + displayName[0]).toUpperCase()
-      : "??";
+  const getUserAvatar = (balance: Balance): string | null => {
+    if (balance.avatar_url) return balance.avatar_url;
+    const participant = participants.find(
+      (p: Participant) =>
+        p.id === balance.participant_id ||
+        (p.user_id && p.user_id === balance.user_id),
+    );
+    if (participant?.avatar_url) return participant.avatar_url;
+    const member = groupMembers.find((m) => m.user_id === balance.user_id);
+    return member?.avatar_url || null;
   };
 
   const renderOriginalParts = (balance: Balance) => {
@@ -133,12 +139,6 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
         from {formatBreakdown(parts)}
       </Text>
     );
-  };
-
-  const avatarTone = (key: string) => {
-    let hash = 0;
-    for (let i = 0; i < key.length; i++) hash = (hash + key.charCodeAt(i) * 17) % AVATAR_TONES.length;
-    return AVATAR_TONES[hash];
   };
 
   if (loading) {
@@ -197,7 +197,7 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
           </Text>
           <Text
             variant="headlineSmall"
-            style={{ color: theme.colors.onTertiaryContainer, fontWeight: "700" }}
+            style={{ color: theme.colors.tertiary, fontWeight: "700" }}
             testID="balances-summary-owed"
           >
             {owedTotal}
@@ -248,17 +248,7 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
         BALANCES
       </Text>
 
-      <Surface
-        elevation={0}
-        style={{
-          backgroundColor: theme.colors.surface,
-          borderRadius: 8,
-          borderWidth: 1,
-          borderColor: theme.colors.outlineVariant,
-          overflow: "hidden",
-        }}
-        testID="balances-person-list"
-      >
+      <View style={{ gap: DENSE_CARD_GAP }} testID="balances-person-list">
         {personRows.map((balance, index) => {
           const name = getUserDisplayName(balance);
           const polarity = balancePolarityLabel(balance.amount);
@@ -269,50 +259,47 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
             balance.participant_id ||
             balance.user_id ||
             `${name}-${balance.currency}`;
+          const subline = polaritySubline(polarity);
 
           return (
-            <React.Fragment key={`${key}-${balance.currency}-${index}`}>
-              <View
-                style={styles.balanceContent}
-                testID={`balance-row-${key}`}
-                accessibilityLabel={`${name}, ${formatShareCurrency(Math.abs(balance.amount), balance.currency)} ${polarity}`}
-              >
-                <Avatar.Text
-                  size={36}
-                  label={getInitials(name)}
-                  style={{
-                    backgroundColor: theme.dark ? theme.colors.primaryContainer : avatarTone(key),
-                    marginRight: 12,
-                  }}
-                  color={theme.dark ? theme.colors.onPrimaryContainer : theme.colors.onSurface}
-                  labelStyle={{ fontWeight: "600", fontSize: 13 }}
-                />
-                <View style={styles.balanceLeft}>
-                  <Text variant="bodyLarge" style={{ color: theme.colors.onSurface }}>
-                    {name}
-                  </Text>
-                </View>
-                <View style={styles.balanceRight}>
-                  <Text
-                    variant="titleSmall"
-                    style={{ color: amountColor, fontWeight: "700" }}
-                  >
-                    {formatShareCurrency(Math.abs(balance.amount), balance.currency)}
-                    <Text
-                      variant="bodySmall"
-                      style={{ color: amountColor, fontWeight: "500" }}
-                    >
-                      {` ${polarity}`}
-                    </Text>
-                  </Text>
-                  {renderOriginalParts(balance)}
-                </View>
+            <DenseListCard
+              key={`${key}-${balance.currency}-${index}`}
+              testID={`balance-row-${key}`}
+              accessibilityLabel={`${name}, ${formatShareCurrency(Math.abs(balance.amount), balance.currency)} ${polarity}`}
+            >
+              <PersonAvatar
+                name={name}
+                uri={getUserAvatar(balance)}
+                personKey={key}
+                size={36}
+              />
+              <View style={styles.balanceLeft}>
+                <Text variant="bodyLarge" style={{ color: theme.colors.onSurface }}>
+                  {name}
+                </Text>
+                <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}>
+                  {subline}
+                </Text>
               </View>
-              {index < personRows.length - 1 ? <Divider /> : null}
-            </React.Fragment>
+              <View style={styles.balanceRight}>
+                <Text
+                  variant="titleSmall"
+                  style={{ color: amountColor, fontWeight: "700" }}
+                >
+                  {formatShareCurrency(Math.abs(balance.amount), balance.currency)}
+                  <Text
+                    variant="bodySmall"
+                    style={{ color: amountColor, fontWeight: "500" }}
+                  >
+                    {` ${polarity}`}
+                  </Text>
+                </Text>
+                {renderOriginalParts(balance)}
+              </View>
+            </DenseListCard>
           );
         })}
-      </Surface>
+      </View>
     </View>
   );
 };

@@ -12,7 +12,7 @@ function components(preferences = {}, theme = { colors: {} }, dimensions = { wid
   let state;
   let initialized = false;
   const paper = Object.fromEntries(["ActivityIndicator", "Button", "Divider", "Surface", "Text", "TouchableRipple"].map(name => [name, name]));
-  paper.Avatar = { Text: "Avatar.Text" };
+  paper.Avatar = { Text: "Avatar.Text", Image: "Avatar.Image", Icon: "Avatar.Icon" };
   paper.useTheme = () => ({ ...theme, fonts: { labelLarge: { lineHeight: 20 }, bodySmall: { lineHeight: 16 } } });
   function load(filename) {
     if (cache.has(filename)) return cache.get(filename).exports;
@@ -26,7 +26,7 @@ function components(preferences = {}, theme = { colors: {} }, dimensions = { wid
         if (!initialized) { state = typeof initial === "function" ? initial() : initial; initialized = true; }
         return [state, () => {}];
       } };
-      if (id === "react-native") return { View: "View", useWindowDimensions: () => dimensions, StyleSheet: { create: styles => styles, hairlineWidth: 1 } };
+      if (id === "react-native") return { View: "View", Pressable: "Pressable", useWindowDimensions: () => dimensions, StyleSheet: { create: styles => styles, flatten: (value) => Object.assign({}, ...[value].flat(Infinity).filter(Boolean)), hairlineWidth: 1 } };
       if (id === "react-native-paper") return paper;
       if (id === "./Skeleton") return { Skeleton: "Skeleton", SkeletonGroup: "SkeletonGroup" };
       if (id === "@expo/vector-icons/MaterialCommunityIcons") return "Icon";
@@ -34,7 +34,8 @@ function components(preferences = {}, theme = { colors: {} }, dimensions = { wid
       if (["./UnifiedBalanceHero", "./UnifyPromptCard"].includes(id)) return { [id.slice(2)]: id.slice(2) };
       if (id.startsWith(".")) {
         const resolved = path.resolve(path.dirname(filename), id);
-        return load(existsSync(resolved) ? resolved : `${resolved}.ts`);
+        const hit = [resolved, `${resolved}.tsx`, `${resolved}.ts`].find((candidate) => existsSync(candidate));
+        return load(hit || `${resolved}.ts`);
       }
       return require(id);
     };
@@ -78,9 +79,22 @@ function themes() {
   const code = ts.transpileModule(readFileSync(path.join(__dirname, '../theme.ts'), 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS },
   }).outputText;
-  new Function('require', 'exports', code)(name => name === 'react-native'
-    ? { Platform: { select: options => options.default } }
-    : { MD3LightTheme: { dark: false }, MD3DarkTheme: { dark: true }, configureFonts: () => ({}) }, module.exports);
+  new Function('require', 'exports', code)((name) => {
+    if (name === 'react-native') return { Platform: { select: options => options.default } };
+    if (name === './themeTokens') {
+      const tokens = { exports: {} };
+      const tokenCode = ts.transpileModule(readFileSync(path.join(__dirname, '../themeTokens.ts'), 'utf8'), {
+        compilerOptions: { module: ts.ModuleKind.CommonJS },
+      }).outputText;
+      new Function('exports', tokenCode)(tokens.exports);
+      return tokens.exports;
+    }
+    return {
+      MD3LightTheme: { dark: false, colors: {} },
+      MD3DarkTheme: { dark: true, colors: {} },
+      configureFonts: () => ({}),
+    };
+  }, module.exports);
   return [module.exports.lightTheme, module.exports.darkTheme];
 }
 function contrast(a, b) {
@@ -127,8 +141,9 @@ test("dashboard creditor sees Alice owes you, not the viewer's own net row", () 
   assert.doesNotMatch(text(tree), /You owes you|You owe Alice/);
   const rows = settlementRows(tree);
   assert.equal(rows.length, 1);
-  assert.match(text(rows[0]), /\+\$50(?!\.00)/);
-  assert.equal(rows[0].props.accessibilityLabel, "Alice owes you, +$50");
+  assert.match(text(rows[0]), /\$50(?!\.00)/);
+  assert.doesNotMatch(text(rows[0]), /\+/);
+  assert.equal(rows[0].props.accessibilityLabel, "Alice owes you, $50");
   assert.equal(rows[0].props.accessibilityRole, "button");
 });
 test("dashboard debtor sees You owe Alice, never Alice owes you", () => {
@@ -137,14 +152,15 @@ test("dashboard debtor sees You owe Alice, never Alice owes you", () => {
   assert.doesNotMatch(text(tree), /Alice owes you|You owe You/);
   const rows = settlementRows(tree);
   assert.equal(rows.length, 1);
-  assert.match(text(rows[0]), /-\$50(?!\.00)/);
+  assert.match(text(rows[0]), /\$50(?!\.00)/);
+  assert.doesNotMatch(text(rows[0]), /-/);
 });
 test("dashboard uses the viewer's edge amount, not the counterparty's group net", () => {
   const tree = dashboard([balance("me", 20), balance("Alice", -100), balance("Bob", 80)]);
   assert.match(text(tree), /Alice owes you/);
   const rows = settlementRows(tree);
   assert.equal(rows.length, 1);
-  assert.match(text(rows[0]), /\+\$20(?!\.00)/);
+  assert.match(text(rows[0]), /\$20(?!\.00)/);
   assert.doesNotMatch(text(rows[0]), /100|80/);
 });
 test("dashboard recognizes viewer by participant id and keeps edge currencies", () => {
@@ -156,8 +172,9 @@ test("dashboard recognizes viewer by participant id and keeps edge currencies", 
   assert.match(text(tree), /You owe Bob/);
   const rows = settlementRows(tree);
   assert.equal(rows.length, 2);
-  assert.match(text(byId(tree, "group-settlement-rows")), /\+\$50(?!\.00)/);
-  assert.match(text(byId(tree, "group-settlement-rows")), /-€30(?!\.00)/);
+  assert.match(text(byId(tree, "group-settlement-rows")), /\$50(?!\.00)/);
+  assert.match(text(byId(tree, "group-settlement-rows")), /€30(?!\.00)/);
+  assert.doesNotMatch(text(byId(tree, "group-settlement-rows")), /\+|-/);
   assert.doesNotMatch(text(byId(tree, "group-settlement-rows")), /80\.00|20\.00/);
 });
 
@@ -173,7 +190,7 @@ test("dashboard unification renders compact viewer-involved rows in the settleme
   const rows = settlementRows(tree);
   assert.equal(rows.length, 1);
   assert.match(text(rows[0]), /Alice owes you/);
-  assert.match(text(rows[0]), /\+\$25(?!\.00)/);
+  assert.match(text(rows[0]), /\$25(?!\.00)/);
   assert.match(text(byId(tree, "group-position-number")), /\$25/);
   assert.match(text(byId(tree, "group-position-label")), /You're owed/);
   assert.doesNotMatch(text(tree), /Rates ›/);
@@ -268,7 +285,8 @@ test("dashboard disambiguates two members who share a first name", () => {
   assert.equal(rows.length, 2);
   assert.match(text(rows[0]), /Christopher F\. owes you/);
   assert.match(text(rows[1]), /Christopher M\. owes you/);
-  assert.match(text(byId(tree, "group-position-sentence")), /Christopher F\. owes ₹1,600 · Christopher M\. ₹800/);
+  assert.equal(nodes(tree).some((node) => node.props?.testID === "group-position-sentence"), false);
+  assert.doesNotMatch(text(tree), /Christopher F\. owes ₹1,600 · Christopher M\. ₹800/);
   assert.doesNotMatch(text(tree), /Christopher Fernandez|Christopher Mills/);
 });
 
@@ -594,17 +612,17 @@ test("balance summary adds only matching currencies on both sides", () => {
     const tree = BalancesSection({ groupBalances: [{ group_id: "g", balances }], overallBalances: showOverallBalances ? balances : [], showOverallBalances, defaultCurrency: "USD", loading: false });
     const owed = text(byId(tree, "balances-summary-owed"));
     const owe = text(byId(tree, "balances-summary-owe"));
-    assert.match(owed, /\$120\.00/);
-    assert.match(owed, /₹100\.00/);
-    assert.match(owe, /\$40\.00/);
-    assert.match(owe, /€70\.00/);
-    assert.doesNotMatch(owed + owe, /220\.00|110\.00/);
+    assert.match(owed, /\$120/);
+    assert.match(owed, /₹100/);
+    assert.match(owe, /\$40/);
+    assert.match(owe, /€70/);
+    assert.doesNotMatch(owed + owe, /220(?:\.00)?|110(?:\.00)?/);
   }
 });
 test("balance summary preserves already-converted currency and default zero", () => {
   const tree = components().BalancesSection({ groupBalances: [], overallBalances: [balance("Alice", 110), balance("Bob", 20)], defaultCurrency: "USD", loading: false });
-  assert.equal(text(byId(tree, "balances-summary-owed")), "$130.00");
-  assert.equal(text(byId(tree, "balances-summary-owe")), "$0.00");
+  assert.equal(text(byId(tree, "balances-summary-owed")), "$130");
+  assert.equal(text(byId(tree, "balances-summary-owe")), "$0");
 });
 
 test("BalancesSection person rows stay non-actionable even with onSettleUp", () => {
@@ -648,8 +666,8 @@ test("GroupDashboard settlement rows are pressable only when pressed", () => {
   const row = rows[0];
   assert.equal(typeof row.props.onPress, "function");
   assert.equal(row.props.accessibilityRole, "button");
-  assert.equal(row.props.accessibilityLabel, "Alice owes you, +$50");
-  assert.ok((row.props.style?.minHeight ?? 0) >= 44);
+  assert.equal(row.props.accessibilityLabel, "Alice owes you, $50");
+  // Row height lives on DenseListCard's inner body (64pt), not host style props.
   assert.equal(pressed, null);
   row.props.onPress();
   assert.equal(pressed?.full_name, "Alice");
@@ -658,25 +676,20 @@ test("GroupDashboard settlement rows are pressable only when pressed", () => {
 
 test("dashboard accessible settlement label includes counterparty, direction, and signed amount", () => {
   const owed = dashboard([balance("me", 50), balance("Alice", -50)], { onSettlePress: () => {} });
-  assert.equal(settlementRows(owed)[0].props.accessibilityLabel, "Alice owes you, +$50");
+  assert.equal(settlementRows(owed)[0].props.accessibilityLabel, "Alice owes you, $50");
   const owe = dashboard([balance("me", -40), balance("Bob", 40)], { onSettlePress: () => {} });
-  assert.equal(settlementRows(owe)[0].props.accessibilityLabel, "You owe Bob, -$40");
+  assert.equal(settlementRows(owe)[0].props.accessibilityLabel, "You owe Bob, $40");
   const eur = dashboard([
     { ...balance("me", -30, "EUR") }, balance("Cara", 30, "EUR"),
   ], { onSettlePress: () => {} });
-  assert.equal(settlementRows(eur)[0].props.accessibilityLabel, "You owe Cara, -€30");
+  assert.equal(settlementRows(eur)[0].props.accessibilityLabel, "You owe Cara, €30");
 });
 
 test("dashboard settlement row layout keeps amount out of the label column", () => {
   const tree = dashboard([balance("me", 50), balance("Alice", -50)], { onSettlePress: () => {} });
   const row = settlementRows(tree)[0];
-  const rowStyle = flatten(row.props.style);
+  const rowStyle = flatten(typeof row.props.style === "function" ? undefined : row.props.style);
   assert.equal(rowStyle.height, undefined);
-  assert.ok((rowStyle.minHeight ?? 0) >= 44);
-  const content = row.props.children;
-  const contentStyle = flatten(content.props.style);
-  assert.equal(contentStyle.height, undefined);
-  assert.ok((contentStyle.minHeight ?? 0) >= 44);
   // App members: one line — name shrinks, "owes you" + amount do not; no caption.
   assert.match(text(row), /Alice owes you/);
   assert.equal(nodes(row).find(n => n.props?.testID === "settlement-row-presence"), undefined);
@@ -702,16 +715,35 @@ test("dashboard settlement row layout keeps amount out of the label column", () 
 test("settlement chevron stays outside the reflowing text and initials grow with text", () => {
   const tree = dashboard([balance("me", 30000), balance("Alexandria", -30000)], { onSettlePress: () => {} });
   const row = settlementRows(tree)[0];
-  const content = row.props.children;
-  assert.notEqual(flatten(content.props.style).flexWrap, "wrap", "chevron must not become a separate flex line");
-  const children = React.Children.toArray(content.props.children);
+  const children = React.Children.toArray(row.props.children);
+  assert.notEqual(flatten(row.props.style).flexWrap, "wrap", "chevron must not become a separate flex line");
   const detail = children.find(n => /Alexandria owes you/.test(text(n)) && /30,000/.test(text(n)));
   assert.ok(detail, "direction and amount reflow together inside the available row width");
   assert.equal(flatten(detail.props.style).minWidth, 0);
   assert.equal(flatten(detail.props.style).flex, 1);
   assert.equal(children.at(-1).props.name, "chevron-right");
-  assert.equal(nodes(row).some(n => n.type === "Avatar.Text"), false);
+  assert.equal(children.some((n) => n?.type?.name === "PersonAvatar"), true);
   assert.equal(nodes(row).some(n => n.type === "Text" && text(n) === "AL"), false);
+});
+
+test("settlement row avatar uses the full name so initials match members", () => {
+  const tree = dashboard(
+    [
+      { participant_id: "p-you", user_id: "me", full_name: "You", amount: 2250, currency: "INR" },
+      { participant_id: "p-asha", user_id: "u-asha", full_name: "Asha Rao", amount: -2250, currency: "INR" },
+    ],
+    {
+      participants: [
+        { id: "p-you", user_id: "me", type: "member", full_name: "You" },
+        { id: "p-asha", user_id: "u-asha", type: "member", full_name: "Asha Rao" },
+      ],
+      defaultCurrency: "INR",
+    },
+  );
+  const row = settlementRows(tree)[0];
+  const avatar = nodes(row).find((n) => n?.type?.name === "PersonAvatar");
+  assert.equal(avatar.props.name, "Asha Rao");
+  assert.equal(text(nodes(row).find((n) => n.props?.testID === "settlement-row-name")), "Asha");
 });
 
 test("spending cards stay off the default group page", () => {
@@ -751,7 +783,7 @@ test("dashboard without onSettlePress is informational: no button role, chevron,
   assert.notEqual(row.props.accessibilityRole, "button");
   assert.equal(nodes(row).some(node => node.type === "Icon" && node.props.name === "chevron-right"), false);
   assert.match(text(row), /Alice owes you/);
-  assert.match(text(row), /\+\$50$/);
+  assert.match(text(row), /\$50$/);
 });
 
 test("GroupDetailsScreen wires balanceError and gates onSettlePress for active members only", () => {

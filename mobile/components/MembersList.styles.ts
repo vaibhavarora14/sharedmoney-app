@@ -4,13 +4,9 @@ export const styles = StyleSheet.create({
   memberCardRemoving: {
     opacity: 0.7,
   },
-  memberContent: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
   memberLeft: {
     flex: 1,
+    minWidth: 0,
     marginRight: 8,
   },
   memberRight: {

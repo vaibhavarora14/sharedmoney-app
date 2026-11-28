@@ -6,7 +6,7 @@
 import { groupListBalanceWords } from "./balanceRowLabels";
 import { formatShareCurrency } from "./settleShareMessage";
 
-export const NOT_IN_SPLIT_LABEL = "not in split";
+export const NOT_IN_SPLIT_LABEL = "Not in split";
 export const SAVING_PAYER_LINE = "Saving…";
 
 export interface ViewerRef {
@@ -23,6 +23,10 @@ export interface SplitRef {
 export interface ExpenseRowModel {
   payerLine: string;
   impactText: string;
+  /** Coloured amount only (`₹1,400`). Empty for muted copy. */
+  impactAmountText: string;
+  /** Direction or muted label (`You're owed` / `Not in split`). */
+  impactDirectionText: string;
   /** Muted figure: not in the split, even, or not yet known. */
   impactMuted: boolean;
   /**
@@ -72,6 +76,8 @@ export function buildExpenseRowModel(input: {
     return {
       payerLine,
       impactText: "",
+      impactAmountText: "",
+      impactDirectionText: "",
       impactMuted: true,
       net: null,
       involvesViewer: viewerPaid,
@@ -87,6 +93,8 @@ export function buildExpenseRowModel(input: {
     return {
       payerLine,
       impactText: NOT_IN_SPLIT_LABEL,
+      impactAmountText: "",
+      impactDirectionText: NOT_IN_SPLIT_LABEL,
       impactMuted: true,
       net: null,
       involvesViewer: false,
@@ -94,13 +102,16 @@ export function buildExpenseRowModel(input: {
   }
 
   const net = (viewerPaid ? input.amount : 0) - (share?.amount ?? 0);
+  const amountText = formatShareCurrency(Math.abs(net), input.currency);
+  const impactText = groupListBalanceWords(net, amountText);
+  const material = Math.abs(net) > 0.01;
+  const directionText = net > 0.01 ? "You're owed" : net < -0.01 ? "You owe" : "";
   return {
     payerLine,
-    impactText: groupListBalanceWords(
-      net,
-      formatShareCurrency(Math.abs(net), input.currency),
-    ),
-    impactMuted: Math.abs(net) <= 0.01,
+    impactText,
+    impactAmountText: material ? amountText : "",
+    impactDirectionText: material ? directionText : impactText,
+    impactMuted: !material,
     net,
     involvesViewer: true,
   };

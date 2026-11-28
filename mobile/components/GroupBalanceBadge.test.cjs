@@ -60,6 +60,7 @@ const lightTheme = {
   dark: false,
   colors: {
     onSurfaceVariant: "#5B6776",
+    tertiary: "#00866E",
     onTertiaryContainer: "#075E51",
     onSecondaryContainer: "#842A43",
     secondary: "#C95872",

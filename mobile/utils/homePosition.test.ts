@@ -1,6 +1,12 @@
 import { assertEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
 import type { Balance } from "../types.ts";
-import { homePosition, settleHeroFromPeople, viewerOverallBalances } from "./homePosition.ts";
+import {
+  homeBothPartsMutedLine,
+  homeDirectionParts,
+  homePosition,
+  settleHeroFromPeople,
+  viewerOverallBalances,
+} from "./homePosition.ts";
 import { buildDirectHomeRows } from "./quickSettle.ts";
 import { formatShareCurrency } from "./settleShareMessage.ts";
 
@@ -196,6 +202,30 @@ Deno.test("cannot-combine currencies produce no number", () => {
   assertEquals(encoded.includes("₹"), false);
   assertEquals(encoded.includes("$"), false);
   assertEquals(encoded.includes("88"), false);
+});
+
+Deno.test("header net matches the group rows and names both directions", () => {
+  const groupBalances = [
+    { balances: [{ user_id: "me", amount: 2250, currency: "INR" }] },
+    { balances: [{ user_id: "me", amount: -640, currency: "INR" }] },
+  ];
+  const overall = viewerOverallBalances(groupBalances, "me");
+  assertEquals(overall[0]?.amount, 1610);
+  const bothParts = homeBothPartsMutedLine(homeDirectionParts(groupBalances, "me"));
+  assertEquals(bothParts, "₹2,250 owed to you · ₹640 you owe");
+  const home = homePosition({
+    hasBalances: true,
+    overallBalances: overall,
+    groupsWithBalance: 2,
+    activeGroupCount: 2,
+    bothPartsLine: bothParts,
+  });
+  assertEquals(home, {
+    kind: "amount",
+    label: "You're owed",
+    numberText: "₹1,610",
+    mutedLine: "₹2,250 owed to you · ₹640 you owe",
+  });
 });
 
 Deno.test("balances that have not loaded are not even", () => {
