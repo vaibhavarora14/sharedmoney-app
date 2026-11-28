@@ -197,7 +197,7 @@ export const BalancesSection: React.FC<BalancesSectionProps> = ({
           </Text>
           <Text
             variant="headlineSmall"
-            style={{ color: theme.colors.onTertiaryContainer, fontWeight: "700" }}
+            style={{ color: theme.colors.tertiary, fontWeight: "700" }}
             testID="balances-summary-owed"
           >
             {owedTotal}

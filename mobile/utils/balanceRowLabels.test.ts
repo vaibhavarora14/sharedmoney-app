@@ -23,14 +23,17 @@ Deno.test("group list zero-balance label avoids Settled", () => {
   assertEquals(/settled/i.test(GROUP_LIST_EVEN_LABEL), false);
 });
 
-Deno.test("balance amount colors prefer quieter on*Container tokens", () => {
+Deno.test("balance amount colors use tertiary green for positive in both themes", () => {
   const colors = {
-    onTertiaryContainer: "#075E51",
+    tertiary: "#68D6C2",
+    onTertiaryContainer: "#D8FBF3",
     onSecondaryContainer: "#842A43",
     secondary: "#C95872",
     onSurfaceVariant: "#5B6776",
   };
-  assertEquals(balanceAmountColor(12, colors), "#075E51");
+  assertEquals(balanceAmountColor(12, colors), "#68D6C2");
+  assertEquals(balanceAmountColor(12, colors, { dark: true }), "#68D6C2");
+  assertEquals(balanceAmountColor(12, colors) === colors.onTertiaryContainer, false);
   assertEquals(balanceAmountColor(-8, colors), "#842A43");
   assertEquals(balanceAmountColor(-8, colors, { dark: true }), "#C95872");
   assertEquals(balanceAmountColor(0, colors), "#5B6776");

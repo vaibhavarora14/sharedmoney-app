@@ -55,7 +55,7 @@ import { fallbackDensePerson } from "../utils/denseListPeople";
 import { DENSE_AVATAR_SIZE, DENSE_CARD_GAP } from "../utils/denseListTokens";
 import { recordSentryListCounts } from "../utils/sentryTelemetry";
 import { balanceAmountColor, groupListBalanceWords } from "../utils/balanceRowLabels";
-import { countGroupsWithViewerBalance, homePosition, viewerOverallBalances, type HomePosition } from "../utils/homePosition";
+import { countGroupsWithViewerBalance, homeBothPartsMutedLine, homeDirectionParts, homePosition, viewerOverallBalances, type HomePosition } from "../utils/homePosition";
 import { groupRecencyLine } from "../utils/groupRecency";
 import { groupsListStatusLine } from "../utils/groupsListStatus";
 import { isBenignConnectivityError } from "../utils/networkErrors";
@@ -163,7 +163,18 @@ export function HomePositionView({ position }: { position: HomePosition }) {
           {position.numberText ? (
             <Text
               testID="home-position-number"
-              style={[styles.positionNumber, { color: theme.colors.onSurface }]}
+              style={[
+                styles.positionNumber,
+                {
+                  color: position.label === "You're even"
+                    ? theme.colors.onSurface
+                    : balanceAmountColor(
+                      position.label === "You're owed" ? 1 : -1,
+                      theme.colors,
+                      { dark: theme.dark },
+                    ),
+                },
+              ]}
             >
               {position.numberText}
             </Text>
@@ -430,22 +441,19 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
     });
   }, [loading, groups.length]);
 
+  const groupBalances = balancesData?.group_balances ?? [];
+  const fromGroups = viewerOverallBalances(groupBalances, user?.id);
   const position = homePosition({
     hasBalances: balancesReady,
-    overallBalances: (() => {
-      const fromGroups = viewerOverallBalances(
-        balancesData?.group_balances ?? [],
-        user?.id,
-      );
-      return fromGroups.length > 0 ? fromGroups : (balancesData?.overall_balances ?? []);
-    })(),
+    overallBalances: fromGroups.length > 0 ? fromGroups : (balancesData?.overall_balances ?? []),
     groupsWithBalance: countGroupsWithViewerBalance(
-      balancesData?.group_balances ?? [],
+      groupBalances,
       activeGroups.map((group) => group.id),
       user?.id,
     ),
     activeGroupCount: activeGroups.length,
     directPeople: directPeopleForHome(directRows),
+    bothPartsLine: homeBothPartsMutedLine(homeDirectionParts(groupBalances, user?.id)),
   });
 
   useEffect(() => {

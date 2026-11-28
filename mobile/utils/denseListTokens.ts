@@ -9,8 +9,17 @@ export const DENSE_STACK_AVATAR_SIZE = 32;
 export const DENSE_STACK_OVERLAP = 8;
 export const DENSE_STACK_RING = 2;
 export const DENSE_STACK_MAX = 3;
-/** Ledger rows keep a 2-avatar stack so titles keep a full line. */
+/** Home and ledger stacks cap at 2 faces plus a count chip. */
 export const DENSE_TX_STACK_MAX = 2;
+
+/** Always reserve 2 faces + a count chip so every title starts at the same x. */
+export function denseStackReservedWidth(
+  size: number,
+  maxVisible: number = DENSE_TX_STACK_MAX,
+): number {
+  const step = size - DENSE_STACK_OVERLAP;
+  return size + maxVisible * step;
+}
 
 export const AVATAR_TONES = [
   "#DCE6FF",

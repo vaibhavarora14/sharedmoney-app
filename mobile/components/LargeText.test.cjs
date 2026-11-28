@@ -31,7 +31,7 @@ function harness(fontScale = 1) {
     '@tanstack/react-query': { useQueryClient: () => ({}) },
     '../contexts/AuthContext': { useAuth: () => ({ user: { id: 'me' } }) },
     '../hooks/useGroups': { useGroups: () => ({ data: [group], isLoading: false }) },
-    '../hooks/useBalances': { useBalances: () => ({ data: { group_balances: [] }, isLoading: false }) },
+    '../hooks/useBalances': { useBalances: () => ({ data: { group_balances: [] }, hasData: true, isLoading: false }) },
     '../hooks/useCurrencyPreferences': { useCurrencyPreferences: () => ({ rateBook: {} }) },
     '../hooks/useNotifications': { useNotifications: () => ({}), useUpdateNotificationPreference: () => ({}) },
     '../utils/featureFlags': { isTransactionNotificationsEnabled: () => false },
@@ -69,10 +69,22 @@ function harness(fontScale = 1) {
         }),
       ),
     },
+    '../components/SettledFoldRow': { SettledFoldRow: 'SettledFoldRow' },
     '../components/DenseListCard': { DenseListCard: 'DenseListCard' },
     '../components/PersonAvatar': { PersonAvatar: 'PersonAvatar' },
     '../utils/groupListBalanceDisplay': {
       partitionActiveGroupsBySettlement: (groups) => ({ openGroups: groups, settledGroups: [] }),
+    },
+    '../utils/homePosition': {
+      homePosition: () => ({ kind: 'amount', label: "You're owed", numberText: '₹0', mutedLine: 'Across 1 group' }),
+      countGroupsWithViewerBalance: () => 1,
+      viewerOverallBalances: () => [],
+      homeBothPartsMutedLine: () => null,
+      homeDirectionParts: () => null,
+    },
+    '../utils/quickSettle': {
+      buildDirectHomeRows: () => [],
+      directPeopleForHome: () => undefined,
     },
     '../utils/denseListPeople': {
       fallbackDensePerson: (key, name) => ({ key, name, avatarUrl: null }),
@@ -196,7 +208,8 @@ test('group rows retain compact normal layout and reflow enlarged title, descrip
   for (const fontScale of [1, 2]) {
     const app = harness(fontScale);
     const tree = app.render('screens/GroupsListScreen.tsx', 'GroupsListScreen');
-    const card = nodes(tree).find(n => n.props.testID === 'group-card-g');
+    const card = nodes(tree).find(n => n.props?.testID === 'group-card-g');
+    assert.ok(card, 'expected a dense group card');
     const title = nodes(card).find(n => n.type === 'Text' && text(n) === app.group.name);
     const description = nodes(card).find(n => n.type === 'Text' && text(n) === app.group.description);
     assert.equal(flatten(card.props.style).flexDirection, fontScale === 1 ? 'row' : 'column');

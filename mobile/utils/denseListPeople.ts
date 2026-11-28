@@ -36,9 +36,11 @@ function pushUnique(people: DensePerson[], person: NamedPerson): void {
 /** Group / 1:1 list avatars from already-loaded balance rows. */
 export function densePeopleFromBalances(
   balances: NamedPerson[] | undefined,
+  options?: { excludeUserId?: string },
 ): DensePerson[] {
   const people: DensePerson[] = [];
   for (const row of balances ?? []) {
+    if (options?.excludeUserId && row.user_id === options.excludeUserId) continue;
     pushUnique(people, row);
   }
   return people;

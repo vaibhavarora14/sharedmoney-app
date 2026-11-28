@@ -33,8 +33,9 @@ function loadStyles(filename) {
       styles = new Function(
         "StyleSheet",
         "GROUP_BALANCE_SLOT_WIDTH",
+        "DENSE_CARD_GAP",
         `return (${node.initializer.arguments[0].getText(source)});`
-      )({ hairlineWidth: 1 }, 152);
+      )({ hairlineWidth: 1 }, 152, 8);
     }
     ts.forEachChild(node, visit);
   }
@@ -148,6 +149,7 @@ function harnessWithFormer(loading = false) {
             },
           ],
         },
+        hasData: true,
         isLoading: false,
       }),
     },
@@ -206,6 +208,7 @@ function harnessWithFormer(loading = false) {
           testID: `group-card-${props.group.id}`,
         }, React.createElement("GroupBalanceBadge", { loading: props.loading })),
     },
+    "../components/SettledFoldRow": { SettledFoldRow: "SettledFoldRow" },
     "../components/DenseListCard": { DenseListCard: "DenseListCard" },
     "../components/PersonAvatar": { PersonAvatar: "PersonAvatar" },
     "../utils/groupListBalanceDisplay": {
@@ -315,9 +318,9 @@ function harnessWithFormer(loading = false) {
       return load(path.join(__dirname, "../screens/GroupsListScreen.tsx")).GroupsHomeSkeletonRows();
     },
     setFormerExpanded(expanded) {
-      // showCreateGroup, showSplitBill, splitBillToken, recentBills,
-      // formerGroupsExpanded (index 4), archivedGroupsExpanded…
-      state[4] = expanded;
+      // showCreateGroup, quickSettleOpen, quickSettleSource, showSplitBill,
+      // splitBillToken, recentBills, formerGroupsExpanded
+      state[6] = expanded;
     },
   };
 }
@@ -512,6 +515,9 @@ test("Home empty state: Create a group primary + tertiary one-time split link", 
         return {
           homePosition: () => ({ kind: "unknown" }),
           countGroupsWithViewerBalance: () => 0,
+          viewerOverallBalances: () => [],
+          homeBothPartsMutedLine: () => null,
+          homeDirectionParts: () => null,
         };
       }
       if (id === "../utils/groupRecency") {
@@ -540,6 +546,7 @@ test("Home empty state: Create a group primary + tertiary one-time split link", 
             React.createElement("View", { testID: `group-card-${props.group.id}` }),
         };
       }
+      if (id === "../components/SettledFoldRow") return { SettledFoldRow: "SettledFoldRow" };
       if (id === "../components/DenseListCard") return { DenseListCard: "DenseListCard" };
       if (id === "../components/PersonAvatar") return { PersonAvatar: "PersonAvatar" };
       if (id === "../utils/groupListBalanceDisplay") {
@@ -561,6 +568,9 @@ test("Home empty state: Create a group primary + tertiary one-time split link", 
           GuestSaveChip: "GuestSaveChip",
           GuestSnackbar: "GuestSnackbar",
         };
+      }
+      if (id === "../utils/quickSettle") {
+        return { buildDirectHomeRows: () => [], directPeopleForHome: () => undefined };
       }
       if (id === "../components/QuickSettleSheet") return { QuickSettleSheet: "QuickSettleSheet" };
       if (id === "../hooks/useGuestFlags") return { useGuestFlags: () => ({ cleanupEnabled: false }) };

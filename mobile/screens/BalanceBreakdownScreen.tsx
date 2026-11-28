@@ -16,6 +16,7 @@ import {
 } from "../utils/balanceBreakdown";
 import { emptyRateBook, type RateBook } from "../utils/currencyMerge";
 import { getDefaultCurrency } from "../utils/currency";
+import { balanceAmountColor } from "../utils/balanceRowLabels";
 import { formatShareCurrency } from "../utils/settleShareMessage";
 import { settlementCounterpartyShortName } from "../utils/settlementPresence";
 
@@ -39,9 +40,7 @@ interface BalanceBreakdownScreenProps {
 }
 
 function signedAmount(amount: number, currency: string): string {
-  const bare = formatShareCurrency(Math.abs(amount), currency);
-  if (Math.abs(amount) < 0.005) return bare;
-  return amount > 0 ? `+${bare}` : `-${bare}`;
+  return formatShareCurrency(Math.abs(amount), currency);
 }
 
 function headline(name: string, amount: number): string {
@@ -59,13 +58,7 @@ function EffectAmount({
   testID?: string;
 }) {
   const theme = useTheme();
-  const color = Math.abs(amount) < 0.005
-    ? theme.colors.onSurfaceVariant
-    : amount > 0
-      ? theme.colors.onTertiaryContainer
-      : theme.dark
-        ? theme.colors.secondary
-        : theme.colors.onSecondaryContainer;
+  const color = balanceAmountColor(amount, theme.colors, { dark: theme.dark });
   return (
     <Text variant="titleSmall" testID={testID} style={{ color, fontWeight: "700" }}>
       {signedAmount(amount, currency)}
@@ -194,11 +187,7 @@ export function BalanceBreakdownView({
   const settled = Math.abs(total) < 0.005;
   const amountColor = settled
     ? theme.colors.onSurface
-    : total > 0
-      ? theme.colors.onTertiaryContainer
-      : theme.dark
-        ? theme.colors.secondary
-        : theme.colors.onSecondaryContainer;
+    : balanceAmountColor(total, theme.colors, { dark: theme.dark });
   const showSettle = Boolean(onSettleUp && balance && !settled);
 
   return (

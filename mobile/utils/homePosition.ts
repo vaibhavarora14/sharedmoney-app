@@ -129,6 +129,46 @@ export function settleHeroFromPeople(
   });
 }
 
+/**
+ * Per-currency owed / owe parts from the same viewer rows the net uses.
+ * Does not add currencies or change the net. Null when parts cannot share one code.
+ */
+export function homeDirectionParts(
+  groupBalances: ReadonlyArray<{
+    balances: ReadonlyArray<{ user_id?: string; amount: number; currency: string }>;
+  }>,
+  userId?: string,
+): { currency: string; owed: number; owe: number } | null {
+  const byCurrency = new Map<string, { owed: number; owe: number }>();
+  for (const group of groupBalances) {
+    for (const row of group.balances) {
+      if (userId && row.user_id !== userId) continue;
+      const currency = row.currency.trim().toUpperCase();
+      if (!currency || Math.abs(row.amount) < MATERIAL) continue;
+      const current = byCurrency.get(currency) ?? { owed: 0, owe: 0 };
+      if (row.amount > 0) current.owed += row.amount;
+      else current.owe += Math.abs(row.amount);
+      byCurrency.set(currency, current);
+    }
+  }
+  if (byCurrency.size !== 1) return null;
+  const [currency, parts] = [...byCurrency.entries()][0];
+  return {
+    currency,
+    owed: Math.round(parts.owed * 100) / 100,
+    owe: Math.round(parts.owe * 100) / 100,
+  };
+}
+
+/** Quiet both-parts subline when the net hides two directions. */
+export function homeBothPartsMutedLine(
+  parts: { currency: string; owed: number; owe: number } | null,
+): string | null {
+  if (!parts) return null;
+  if (parts.owed < MATERIAL || parts.owe < MATERIAL) return null;
+  return `${formatShareCurrency(parts.owed, parts.currency)} owed to you · ${formatShareCurrency(parts.owe, parts.currency)} you owe`;
+}
+
 export function homePosition(input: {
   hasBalances: boolean;
   overallBalances: Balance[];
@@ -138,6 +178,11 @@ export function homePosition(input: {
   directPeople?: { count: number; name?: string };
   /** Settle tab counts people, not groups. */
   peopleCount?: number;
+  /**
+   * Optional both-parts subline from per-group viewer amounts.
+   * Does not change the net number.
+   */
+  bothPartsLine?: string | null;
 }): HomePosition {
   if (!input.hasBalances) return { kind: "unknown" };
 
@@ -152,9 +197,11 @@ export function homePosition(input: {
     const mutedCount = Math.abs(amount) >= MATERIAL
       ? input.groupsWithBalance
       : input.activeGroupCount;
-    const mutedLine = input.peopleCount && input.peopleCount > 0
+    const acrossLine = input.peopleCount && input.peopleCount > 0
       ? (input.peopleCount === 1 ? "Across 1 person" : `Across ${input.peopleCount} people`)
       : homeMutedLine(mutedCount, input.directPeople);
+    const bothParts = input.bothPartsLine?.trim() || "";
+    const mutedLine = bothParts || acrossLine;
     if (amount > MATERIAL) {
       return {
         kind: "amount",

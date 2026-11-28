@@ -12,8 +12,15 @@ import { useThemePreference } from "../contexts/ThemePreferenceContext";
 import type { Balance, Group, Participant, Settlement, Transaction } from "../types";
 import { DENSE_CARD_GAP } from "../utils/denseListTokens";
 import { readDenseCardsFrame, type DenseCardsFrame } from "../utils/denseCardsShots";
+import {
+  homeBothPartsMutedLine,
+  homeDirectionParts,
+  homePosition,
+  viewerOverallBalances,
+} from "../utils/homePosition";
 import { groupByLedgerDateSection } from "../utils/ledgerDateSections";
 import { buildTransactionsLedger } from "../utils/transactionsLedger";
+import { HomePositionView } from "./GroupsListScreen";
 
 export type { DenseCardsFrame };
 export { readDenseCardsFrame };
@@ -171,6 +178,9 @@ export function DenseCardsPreviewScreen({ frame }: { frame: DenseCardsFrame }) {
         <Appbar.Header style={{ backgroundColor: theme.colors.background }}>
           {frame === "home" ? null : <Appbar.BackAction />}
           <Appbar.Content title={title} titleStyle={{ fontWeight: "bold" }} />
+          {frame === "group" ? (
+            <Appbar.Action icon="dots-vertical" accessibilityLabel="Group options" />
+          ) : null}
         </Appbar.Header>
         <ScrollView contentContainerStyle={styles.body}>
           {frame === "home" ? <HomeFrame /> : null}
@@ -183,16 +193,21 @@ export function DenseCardsPreviewScreen({ frame }: { frame: DenseCardsFrame }) {
 }
 
 function HomeFrame() {
-  const theme = useTheme();
   const [settledOpen, setSettledOpen] = useState(false);
   const open = HOME_GROUPS.filter((row) => row.group.id !== "g-settled");
   const settled = HOME_GROUPS.filter((row) => row.group.id === "g-settled");
+  const groupBalances = HOME_GROUPS.map((row) => ({ balances: row.balances }));
+  const position = homePosition({
+    hasBalances: true,
+    overallBalances: viewerOverallBalances(groupBalances, VIEWER),
+    groupsWithBalance: 2,
+    activeGroupCount: 2,
+    bothPartsLine: homeBothPartsMutedLine(homeDirectionParts(groupBalances, VIEWER)),
+  });
   return (
     <View>
-      <View style={{ paddingHorizontal: 16, marginBottom: 12 }}>
-        <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>You're owed</Text>
-        <Text style={{ fontSize: 40, lineHeight: 48, fontWeight: "700", color: theme.colors.onSurface }}>₹2,250</Text>
-        <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>Across 2 groups</Text>
+      <View style={{ paddingHorizontal: 16 }}>
+        <HomePositionView position={position} />
       </View>
       <View style={styles.denseList}>
         {open.map((row) => (

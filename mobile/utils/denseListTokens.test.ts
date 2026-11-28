@@ -2,6 +2,7 @@ import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
   AVATAR_TONES,
   AVATAR_TONES_DARK,
+  DENSE_AVATAR_SIZE,
   DENSE_STACK_MAX,
   DENSE_STACK_OVERLAP,
   DENSE_STACK_RING,
@@ -9,6 +10,7 @@ import {
   avatarInitialsFontSize,
   avatarToneFill,
   avatarToneInk,
+  denseStackReservedWidth,
 } from "./denseListTokens.ts";
 
 Deno.test("transaction stacks cap at two faces plus a count chip", () => {
@@ -16,6 +18,9 @@ Deno.test("transaction stacks cap at two faces plus a count chip", () => {
   assertEquals(DENSE_TX_STACK_MAX < DENSE_STACK_MAX, true);
   assertEquals(DENSE_STACK_OVERLAP <= 8, true);
   assertEquals(DENSE_STACK_RING, 2);
+  const reserved = denseStackReservedWidth(DENSE_AVATAR_SIZE);
+  const step = DENSE_AVATAR_SIZE - DENSE_STACK_OVERLAP;
+  assertEquals(reserved, DENSE_AVATAR_SIZE + DENSE_TX_STACK_MAX * step);
 });
 
 Deno.test("dark avatars keep a per-person tint, not one shared blue", () => {

@@ -6,7 +6,7 @@
 import { groupListBalanceWords } from "./balanceRowLabels";
 import { formatShareCurrency } from "./settleShareMessage";
 
-export const NOT_IN_SPLIT_LABEL = "not in split";
+export const NOT_IN_SPLIT_LABEL = "Not in split";
 export const SAVING_PAYER_LINE = "Saving…";
 
 export interface ViewerRef {
@@ -25,7 +25,7 @@ export interface ExpenseRowModel {
   impactText: string;
   /** Coloured amount only (`₹1,400`). Empty for muted copy. */
   impactAmountText: string;
-  /** Direction or muted label (`You're owed` / `not in split`). */
+  /** Direction or muted label (`You're owed` / `Not in split`). */
   impactDirectionText: string;
   /** Muted figure: not in the split, even, or not yet known. */
   impactMuted: boolean;

@@ -1,17 +1,22 @@
 import React from "react";
-import { View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import {
   ActivityIndicator,
   IconButton,
   Menu,
+  Surface,
   Text,
   useTheme,
 } from "react-native-paper";
 import { Participant } from "../types";
 import { formatDate } from "../utils/date";
-import { DENSE_CARD_GAP } from "../utils/denseListTokens";
+import {
+  DENSE_AVATAR_SIZE,
+  DENSE_CARD_RADIUS,
+  DENSE_ROW_MIN_HEIGHT,
+  denseCardSurface,
+} from "../utils/denseListTokens";
 import { canRemovePerson, memberRowShowsMenu } from "../utils/peoplePicker";
-import { DenseListCard } from "./DenseListCard";
 import { PersonAvatar } from "./PersonAvatar";
 import { styles } from "./MembersList.styles";
 
@@ -40,11 +45,12 @@ export const MembersList: React.FC<MembersListProps> = ({
   onBlock,
 }) => {
   const theme = useTheme();
+  const surface = denseCardSurface(theme);
   const [menuParticipantId, setMenuParticipantId] = React.useState<string | null>(null);
   const sortedPeople = React.useMemo(() => {
     return [...people].sort((a, b) => {
-      if (a.type === 'former' && b.type !== 'former') return 1;
-      if (a.type !== 'former' && b.type === 'former') return -1;
+      if (a.type === "former" && b.type !== "former") return 1;
+      if (a.type !== "former" && b.type === "former") return -1;
       return 0;
     });
   }, [people]);
@@ -57,7 +63,7 @@ export const MembersList: React.FC<MembersListProps> = ({
         `Person ${person.id.substring(0, 8)}`;
       const isCurrentUser = person.user_id === currentUserId;
       const isActive = person.type !== "former";
-      const canRemove = canRemovePerson(person, {
+      const canRemove = !isCurrentUser && canRemovePerson(person, {
         canManageMembers,
         currentUserId,
       });
@@ -73,7 +79,7 @@ export const MembersList: React.FC<MembersListProps> = ({
       const dateLabel = person.joined_at || person.created_at;
       return {
         person,
-        personName,
+        personName: isCurrentUser ? "You" : personName,
         isCurrentUser,
         isActive,
         canRemove,
@@ -112,12 +118,17 @@ export const MembersList: React.FC<MembersListProps> = ({
   }
 
   return (
-    <View style={{ gap: DENSE_CARD_GAP }}>
-      {rows.map((row) => {
+    <Surface
+      elevation={surface.elevation}
+      style={[
+        cardStyles.card,
+        { backgroundColor: surface.backgroundColor },
+      ]}
+    >
+      {rows.map((row, index) => {
         const {
           person,
           personName,
-          isCurrentUser,
           isActive,
           canRemove,
           isRemoving,
@@ -129,21 +140,30 @@ export const MembersList: React.FC<MembersListProps> = ({
         } = row;
 
         return (
-          <DenseListCard
-            key={person.id}
-            style={isRemoving ? styles.memberCardRemoving : undefined}
-          >
+          <View key={person.id}>
+            {index > 0 ? (
+              <View
+                style={[
+                  cardStyles.hairline,
+                  {
+                    backgroundColor: theme.colors.outlineVariant,
+                    marginLeft: 12 + DENSE_AVATAR_SIZE + 12,
+                  },
+                ]}
+              />
+            ) : null}
             <View
               style={[
-                styles.memberContent,
-                { opacity: isWorking ? 0.6 : 1, flex: 1 },
+                cardStyles.row,
+                isRemoving ? styles.memberCardRemoving : undefined,
+                { opacity: isWorking ? 0.6 : 1 },
               ]}
             >
               <PersonAvatar
                 name={personName}
                 uri={person.avatar_url}
                 personKey={person.id}
-                style={{ marginRight: 4, opacity: isActive ? 1 : 0.7 }}
+                style={{ opacity: isActive ? 1 : 0.7 }}
               />
               <View style={styles.memberLeft}>
                 <View style={{ flexDirection: "row", alignItems: "center" }}>
@@ -154,7 +174,7 @@ export const MembersList: React.FC<MembersListProps> = ({
                       isRemoving && { opacity: 0.6 },
                     ]}
                   >
-                    {personName}{isCurrentUser ? " (You)" : ""}
+                    {personName}
                     {!isActive ? " (Former)" : ""}
                   </Text>
                 </View>
@@ -207,37 +227,37 @@ export const MembersList: React.FC<MembersListProps> = ({
                           />
                         }
                       >
-                          {canInviteOrConnect ? (
-                            <>
-                              <Menu.Item
-                                title="Invite to SharedMoney"
-                                leadingIcon="email-outline"
-                                onPress={() => {
-                                  setMenuParticipantId(null);
-                                  onInvite?.(person);
-                                }}
-                              />
-                              <Menu.Item
-                                title="Connect account"
-                                leadingIcon="account-check-outline"
-                                onPress={() => {
-                                  setMenuParticipantId(null);
-                                  onConnect?.(person);
-                                }}
-                              />
-                            </>
-                          ) : null}
-                          {canBlock ? (
+                        {canInviteOrConnect ? (
+                          <>
                             <Menu.Item
-                              title={`Block ${personName} everywhere`}
-                              leadingIcon="account-cancel-outline"
+                              title="Invite to SharedMoney"
+                              leadingIcon="email-outline"
                               onPress={() => {
                                 setMenuParticipantId(null);
-                                onBlock?.(person);
+                                onInvite?.(person);
                               }}
                             />
-                          ) : null}
-                        </Menu>
+                            <Menu.Item
+                              title="Connect account"
+                              leadingIcon="account-check-outline"
+                              onPress={() => {
+                                setMenuParticipantId(null);
+                                onConnect?.(person);
+                              }}
+                            />
+                          </>
+                        ) : null}
+                        {canBlock ? (
+                          <Menu.Item
+                            title={`Block ${personName} everywhere`}
+                            leadingIcon="account-cancel-outline"
+                            onPress={() => {
+                              setMenuParticipantId(null);
+                              onBlock?.(person);
+                            }}
+                          />
+                        ) : null}
+                      </Menu>
                     ) : isWorking && !isRemoving ? (
                       <ActivityIndicator
                         size="small"
@@ -248,9 +268,27 @@ export const MembersList: React.FC<MembersListProps> = ({
                 ) : null}
               </View>
             </View>
-          </DenseListCard>
+          </View>
         );
       })}
-    </View>
+    </Surface>
   );
 };
+
+const cardStyles = StyleSheet.create({
+  card: {
+    borderRadius: DENSE_CARD_RADIUS,
+    overflow: "hidden",
+  },
+  row: {
+    minHeight: DENSE_ROW_MIN_HEIGHT,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  hairline: {
+    height: StyleSheet.hairlineWidth,
+  },
+});

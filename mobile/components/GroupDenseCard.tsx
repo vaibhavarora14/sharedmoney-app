@@ -7,7 +7,11 @@ import {
   densePeopleFromBalances,
   fallbackDensePerson,
 } from "../utils/denseListPeople";
-import { DENSE_AVATAR_SIZE } from "../utils/denseListTokens";
+import {
+  DENSE_AVATAR_SIZE,
+  DENSE_TX_STACK_MAX,
+  denseStackReservedWidth,
+} from "../utils/denseListTokens";
 import {
   groupListDenseAmountText,
   groupListDenseSubline,
@@ -41,7 +45,7 @@ export const GroupDenseCard: React.FC<GroupDenseCardProps> = ({
   accessibilityExtra = "",
 }) => {
   const theme = useTheme();
-  const people = densePeopleFromBalances(balances);
+  const people = densePeopleFromBalances(balances, { excludeUserId: currentUserId });
   const stack = people.length > 0
     ? people
     : [fallbackDensePerson(group.id, group.name)];
@@ -67,7 +71,9 @@ export const GroupDenseCard: React.FC<GroupDenseCardProps> = ({
             accessibilityLabel={`${group.name}${subline ? `, ${subline}` : ""}${amountText ? `, ${amountText}` : ""}${isNew ? ", new group" : ""}${hasUnreadActivity ? `, ${unreadActivityCount} unread ${unreadActivityCount === 1 ? "notification" : "notifications"}` : ""}${accessibilityExtra}`}
             style={expandedText ? styles.expandedCard : undefined}
           >
-            <AvatarStack people={stack} size={DENSE_AVATAR_SIZE} />
+            <View style={{ width: denseStackReservedWidth(DENSE_AVATAR_SIZE), flexShrink: 0 }}>
+              <AvatarStack people={stack} size={DENSE_AVATAR_SIZE} max={DENSE_TX_STACK_MAX} />
+            </View>
             <View style={styles.info}>
               <View style={styles.titleRow}>
                 <Text

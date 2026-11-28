@@ -141,8 +141,9 @@ test("dashboard creditor sees Alice owes you, not the viewer's own net row", () 
   assert.doesNotMatch(text(tree), /You owes you|You owe Alice/);
   const rows = settlementRows(tree);
   assert.equal(rows.length, 1);
-  assert.match(text(rows[0]), /\+\$50(?!\.00)/);
-  assert.equal(rows[0].props.accessibilityLabel, "Alice owes you, +$50");
+  assert.match(text(rows[0]), /\$50(?!\.00)/);
+  assert.doesNotMatch(text(rows[0]), /\+/);
+  assert.equal(rows[0].props.accessibilityLabel, "Alice owes you, $50");
   assert.equal(rows[0].props.accessibilityRole, "button");
 });
 test("dashboard debtor sees You owe Alice, never Alice owes you", () => {
@@ -151,14 +152,15 @@ test("dashboard debtor sees You owe Alice, never Alice owes you", () => {
   assert.doesNotMatch(text(tree), /Alice owes you|You owe You/);
   const rows = settlementRows(tree);
   assert.equal(rows.length, 1);
-  assert.match(text(rows[0]), /-\$50(?!\.00)/);
+  assert.match(text(rows[0]), /\$50(?!\.00)/);
+  assert.doesNotMatch(text(rows[0]), /-/);
 });
 test("dashboard uses the viewer's edge amount, not the counterparty's group net", () => {
   const tree = dashboard([balance("me", 20), balance("Alice", -100), balance("Bob", 80)]);
   assert.match(text(tree), /Alice owes you/);
   const rows = settlementRows(tree);
   assert.equal(rows.length, 1);
-  assert.match(text(rows[0]), /\+\$20(?!\.00)/);
+  assert.match(text(rows[0]), /\$20(?!\.00)/);
   assert.doesNotMatch(text(rows[0]), /100|80/);
 });
 test("dashboard recognizes viewer by participant id and keeps edge currencies", () => {
@@ -170,8 +172,9 @@ test("dashboard recognizes viewer by participant id and keeps edge currencies", 
   assert.match(text(tree), /You owe Bob/);
   const rows = settlementRows(tree);
   assert.equal(rows.length, 2);
-  assert.match(text(byId(tree, "group-settlement-rows")), /\+\$50(?!\.00)/);
-  assert.match(text(byId(tree, "group-settlement-rows")), /-€30(?!\.00)/);
+  assert.match(text(byId(tree, "group-settlement-rows")), /\$50(?!\.00)/);
+  assert.match(text(byId(tree, "group-settlement-rows")), /€30(?!\.00)/);
+  assert.doesNotMatch(text(byId(tree, "group-settlement-rows")), /\+|-/);
   assert.doesNotMatch(text(byId(tree, "group-settlement-rows")), /80\.00|20\.00/);
 });
 
@@ -187,7 +190,7 @@ test("dashboard unification renders compact viewer-involved rows in the settleme
   const rows = settlementRows(tree);
   assert.equal(rows.length, 1);
   assert.match(text(rows[0]), /Alice owes you/);
-  assert.match(text(rows[0]), /\+\$25(?!\.00)/);
+  assert.match(text(rows[0]), /\$25(?!\.00)/);
   assert.match(text(byId(tree, "group-position-number")), /\$25/);
   assert.match(text(byId(tree, "group-position-label")), /You're owed/);
   assert.doesNotMatch(text(tree), /Rates ›/);
@@ -282,7 +285,8 @@ test("dashboard disambiguates two members who share a first name", () => {
   assert.equal(rows.length, 2);
   assert.match(text(rows[0]), /Christopher F\. owes you/);
   assert.match(text(rows[1]), /Christopher M\. owes you/);
-  assert.match(text(byId(tree, "group-position-sentence")), /Christopher F\. owes ₹1,600 · Christopher M\. ₹800/);
+  assert.equal(nodes(tree).some((node) => node.props?.testID === "group-position-sentence"), false);
+  assert.doesNotMatch(text(tree), /Christopher F\. owes ₹1,600 · Christopher M\. ₹800/);
   assert.doesNotMatch(text(tree), /Christopher Fernandez|Christopher Mills/);
 });
 
@@ -662,7 +666,7 @@ test("GroupDashboard settlement rows are pressable only when pressed", () => {
   const row = rows[0];
   assert.equal(typeof row.props.onPress, "function");
   assert.equal(row.props.accessibilityRole, "button");
-  assert.equal(row.props.accessibilityLabel, "Alice owes you, +$50");
+  assert.equal(row.props.accessibilityLabel, "Alice owes you, $50");
   // Row height lives on DenseListCard's inner body (64pt), not host style props.
   assert.equal(pressed, null);
   row.props.onPress();
@@ -672,25 +676,20 @@ test("GroupDashboard settlement rows are pressable only when pressed", () => {
 
 test("dashboard accessible settlement label includes counterparty, direction, and signed amount", () => {
   const owed = dashboard([balance("me", 50), balance("Alice", -50)], { onSettlePress: () => {} });
-  assert.equal(settlementRows(owed)[0].props.accessibilityLabel, "Alice owes you, +$50");
+  assert.equal(settlementRows(owed)[0].props.accessibilityLabel, "Alice owes you, $50");
   const owe = dashboard([balance("me", -40), balance("Bob", 40)], { onSettlePress: () => {} });
-  assert.equal(settlementRows(owe)[0].props.accessibilityLabel, "You owe Bob, -$40");
+  assert.equal(settlementRows(owe)[0].props.accessibilityLabel, "You owe Bob, $40");
   const eur = dashboard([
     { ...balance("me", -30, "EUR") }, balance("Cara", 30, "EUR"),
   ], { onSettlePress: () => {} });
-  assert.equal(settlementRows(eur)[0].props.accessibilityLabel, "You owe Cara, -€30");
+  assert.equal(settlementRows(eur)[0].props.accessibilityLabel, "You owe Cara, €30");
 });
 
 test("dashboard settlement row layout keeps amount out of the label column", () => {
   const tree = dashboard([balance("me", 50), balance("Alice", -50)], { onSettlePress: () => {} });
   const row = settlementRows(tree)[0];
-  const rowStyle = flatten(row.props.style);
+  const rowStyle = flatten(typeof row.props.style === "function" ? undefined : row.props.style);
   assert.equal(rowStyle.height, undefined);
-  assert.ok((rowStyle.minHeight ?? 0) >= 44);
-  const content = row.props.children;
-  const contentStyle = flatten(content.props.style);
-  assert.equal(contentStyle.height, undefined);
-  assert.ok((contentStyle.minHeight ?? 0) >= 44);
   // App members: one line — name shrinks, "owes you" + amount do not; no caption.
   assert.match(text(row), /Alice owes you/);
   assert.equal(nodes(row).find(n => n.props?.testID === "settlement-row-presence"), undefined);
@@ -764,7 +763,7 @@ test("dashboard without onSettlePress is informational: no button role, chevron,
   assert.notEqual(row.props.accessibilityRole, "button");
   assert.equal(nodes(row).some(node => node.type === "Icon" && node.props.name === "chevron-right"), false);
   assert.match(text(row), /Alice owes you/);
-  assert.match(text(row), /\+\$50$/);
+  assert.match(text(row), /\$50$/);
 });
 
 test("GroupDetailsScreen wires balanceError and gates onSettlePress for active members only", () => {

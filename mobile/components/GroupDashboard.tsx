@@ -8,6 +8,7 @@ import {
 } from "react-native-paper";
 import { DenseListCard } from "./DenseListCard";
 import { PersonAvatar } from "./PersonAvatar";
+import { balanceAmountColor } from "../utils/balanceRowLabels";
 import { DENSE_CARD_GAP } from "../utils/denseListTokens";
 import { resolveGroupDashboardSlots } from "../utils/groupDashboardReservation";
 import { resolveGroupPosition } from "../utils/groupPosition";
@@ -241,9 +242,8 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
   const settlementRows = position.kind === "ready" ? position.rows : [];
 
 
-  const formatSignedBalance = (amount: number, currency: string, isOwed: boolean) => {
-    const bare = formatShareCurrency(Math.abs(amount), currency);
-    return isOwed ? `+${bare}` : `-${bare}`;
+  const formatSignedBalance = (amount: number, currency: string) => {
+    return formatShareCurrency(Math.abs(amount), currency);
   };
 
   const isSettled = !balanceError && !dashboardLoading && Boolean(currentUserId)
@@ -339,9 +339,9 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
       const rowKey =
         balance.participant_id || balance.user_id || `${name}-${balance.currency}`;
       const currency = balance.currency || defaultCurrency;
-      const amountColor = isOwed
-        ? theme.colors.onTertiaryContainer
-        : theme.colors.onSecondaryContainer;
+      const amountColor = balanceAmountColor(balance.amount, theme.colors, {
+        dark: theme.dark,
+      });
       const isConverted = !unifyEnabled || balance.currency.toUpperCase() === settlementCurrency.toUpperCase();
       const rowAction = onBalancePress ?? onSettlePress;
       const a11yName = isFormer ? `${name} (Former)` : name;
@@ -349,7 +349,7 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
       const a11yOwes = isOwed
         ? `${a11yName} owes you${a11yPresence}`
         : `You owe ${a11yName}${a11yPresence}`;
-      const signedAmount = formatSignedBalance(balance.amount, currency, isOwed);
+      const signedAmount = formatSignedBalance(balance.amount, currency);
       const nameColor = isFormer
         ? theme.colors.onSurfaceVariant
         : theme.colors.onSurface;
@@ -529,7 +529,21 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
           </Text>
         ) : null}
         {position.numberText ? (
-          <Text testID="group-position-number" style={styles.positionNumber}>
+          <Text
+            testID="group-position-number"
+            style={[
+              styles.positionNumber,
+              {
+                color: position.label === "You're owed" || position.label === "You owe"
+                  ? balanceAmountColor(
+                    position.label === "You're owed" ? 1 : -1,
+                    theme.colors,
+                    { dark: theme.dark },
+                  )
+                  : theme.colors.onSurface,
+              },
+            ]}
+          >
             {position.numberText}
           </Text>
         ) : null}
@@ -542,17 +556,6 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
             style={{ color: theme.colors.onSurfaceVariant }}
           >
             Show in one currency ›
-          </Text>
-        ) : null}
-        {position.sentence ? (
-          <Text
-            variant="bodySmall"
-            testID="group-position-sentence"
-            onPress={onOpenSettle}
-            accessibilityRole={onOpenSettle ? "button" : undefined}
-            style={{ color: theme.colors.onSurface }}
-          >
-            {position.sentence}
           </Text>
         ) : null}
         {position.showSettle ? (

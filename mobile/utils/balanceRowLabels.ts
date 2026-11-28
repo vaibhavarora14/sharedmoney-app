@@ -34,6 +34,7 @@ export function shouldHideBalanceChrome(
 }
 
 type BalancePalette = {
+  tertiary: string;
   onTertiaryContainer: string;
   onSecondaryContainer: string;
   secondary: string;
@@ -41,8 +42,8 @@ type BalancePalette = {
 };
 
 /**
- * Quieter owe / owed ink for stats and list amounts (#278).
- * Prefers on*Container tokens over saturated brand fills for readable contrast.
+ * Owe / owed ink for stats and list amounts.
+ * Positive uses the tertiary green in both themes (dark: #68D6C2, not onTertiaryContainer).
  */
 export function balanceAmountColor(
   amount: number,
@@ -50,6 +51,6 @@ export function balanceAmountColor(
   options?: { dark?: boolean },
 ): string {
   if (Math.abs(amount) < 0.005) return colors.onSurfaceVariant;
-  if (amount > 0) return colors.onTertiaryContainer;
+  if (amount > 0) return colors.tertiary;
   return options?.dark ? colors.secondary : colors.onSecondaryContainer;
 }

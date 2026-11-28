@@ -17,6 +17,15 @@ Deno.test("balance people skip blanks and keep first avatar per person", () => {
   assertEquals(people[0].avatarUrl, "https://example.com/a.png");
 });
 
+Deno.test("home stacks skip the viewer so titles show other people", () => {
+  const people = densePeopleFromBalances([
+    { user_id: "u-you", full_name: "You" },
+    { user_id: "u-asha", full_name: "Asha Rao" },
+    { user_id: "u-rohan", full_name: "Rohan Iyer" },
+  ], { excludeUserId: "u-you" });
+  assertEquals(people.map((person) => person.name), ["Asha Rao", "Rohan Iyer"]);
+});
+
 Deno.test("expense rows stack split people when there are two or more", () => {
   const people = densePeopleForExpense({
     payerName: "Rohan",
