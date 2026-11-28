@@ -15,6 +15,7 @@ import {
 import { ledgerDateSectionLabel } from "./ledgerDateSections";
 import { resolveLedgerParticipantName, type LedgerNameMember } from "./ledgerNames";
 import { formatShareCurrency } from "./settleShareMessage";
+import { formatPaidByLabel, resolveExpensePayers } from "./expensePayers";
 import {
   buildExpenseRowModel,
   paymentAmountText,
@@ -170,19 +171,27 @@ export function buildExpenseDetailModel(input: {
   const participants = input.participants ?? [];
   const members = input.members ?? [];
   const currency = input.transaction.currency || getDefaultCurrency();
-  const payerName = nameFor(
-    input.transaction.paid_by_participant_id,
-    input.transaction.paid_by,
+  const payers = resolveExpensePayers(input.transaction);
+  const payerNames = (payers.length > 0 ? payers : [{
+    participant_id: input.transaction.paid_by_participant_id ?? "",
+    user_id: input.transaction.paid_by,
+    amount: input.transaction.amount,
+  }]).map((payer) => nameFor(
+    payer.participant_id,
+    payer.user_id,
     input.viewerUserId,
     participants,
     members,
-  );
+  ));
+  const payerName = payerNames[0] || "Someone";
   const row = buildExpenseRowModel({
     amount: input.transaction.amount,
     currency,
     payerName,
+    payerNames,
     paidByParticipantId: input.transaction.paid_by_participant_id,
     paidByUserId: input.transaction.paid_by,
+    payers,
     splits: input.transaction.splits,
     viewer: {
       userId: input.viewerUserId,
@@ -203,7 +212,7 @@ export function buildExpenseDetailModel(input: {
     amountText: formatShareCurrency(Math.abs(input.transaction.amount), currency),
     metaLine: metaLine(input.transaction.date, input.transaction.category, input.now ?? new Date()),
     yourLine: yourLineFromNet(row.net, row.involvesViewer, currency),
-    paidBy: payerName,
+    paidBy: formatPaidByLabel(payerNames),
     paidTo: null,
     split: buildSplitPresentation(
       splits,

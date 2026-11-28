@@ -104,7 +104,7 @@ async function buildCandidates(supabase: SupabaseClient, periodKey: string): Pro
     fetchAllRows<ReminderTransaction>((f, t) =>
       supabase
         .from('transactions')
-        .select('id, group_id, amount, currency, paid_by_participant_id, transaction_splits ( participant_id, amount )')
+        .select('id, group_id, amount, currency, paid_by_participant_id, transaction_splits ( participant_id, amount ), transaction_payers ( participant_id, amount )')
         .eq('type', 'expense')
         .not('group_id', 'is', null)
         .range(f, t)

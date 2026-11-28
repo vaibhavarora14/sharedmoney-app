@@ -5,6 +5,7 @@ import { log } from '../_shared/logger.ts';
 import { createEmptyResponse, createSuccessResponse } from '../_shared/response.ts';
 import { fetchUserEmails } from '../_shared/user-email.ts';
 import { fetchUserProfiles } from '../_shared/user-profiles.ts';
+import { resolveExpensePayers } from '../_shared/payers.ts';
 import { isValidUUID } from '../_shared/validation.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { SUPABASE_SERVICE_ROLE_KEY, SUPABASE_URL } from '../_shared/env.ts';
@@ -64,6 +65,7 @@ interface TransactionWithSplits {
   currency: string;
   split_among?: string[] | null;
   transaction_splits?: TransactionSplit[];
+  transaction_payers?: TransactionSplit[];
 }
 
 interface StatsMemberBreakdownEntry {
@@ -177,6 +179,7 @@ function toStatsTransaction(tx: LedgerTransaction): TransactionWithSplits {
     paid_by_participant_id: tx.paid_by_participant_id,
     currency: tx.currency,
     transaction_splits: tx.transaction_splits,
+    transaction_payers: tx.transaction_payers,
   };
 }
 
@@ -226,9 +229,14 @@ function calculateGroupStatsFromLedger(
 
     addCurrencyAmount(groupTotal, currency, amount);
 
-    if (tx.paid_by_participant_id) {
-      const payerEntry = ensureMember(tx.paid_by_participant_id);
-      addCurrencyAmount(payerEntry.paid_totals, currency, amount);
+    const payers = resolveExpensePayers(tx);
+    let viewerPaid = 0;
+    for (const payer of payers) {
+      const payerEntry = ensureMember(payer.participant_id);
+      addCurrencyAmount(payerEntry.paid_totals, currency, payer.amount);
+      if (currentParticipantId && payer.participant_id === currentParticipantId) {
+        viewerPaid += payer.amount;
+      }
     }
 
     const splits = (tx.transaction_splits || [])
@@ -248,7 +256,7 @@ function calculateGroupStatsFromLedger(
     const mySplitAmount = currentParticipantId
       ? (splits.find((split) => split.participant_id === currentParticipantId)?.amount ?? null)
       : null;
-    const isPayer = !!(currentParticipantId && tx.paid_by_participant_id === currentParticipantId);
+    const isPayer = viewerPaid > 0;
     const involved = isPayer || mySplitAmount !== null;
 
     if (involved) {
@@ -259,7 +267,9 @@ function calculateGroupStatsFromLedger(
         transaction: tx,
         share_amount: mySplitAmount,
         is_payer: isPayer,
-        net_receivable: isPayer ? Math.round((amount - (mySplitAmount || 0)) * 100) / 100 : null,
+        net_receivable: isPayer
+          ? Math.round((viewerPaid - (mySplitAmount || 0)) * 100) / 100
+          : null,
       });
     }
   }

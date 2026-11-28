@@ -13,6 +13,11 @@ export type LedgerTransactionSplit = {
   amount: number | string;
 };
 
+export type LedgerTransactionPayer = {
+  participant_id?: string | null;
+  amount: number | string;
+};
+
 export type LedgerTransaction = {
   id: number;
   group_id?: string;
@@ -23,6 +28,7 @@ export type LedgerTransaction = {
   paid_by_participant_id: string | null;
   currency: string;
   transaction_splits?: LedgerTransactionSplit[];
+  transaction_payers?: LedgerTransactionPayer[];
 };
 
 export type LedgerParticipant = {
@@ -61,6 +67,10 @@ const BALANCE_TX_SELECT = `
   transaction_splits (
     participant_id,
     amount
+  ),
+  transaction_payers (
+    participant_id,
+    amount
   )
 `;
 
@@ -74,6 +84,10 @@ const STATS_TX_SELECT = `
   paid_by_participant_id,
   currency,
   transaction_splits (
+    participant_id,
+    amount
+  ),
+  transaction_payers (
     participant_id,
     amount
   )

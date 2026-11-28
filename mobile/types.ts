@@ -51,7 +51,8 @@ export interface Transaction {
   currency?: string;
   receipts?: TransactionReceipt[];
   paid_by?: string; // Legacy: User ID of who paid (deprecated, use paid_by_participant_id)
-  paid_by_participant_id?: string; // Participant who paid
+  paid_by_participant_id?: string; // Primary payer (first/compat column)
+  payers?: TransactionSplit[]; // From transaction_payers; omit for a single paid_by_participant_id
   split_among?: string[]; // Legacy: Array of user IDs/emails (deprecated, use split_among_participant_ids)
   split_among_participant_ids?: string[]; // Array of participant IDs to split among
   splits?: TransactionSplit[]; // From transaction_splits table (preferred for reading)

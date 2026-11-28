@@ -674,7 +674,7 @@ Deno.serve(async (req: Request) => {
           );
         }
 
-        const [splitResult, payerResult, settlementResult] = await Promise.all([
+        const [splitResult, payerResult, multiPayerResult, settlementResult] = await Promise.all([
           supabase
             .from("transaction_splits")
             .select("id")
@@ -684,6 +684,11 @@ Deno.serve(async (req: Request) => {
             .from("transactions")
             .select("id")
             .eq("paid_by_participant_id", participant.id)
+            .limit(1),
+          supabase
+            .from("transaction_payers")
+            .select("id")
+            .eq("participant_id", participant.id)
             .limit(1),
           supabase
             .from("settlements")
@@ -696,11 +701,13 @@ Deno.serve(async (req: Request) => {
 
         if (splitResult.error) return handleError(splitResult.error, "checking expense history", req);
         if (payerResult.error) return handleError(payerResult.error, "checking expense history", req);
+        if (multiPayerResult.error) return handleError(multiPayerResult.error, "checking expense history", req);
         if (settlementResult.error) return handleError(settlementResult.error, "checking settlement history", req);
 
         const hasHistory =
           (splitResult.data?.length || 0) > 0 ||
           (payerResult.data?.length || 0) > 0 ||
+          (multiPayerResult.data?.length || 0) > 0 ||
           (settlementResult.data?.length || 0) > 0;
         const plan = planPersonRemoval(participant, hasHistory);
 

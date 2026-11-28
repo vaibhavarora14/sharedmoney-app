@@ -1,3 +1,4 @@
+import { resolveExpensePayers } from './payers.ts';
 import { buildParticipantCanonicalResolver } from './participant-canonical.ts';
 import { VERSION_CONFIG } from './version-config.ts';
 
@@ -29,6 +30,7 @@ export interface ReminderTransaction {
   currency: string | null;
   paid_by_participant_id: string | null;
   transaction_splits?: ReminderTransactionSplit[] | null;
+  transaction_payers?: ReminderTransactionSplit[] | null;
 }
 
 export interface ReminderSettlement {
@@ -373,11 +375,15 @@ function resolveGroupBalances(input: BuildGroupSettlementEdgesInput): {
     if (transaction.group_id !== input.group.id) continue;
 
     const amount = toNumber(transaction.amount);
-    const payerId = transaction.paid_by_participant_id
-      ? canonicalParticipantId(transaction.paid_by_participant_id)
-      : null;
     const currency = transaction.currency || 'USD';
-    if (!payerId || amount === null) continue;
+    if (amount === null) continue;
+
+    const payers = resolveExpensePayers(transaction)
+      .map((payer) => ({
+        participant_id: canonicalParticipantId(payer.participant_id),
+        amount: payer.amount,
+      }))
+      .filter((payer) => !!payer.participant_id);
 
     const splits = (transaction.transaction_splits || [])
       .map((split) => ({
@@ -388,9 +394,11 @@ function resolveGroupBalances(input: BuildGroupSettlementEdgesInput): {
         !!split.participant_id && split.amount !== null
       );
 
-    if (splits.length === 0) continue;
+    if (payers.length === 0 || splits.length === 0) continue;
 
-    addBalance(balances, payerId, currency, amount);
+    for (const payer of payers) {
+      addBalance(balances, payer.participant_id, currency, payer.amount);
+    }
     for (const split of splits) {
       addBalance(balances, split.participant_id, currency, -split.amount);
     }

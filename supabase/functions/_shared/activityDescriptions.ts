@@ -16,6 +16,7 @@ interface TransactionSnapshot {
   group_id: string;
   paid_by?: string;
   paid_by_participant_id?: string;
+  payers?: Array<{ participant_id?: string; amount?: number }>;
   split_among?: string[];
   split_among_participant_ids?: string[];
   created_at: string;
@@ -110,6 +111,7 @@ export function formatFieldName(field: string): string {
     'type': 'Type',
     'paid_by': 'Paid by',
     'paid_by_participant_id': 'Paid by',
+    'payers': 'Paid by',
     'split_among': 'Splits',
     'split_among_participant_ids': 'Splits',
     'currency': 'Currency',
@@ -194,6 +196,23 @@ export function formatValue(
   
   if ((field === 'split_among_participant_ids' || field === 'split_among') && Array.isArray(value)) {
     return `${value.length} person${value.length !== 1 ? 's' : ''}`;
+  }
+
+  if (field === 'payers' && Array.isArray(value)) {
+    const ids = value
+      .map((entry) => {
+        if (entry && typeof entry === 'object' && 'participant_id' in entry) {
+          return (entry as { participant_id?: string }).participant_id;
+        }
+        return typeof entry === 'string' ? entry : null;
+      })
+      .filter((id): id is string => typeof id === 'string' && id.length > 0);
+    if (ids.length >= 3) return `${ids.length} people`;
+    if (ids.length === 2) {
+      return ids.map((id) => getParticipantDisplayName(id, participantMap)).join(' and ');
+    }
+    if (ids.length === 1) return getParticipantDisplayName(ids[0], participantMap);
+    return 'none';
   }
   
   if (Array.isArray(value)) {
@@ -317,13 +336,26 @@ function getParticipantDisplayName(
   return participantId.substring(0, 8) + '...';
 }
 
-function generateTransactionCreatedDescription(transaction: TransactionSnapshot): string {
+function generateTransactionCreatedDescription(
+  transaction: TransactionSnapshot,
+  participantMap?: Map<string, Participant>,
+): string {
   const amount = transaction.amount || 0;
   const currency = transaction.currency || 'USD';
   const description = transaction.description || 'transaction';
   const descriptionGlimpse = description.length > 30 
     ? description.substring(0, 30) + '...' 
     : description;
+  const payerIds = (transaction.payers ?? [])
+    .map((payer) => payer.participant_id)
+    .filter((id): id is string => typeof id === 'string' && id.length > 0);
+  if (payerIds.length >= 3) {
+    return `${payerIds.length} people paid ${formatCurrency(amount, currency)}`;
+  }
+  if (payerIds.length === 2) {
+    const names = payerIds.map((id) => getParticipantDisplayName(id, participantMap));
+    return `${names[0]} and ${names[1]} paid ${formatCurrency(amount, currency)}`;
+  }
   return `${formatCurrency(amount, currency)} - ${descriptionGlimpse}`;
 }
 
@@ -515,7 +547,7 @@ export function generateActivityDescription(
       } else {
         const transaction = extractTransactionFromSnapshot(snapshot, changes, 'transaction') as TransactionSnapshot | undefined;
         if (transaction) {
-          return generateTransactionCreatedDescription(transaction);
+          return generateTransactionCreatedDescription(transaction, participantMap);
         }
         return 'Added transaction';
       }

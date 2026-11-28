@@ -1,3 +1,4 @@
+import { resolveExpensePayers } from '../_shared/payers.ts';
 import { buildParticipantCanonicalResolver } from '../_shared/participant-canonical.ts';
 import { isValidUUID } from '../_shared/validation.ts';
 import type {
@@ -119,10 +120,15 @@ export function calculateGroupBalancesFromLedger(
 
     if (isNaN(totalAmount)) continue;
 
-    const paidByPid = tx.paid_by_participant_id;
-    if (!paidByPid) continue;
+    const payers = resolveExpensePayers(tx)
+      .map((payer) => {
+        const amount = typeof payer.amount === 'string' ? parseFloat(payer.amount) : payer.amount;
+        if (!payer.participant_id || isNaN(amount)) return undefined;
+        return { pid: canonicalParticipantId(payer.participant_id), amount };
+      })
+      .filter((payer): payer is { pid: string; amount: number } => !!payer);
 
-    const paidByKey = canonicalParticipantId(paidByPid);
+    if (payers.length === 0) continue;
 
     if (tx.transaction_splits && Array.isArray(tx.transaction_splits)) {
       const splits = tx.transaction_splits
@@ -137,7 +143,9 @@ export function calculateGroupBalancesFromLedger(
 
       if (splits.length === 0) continue;
 
-      updateBalance(paidByKey, currency, totalAmount);
+      for (const payer of payers) {
+        updateBalance(payer.pid, currency, payer.amount);
+      }
 
       for (const split of splits) {
         updateBalance(split.pid, currency, -split.amount);

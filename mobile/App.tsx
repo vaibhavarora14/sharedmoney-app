@@ -125,6 +125,10 @@ import {
   readDefaultSplitShot,
 } from "./screens/DefaultSplitPreviewScreen";
 import {
+  MultiPayerPreviewScreen,
+  readMultiPayerShot,
+} from "./screens/MultiPayerPreviewScreen";
+import {
   GroupExportPreviewScreen,
   readGroupExportShot,
 } from "./screens/GroupExportPreviewScreen";
@@ -1454,6 +1458,7 @@ function AppContent() {
   const showHomePolishPreview = previewParam === "home-polish";
   const showDenseCardsPreview = previewParam === "dense-cards";
   const showBalanceBreakdownPreview = previewParam === "balance-breakdown";
+  const showMultiPayerPreview = previewParam === "multi-payer";
 
   if (showCurrencyMergePreview) {
     return (
@@ -1497,6 +1502,17 @@ function AppContent() {
     return (
       <>
         <DenseCardsPreviewScreen frame={readDenseCardsFrame(href)} />
+        <StatusBar style={dark ? "light" : "dark"} />
+      </>
+    );
+  }
+
+  if (__DEV__ && showMultiPayerPreview) {
+    const href = Platform.OS === "web" && typeof window !== "undefined" ? window.location.href : "";
+    const dark = /(?:colorScheme|theme)=dark/i.test(href);
+    return (
+      <>
+        <MultiPayerPreviewScreen shot={readMultiPayerShot(href)} />
         <StatusBar style={dark ? "light" : "dark"} />
       </>
     );
