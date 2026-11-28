@@ -226,6 +226,14 @@ export function buildExpenseDetailModel(input: {
   };
 }
 
+/** Detail holds a snapshot; prefer the live feed row after receipt upload. */
+export function resolveExpenseDetailTransaction(
+  snapshot: Transaction,
+  feed: readonly Transaction[],
+): Transaction {
+  return feed.find((tx) => tx.id === snapshot.id) ?? snapshot;
+}
+
 export function buildPaymentDetailModel(input: {
   settlement: Settlement;
   viewerUserId?: string | null;

@@ -1,7 +1,11 @@
 import { assertEquals } from "jsr:@std/assert@1";
 import type { Participant, Settlement, Transaction } from "../types";
 import { emptyRateBook } from "./currencyMerge.ts";
-import { buildExpenseDetailModel, buildPaymentDetailModel } from "./transactionDetail.ts";
+import {
+  buildExpenseDetailModel,
+  buildPaymentDetailModel,
+  resolveExpenseDetailTransaction,
+} from "./transactionDetail.ts";
 
 const viewer = "me";
 const participants: Participant[] = [
@@ -156,4 +160,21 @@ Deno.test("payment detail is a title and an unsigned amount", () => {
   assertEquals(detail.paidBy, "Rahul");
   assertEquals(detail.paidTo, "You");
   assertEquals(detail.split.mode, "none");
+});
+
+Deno.test("expense detail prefers live feed receipts over the frozen snapshot", () => {
+  const snapshot = expense({ receipts: [] });
+  const live = expense({
+    receipts: [{
+      id: "abcdef12-3456-7890-abcd-ef1234567890",
+      transaction_id: 1,
+      group_id: "g",
+      storage_path: "g/1/abcdef12-3456-7890-abcd-ef1234567890.jpg",
+      content_type: "image/jpeg",
+    }],
+  });
+  const resolved = resolveExpenseDetailTransaction(snapshot, [live]);
+  assertEquals(resolved.receipts?.length, 1);
+  assertEquals(resolved.receipts?.[0].id, "abcdef12-3456-7890-abcd-ef1234567890");
+  assertEquals(resolveExpenseDetailTransaction(snapshot, []).receipts, []);
 });

@@ -46,6 +46,7 @@ import { useGroupLastExpenseSplitAmong } from "../hooks/useTransactions";
 import { Participant, Transaction } from "../types";
 import { normalizeTransactionReceipts } from "../utils/expenseReceipts";
 import { syncExpenseReceipts, type ReceiptDraft } from "../utils/expenseReceiptActions";
+import { commitExpenseReceiptsToCache } from "../utils/transactionOptimisticCache";
 import {
     filterCurrencies,
     getCurrencySymbol,
@@ -73,7 +74,6 @@ import {
     sumSelectedAmounts,
 } from "../utils/splits";
 import { useGroupDetails, useGroups } from "../hooks/useGroups";
-import { queryKeys } from "../hooks/queryKeys";
 import {
   SplitBillScreen,
   splitDraftFromExpense,
@@ -642,15 +642,16 @@ export const TransactionFormScreen: React.FC<TransactionFormScreenProps> = ({
       const savedId = saved?.id ?? transaction?.id;
       const savedGroupId = saved?.group_id ?? transaction?.group_id ?? effectiveGroupId;
       if (savedId && savedGroupId && (receiptDrafts.length > 0 || removedReceiptIds.length > 0)) {
-        await syncExpenseReceipts({
+        const receipts = await syncExpenseReceipts({
           groupId: savedGroupId,
           transactionId: savedId,
           drafts: receiptDrafts,
           removedIds: removedReceiptIds,
         });
         setRemovedReceiptIds([]);
-        queryClient.invalidateQueries({ queryKey: queryKeys.transactionsFeed(savedGroupId) });
+        await commitExpenseReceiptsToCache(queryClient, savedGroupId, savedId, receipts);
       }
+      onDismiss();
     } catch (error) {
       Alert.alert("Error", getUserFriendlyErrorMessage(error));
     } finally {
