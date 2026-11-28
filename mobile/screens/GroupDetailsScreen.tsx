@@ -8,6 +8,7 @@ import {
   Linking,
   NativeScrollEvent,
   NativeSyntheticEvent,
+  Modal,
   Platform,
   RefreshControl,
   ScrollView,
@@ -37,6 +38,8 @@ import {
   ActivityFeedRow,
 } from "../components/ActivityFeed";
 import { GroupDashboard } from "../components/GroupDashboard";
+import { SettlePayStep } from "../components/SettlePayStep";
+import { SettleUpPlan } from "../components/SettleUpPlan";
 import { GroupDefaultSplitSheet } from "../components/GroupDefaultSplitSheet";
 import { RecurringDueBanners, RecurringTemplatesSheet } from "../components/RecurringTemplatesSheet";
 import { BalanceShareLinkSheet } from "../components/BalanceShareLinkSheet";
@@ -136,6 +139,14 @@ import {
   settleRemindAudienceFromPresence,
 } from "../utils/settlementPresence";
 import { shareSettleDraft } from "../utils/shareSettleDraft";
+import {
+  paymentInvolvement,
+  settlementInputFromPayment,
+  settlePayMethodNote,
+  simplestSettlementPlan,
+  type SettlementPayment,
+  type SettlePayMethod,
+} from "../utils/simplestSettlementPlan";
 import type { GroupShareSummaryPayload } from "../components/GroupDashboard";
 import {
   getUserFriendlyErrorMessage,
@@ -298,6 +309,11 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
   const [searchFilter, setSearchFilter] = useState<TransactionSearchFilter>("all");
   const [searchOpen, setSearchOpen] = useState(false);
   const [settleListOpen, setSettleListOpen] = useState(false);
+  const [showSettlePlan, setShowSettlePlan] = useState(false);
+  const [settlePlanPayments, setSettlePlanPayments] = useState<SettlementPayment[]>([]);
+  const [tickedSettleKeys, setTickedSettleKeys] = useState<Set<string>>(() => new Set());
+  const [settlePayPayment, setSettlePayPayment] = useState<SettlementPayment | null>(null);
+  const [recordingSettleKey, setRecordingSettleKey] = useState<string | null>(null);
   const [showBalanceNudges, setShowBalanceNudges] = useState(false);
   const [showRecurringTemplates, setShowRecurringTemplates] = useState(false);
   const [showBalanceShareLinks, setShowBalanceShareLinks] = useState(false);
@@ -1416,6 +1432,64 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     setShowSettlementForm(true);
   };
 
+  const openSettlePlan = () => {
+    setSettlePlanPayments(simplestSettlementPlan(groupBalances));
+    setTickedSettleKeys(new Set());
+    setSettlePayPayment(null);
+    setShowSettlePlan(true);
+    setSettleListOpen(true);
+  };
+
+  const recordPlanPayment = async (payment: SettlementPayment, notes?: string) => {
+    const payload = settlementInputFromPayment(group.id, payment, notes);
+    if (!payload) {
+      showErrorAlert(new Error("Missing people on this payment"), signOut, "Could not record settlement");
+      return;
+    }
+    setRecordingSettleKey(payment.key);
+    try {
+      await createSettlement.mutate(payload);
+      setTickedSettleKeys((current) => new Set(current).add(payment.key));
+      setSettlePayPayment(null);
+    } catch (error) {
+      showErrorAlert(error, signOut, "Could not record settlement");
+    } finally {
+      setRecordingSettleKey(null);
+    }
+  };
+
+  const handlePlanAction = (payment: SettlementPayment) => {
+    if (!isActiveMember || balancesError) return;
+    const viewerParticipantId = participants.find((person) => person.user_id === session?.user?.id)?.id;
+    const involvement = paymentInvolvement(payment, session?.user?.id, viewerParticipantId);
+    if (involvement === "pay") {
+      setSettlePayPayment(payment);
+      return;
+    }
+    void recordPlanPayment(payment);
+  };
+
+  const handlePayMethod = (method: SettlePayMethod) => {
+    const payment = settlePayPayment;
+    if (!payment) return;
+    if (method === "upi") {
+      const viewerParticipantId = participants.find((person) => person.user_id === session?.user?.id)?.id;
+      const counterparty = paymentInvolvement(payment, session?.user?.id, viewerParticipantId) === "pay"
+        ? payment.to
+        : payment.from;
+      handleSettleUp({
+        user_id: counterparty.userId || "",
+        participant_id: counterparty.participantId || undefined,
+        full_name: counterparty.name,
+        avatar_url: counterparty.avatarUrl,
+        amount: -payment.amount,
+        currency: payment.currency,
+      });
+      return;
+    }
+    void recordPlanPayment(payment, settlePayMethodNote(method));
+  };
+
   const handleBalancePress = (balance: Balance) => {
     if (balancesError) return;
     setBreakdownBalance(balance);
@@ -1614,6 +1688,10 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
     notes?: string;
   }) => {
     await createSettlement.mutate(settlementData);
+    if (settlePayPayment) {
+      setTickedSettleKeys((current) => new Set(current).add(settlePayPayment.key));
+      setSettlePayPayment(null);
+    }
     setShowSettlementForm(false);
     setSettlingBalance(null);
   };
@@ -2586,7 +2664,7 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
                 defaultCurrency={getDefaultCurrency()}
                 settleListOpen={settleListOpen}
                 loadingLine={showBalanceLine ? "Loading balances…" : null}
-                onOpenSettle={() => setSettleListOpen(true)}
+                onOpenSettle={openSettlePlan}
                 onRemind={remindBalance ? () => handleRemindBalance(remindBalance) : undefined}
                 activeMemberCount={settleAudienceCount}
                 membersKnown={
@@ -2947,6 +3025,38 @@ export const GroupDetailsScreen: React.FC<GroupDetailsScreenProps> = ({
         onSettleUp={isActiveMember && !balancesError ? handleSettleFromBreakdown : undefined}
       />
 
+      <Modal
+        visible={showSettlePlan && !showSettlementForm}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => {
+          if (settlePayPayment) {
+            setSettlePayPayment(null);
+            return;
+          }
+          setShowSettlePlan(false);
+        }}
+      >
+        {settlePayPayment ? (
+          <SettlePayStep
+            payment={settlePayPayment}
+            busy={recordingSettleKey === settlePayPayment.key}
+            onBack={() => setSettlePayPayment(null)}
+            onChoose={handlePayMethod}
+          />
+        ) : (
+          <SettleUpPlan
+            groupName={group.name}
+            payments={settlePlanPayments}
+            currentUserId={session?.user?.id}
+            currentParticipantId={participants.find((person) => person.user_id === session?.user?.id)?.id}
+            tickedKeys={tickedSettleKeys}
+            recordingKey={recordingSettleKey}
+            onBack={() => setShowSettlePlan(false)}
+            onAction={handlePlanAction}
+          />
+        )}
+      </Modal>
       {/* Settlement form modal — Remind lives here for owes-you creates only */}
       <SettlementFormScreen
         visible={showSettlementForm}

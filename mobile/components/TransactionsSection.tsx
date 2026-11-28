@@ -175,13 +175,14 @@ export const LedgerRow: React.FC<LedgerRowProps> = ({
   const impactColor = model.impactMuted || model.net == null
     ? theme.colors.onSurfaceVariant
     : balanceAmountColor(model.net, theme.colors, { dark: theme.dark });
-  const people = densePeopleForExpense({
+    const people = densePeopleForExpense({
     payerName,
     paidByParticipantId: transaction.paid_by_participant_id,
     paidByUserId: transaction.paid_by,
     splits: transaction.splits,
     participants,
     members,
+    excludeUserId: currentUserId,
   });
 
   return (

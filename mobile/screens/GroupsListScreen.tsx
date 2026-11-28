@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useQueryClient } from "@tanstack/react-query";
-import React, { useEffect, useState } from "react";
-import { Platform, ScrollView, StyleSheet, TouchableOpacity, useWindowDimensions, View } from "react-native";
+import React, { useEffect, useMemo, useState } from "react";
+import { Modal, Platform, ScrollView, StyleSheet, TouchableOpacity, useWindowDimensions, View } from "react-native";
 import {
   ActivityIndicator,
   Appbar,
@@ -32,8 +32,9 @@ import {
   useUpdateNotificationPreference,
 } from "../hooks/useNotifications";
 import { enablePushNotifications } from "../services/pushNotifications";
+import { useCreateSettlement } from "../hooks/useSettlements";
 import { supabase } from "../supabase";
-import { Group } from "../types";
+import { Balance, Group, Participant } from "../types";
 import { showErrorAlert } from "../utils/errorHandling";
 import {
   getUserFriendlyErrorMessage,
@@ -66,9 +67,22 @@ import {
   type OneTimeBillsHomeSummary,
   type RecentBillSplit,
 } from "../utils/recentBillSplits";
+import { HomeSettleUpList } from "../components/HomeSettleUpList";
 import { QuickSettleSheet, type QuickSettleSource } from "../components/QuickSettleSheet";
+import { SettlePayStep } from "../components/SettlePayStep";
+import { SettleUpPlan } from "../components/SettleUpPlan";
+import { getDefaultCurrency } from "../utils/currency";
+import { homeSettleGroups, type HomeSettleGroupPlan } from "../utils/homeSettleGroups";
 import { buildDirectHomeRows, directPeopleForHome, type DirectBalanceTone } from "../utils/quickSettle";
+import {
+  paymentInvolvement,
+  settlementInputFromPayment,
+  settlePayMethodNote,
+  type SettlementPayment,
+  type SettlePayMethod,
+} from "../utils/simplestSettlementPlan";
 import { CreateGroupScreen } from "./CreateGroupScreen";
+import { SettlementFormScreen } from "./SettlementFormScreen";
 import { SplitBillScreen } from "./SplitBillScreen";
 
 interface GroupsListScreenProps {
@@ -102,6 +116,17 @@ function spokenGroupBalance(
     formatShareCurrency(Math.abs(main.amount), main.currency),
   );
   return material.length > 1 ? `${words} (+)` : words;
+}
+
+function participantsFromBalances(groupId: string, balances: Balance[]): Participant[] {
+  return balances.map((row, index) => ({
+    id: row.participant_id || `p-${index}`,
+    group_id: groupId,
+    user_id: row.user_id,
+    type: "member",
+    full_name: row.full_name ?? null,
+    avatar_url: row.avatar_url ?? null,
+  }));
 }
 
 function directRowSubline(tone: DirectBalanceTone): "You're owed" | "You owe" | "Settled" | "Mixed" {
@@ -228,6 +253,12 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
   const [showCreateGroup, setShowCreateGroup] = useState<boolean>(false);
   const [quickSettleOpen, setQuickSettleOpen] = useState(false);
   const [quickSettleSource, setQuickSettleSource] = useState<QuickSettleSource>("home_header");
+  const [homeSettleOpen, setHomeSettleOpen] = useState(false);
+  const [homePlan, setHomePlan] = useState<HomeSettleGroupPlan | null>(null);
+  const [homeTickedKeys, setHomeTickedKeys] = useState<Set<string>>(() => new Set());
+  const [homeSettlePay, setHomeSettlePay] = useState<SettlementPayment | null>(null);
+  const [homeRecordingKey, setHomeRecordingKey] = useState<string | null>(null);
+  const [homeUpiBalance, setHomeUpiBalance] = useState<Balance | null>(null);
   const [showSplitBill, setShowSplitBill] = useState(false);
   const [splitBillToken, setSplitBillToken] = useState<string | undefined>();
   const [recentBills, setRecentBills] = useState<RecentBillSplit[]>([]);
@@ -258,6 +289,9 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
     hasData: balancesHaveData,
     refetch: refetchBalances,
   } = useBalances();
+  const createSettlement = useCreateSettlement(() => {
+    void refetchBalances();
+  });
   useEffect(() => {
     if (!user?.id || !balancesHaveData) return;
     void rememberAllBalances(AsyncStorage, user.id, balancesData);
@@ -405,6 +439,75 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
   const openQuickSettle = (source: QuickSettleSource) => {
     setQuickSettleSource(source);
     setQuickSettleOpen(true);
+  };
+
+  const homeSettleRows = useMemo(
+    () => homeSettleGroups(
+      (balancesData?.group_balances ?? [])
+        .filter((entry) => entry.group_kind !== "direct")
+        .map((entry) => ({
+          groupId: entry.group_id,
+          groupName: entry.group_name,
+          balances: entry.balances,
+        })),
+      user?.id,
+    ),
+    [balancesData?.group_balances, user?.id],
+  );
+
+  const closeHomeSettle = () => {
+    setHomeSettleOpen(false);
+    setHomePlan(null);
+    setHomeSettlePay(null);
+    setHomeUpiBalance(null);
+    setHomeTickedKeys(new Set());
+  };
+
+  const recordHomePayment = async (payment: SettlementPayment, notes?: string) => {
+    if (!homePlan) return;
+    const payload = settlementInputFromPayment(homePlan.groupId, payment, notes);
+    if (!payload) {
+      showErrorAlert(new Error("Missing people on this payment"), signOut, "Could not record settlement");
+      return;
+    }
+    setHomeRecordingKey(payment.key);
+    try {
+      await createSettlement.mutate(payload);
+      setHomeTickedKeys((current) => new Set(current).add(payment.key));
+      setHomeSettlePay(null);
+    } catch (error) {
+      showErrorAlert(error, signOut, "Could not record settlement");
+    } finally {
+      setHomeRecordingKey(null);
+    }
+  };
+
+  const handleHomePlanAction = (payment: SettlementPayment) => {
+    const involvement = paymentInvolvement(payment, user?.id);
+    if (involvement === "pay") {
+      setHomeSettlePay(payment);
+      return;
+    }
+    void recordHomePayment(payment);
+  };
+
+  const handleHomePayMethod = (method: SettlePayMethod) => {
+    const payment = homeSettlePay;
+    if (!payment) return;
+    if (method === "upi") {
+      const involvement = paymentInvolvement(payment, user?.id);
+      const counterparty = involvement === "pay" ? payment.to : payment.from;
+      setHomeUpiBalance({
+        user_id: counterparty.userId || "",
+        participant_id: counterparty.participantId || undefined,
+        full_name: counterparty.name,
+        avatar_url: counterparty.avatarUrl,
+        amount: -payment.amount,
+        currency: payment.currency,
+      });
+      return;
+    }
+    void recordHomePayment(payment, settlePayMethodNote(method));
   };
 
   useEffect(() => {
@@ -683,13 +786,19 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                 mode="contained-tonal"
                 buttonColor={theme.colors.primaryContainer}
                 textColor={theme.colors.onPrimaryContainer}
-                onPress={() => openQuickSettle("home_header")}
+                onPress={() => {
+                  setHomePlan(null);
+                  setHomeSettlePay(null);
+                  setHomeUpiBalance(null);
+                  setHomeTickedKeys(new Set());
+                  setHomeSettleOpen(true);
+                }}
                 testID="home-settle-pill"
                 style={styles.settlePill}
                 contentStyle={{ minHeight: 44 }}
                 labelStyle={{ fontWeight: "700" }}
               >
-                Settle up with someone
+                Settle up
               </Button>
 
               <View style={styles.denseList}>
@@ -911,6 +1020,77 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
           if (group) handleGroupPress(group);
         }}
       />
+      <Modal
+        visible={homeSettleOpen && !homeUpiBalance}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => {
+          if (homeSettlePay) {
+            setHomeSettlePay(null);
+            return;
+          }
+          if (homePlan) {
+            setHomePlan(null);
+            return;
+          }
+          closeHomeSettle();
+        }}
+      >
+        {homeSettlePay ? (
+          <SettlePayStep
+            payment={homeSettlePay}
+            busy={homeRecordingKey === homeSettlePay.key}
+            onBack={() => setHomeSettlePay(null)}
+            onChoose={handleHomePayMethod}
+          />
+        ) : homePlan ? (
+          <SettleUpPlan
+            groupName={homePlan.groupName}
+            payments={homePlan.payments}
+            currentUserId={user?.id}
+            tickedKeys={homeTickedKeys}
+            recordingKey={homeRecordingKey}
+            onBack={() => setHomePlan(null)}
+            onAction={handleHomePlanAction}
+          />
+        ) : (
+          <HomeSettleUpList
+            rows={homeSettleRows}
+            onBack={closeHomeSettle}
+            onOpenGroup={(groupId) => {
+              const row = homeSettleRows.find((item) => item.groupId === groupId);
+              if (!row) return;
+              setHomePlan(row);
+              setHomeTickedKeys(new Set());
+              setHomeSettlePay(null);
+            }}
+          />
+        )}
+      </Modal>
+      {homePlan ? (
+        <SettlementFormScreen
+          visible={!!homeUpiBalance}
+          balance={homeUpiBalance}
+          groupMembers={[]}
+          participants={participantsFromBalances(
+            homePlan.groupId,
+            balancesData?.group_balances?.find((entry) => entry.group_id === homePlan.groupId)?.balances ?? [],
+          )}
+          currentUserId={user?.id || ""}
+          groupId={homePlan.groupId}
+          groupName={homePlan.groupName}
+          defaultCurrency={getDefaultCurrency()}
+          onSave={async (data) => {
+            await createSettlement.mutate(data);
+            if (homeSettlePay) {
+              setHomeTickedKeys((current) => new Set(current).add(homeSettlePay.key));
+              setHomeSettlePay(null);
+            }
+            setHomeUpiBalance(null);
+          }}
+          onDismiss={() => setHomeUpiBalance(null)}
+        />
+      ) : null}
     </View>
   );
 };

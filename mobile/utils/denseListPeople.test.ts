@@ -39,6 +39,21 @@ Deno.test("expense rows stack split people when there are two or more", () => {
   assertEquals(people[1].name, "Rohan Iyer");
 });
 
+Deno.test("expense stacks skip the viewer the way Home does", () => {
+  const people = densePeopleForExpense({
+    payerName: "You",
+    paidByParticipantId: "p-you",
+    paidByUserId: "u-you",
+    excludeUserId: "u-you",
+    splits: [
+      { participant_id: "p-you", user_id: "u-you", full_name: "You" },
+      { participant_id: "p-rohan", user_id: "u-rohan", full_name: "Rohan Iyer" },
+      { participant_id: "p-meera", user_id: "u-meera", full_name: "Meera Shah" },
+    ],
+  });
+  assertEquals(people.map((person) => person.name), ["Rohan Iyer", "Meera Shah"]);
+});
+
 Deno.test("expense row falls back to the payer when splits are missing", () => {
   const people = densePeopleForExpense({
     payerName: "Meera",
@@ -48,7 +63,7 @@ Deno.test("expense row falls back to the payer when splits are missing", () => {
   assertEquals(people, [fallbackDensePerson("p-meera", "Meera")]);
 });
 
-Deno.test("payment rows show from and to people", () => {
+Deno.test("payment rows keep payer then payee as a direction pair", () => {
   const people = densePeopleForPayment({
     fromName: "Asha",
     toName: "Rohan",
@@ -60,4 +75,20 @@ Deno.test("payment rows show from and to people", () => {
     ],
   });
   assertEquals(people.map((person) => person.name), ["Asha Rao", "Rohan Iyer"]);
+});
+
+Deno.test("payment rows keep the viewer when they are the payee", () => {
+  const people = densePeopleForPayment({
+    fromName: "Rohan Iyer",
+    toName: "You",
+    fromParticipantId: "p-rohan",
+    fromUserId: "u-rohan",
+    toParticipantId: "p-you",
+    toUserId: "u-you",
+    participants: [
+      { id: "p-rohan", user_id: "u-rohan", full_name: "Rohan Iyer" },
+      { id: "p-you", user_id: "u-you", full_name: "You" },
+    ],
+  });
+  assertEquals(people.map((person) => person.name), ["Rohan Iyer", "You"]);
 });

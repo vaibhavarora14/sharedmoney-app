@@ -95,10 +95,15 @@ export function densePeopleForExpense(input: {
   }> | null;
   participants?: LedgerNameSource[];
   members?: LedgerNameSource[];
+  excludeUserId?: string;
 }): DensePerson[] {
   const sources = [...(input.participants ?? []), ...(input.members ?? [])];
-  const fromSplits = densePeopleFromBalances(input.splits ?? []);
-  if (fromSplits.length >= 2) return fromSplits;
+  const fromSplits = densePeopleFromBalances(input.splits ?? [], {
+    excludeUserId: input.excludeUserId,
+  });
+  if (fromSplits.length > 0) return fromSplits;
+  const fallbackSplits = densePeopleFromBalances(input.splits ?? []);
+  if (fallbackSplits.length >= 2) return fallbackSplits;
   const payer = lookupPerson(input.paidByParticipantId, input.paidByUserId, [
     ...fromSplits.map((person) => ({
       id: person.key,
@@ -130,18 +135,19 @@ export function densePeopleForPayment(input: {
   members?: LedgerNameSource[];
 }): DensePerson[] {
   const sources = [...(input.participants ?? []), ...(input.members ?? [])];
-  const people: DensePerson[] = [];
   const from = lookupPerson(input.fromParticipantId, input.fromUserId, sources);
   const to = lookupPerson(input.toParticipantId, input.toUserId, sources);
-  if (from) pushUnique(people, from);
-  else people.push(fallbackDensePerson(
-    input.fromParticipantId || input.fromUserId || "from",
-    input.fromName,
-  ));
-  if (to) pushUnique(people, to);
-  else people.push(fallbackDensePerson(
-    input.toParticipantId || input.toUserId || "to",
-    input.toName,
-  ));
-  return people;
+  const payer = from
+    ? { key: personKey(from) || input.fromParticipantId || input.fromUserId || "from", name: personName(from) || input.fromName, avatarUrl: from.avatar_url || null }
+    : fallbackDensePerson(
+      input.fromParticipantId || input.fromUserId || "from",
+      input.fromName,
+    );
+  const payee = to
+    ? { key: personKey(to) || input.toParticipantId || input.toUserId || "to", name: personName(to) || input.toName, avatarUrl: to.avatar_url || null }
+    : fallbackDensePerson(
+      input.toParticipantId || input.toUserId || "to",
+      input.toName,
+    );
+  return [payer, payee];
 }
