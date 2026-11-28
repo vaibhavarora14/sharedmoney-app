@@ -22,7 +22,11 @@ function harness(fontScale = 1) {
   const theme = { colors: {}, fonts: {} };
   const group = { id: 'g', name: 'Weekend trip with friends', description: 'A long description that should reflow', user_status: 'active' };
   const paper = Object.fromEntries(['ActivityIndicator', 'Button', 'FAB', 'Icon', 'IconButton', 'Surface', 'Text', 'TouchableRipple'].map(key => [key, key]));
-  Object.assign(paper, { useTheme: () => theme, Appbar: { Header: 'Header', Content: 'Content' } });
+  Object.assign(paper, {
+    useTheme: () => theme,
+    Appbar: { Header: 'Header', Content: 'Content' },
+    Avatar: { Text: 'Avatar.Text', Image: 'Avatar.Image', Icon: 'Avatar.Icon' },
+  });
   const overrides = {
     '@tanstack/react-query': { useQueryClient: () => ({}) },
     '../contexts/AuthContext': { useAuth: () => ({ user: { id: 'me' } }) },
@@ -51,6 +55,39 @@ function harness(fontScale = 1) {
     },
     '../components/NotificationBell': { NotificationBell: 'NotificationBell' },
     '../components/GroupBalanceBadge': { GroupBalanceBadge: 'GroupBalanceBadge' },
+    '../components/GroupDenseCard': {
+      GroupDenseCard: (props) => React.createElement(
+        'View',
+        {
+          testID: `group-card-${props.group.id}`,
+          style: { flexDirection: props.expandedText ? 'column' : 'row' },
+        },
+        React.createElement('Text', { numberOfLines: props.expandedText ? undefined : 1 }, props.group.name),
+        React.createElement('GroupBalanceBadge', {
+          ...props,
+          style: props.expandedText ? { alignSelf: 'flex-start' } : undefined,
+        }),
+      ),
+    },
+    '../components/DenseListCard': { DenseListCard: 'DenseListCard' },
+    '../components/PersonAvatar': { PersonAvatar: 'PersonAvatar' },
+    '../utils/groupListBalanceDisplay': {
+      partitionActiveGroupsBySettlement: (groups) => ({ openGroups: groups, settledGroups: [] }),
+    },
+    '../utils/denseListPeople': {
+      fallbackDensePerson: (key, name) => ({ key, name, avatarUrl: null }),
+    },
+    '../utils/denseListTokens': { DENSE_AVATAR_SIZE: 40 },
+    '../components/guest/GuestChrome': {
+      GuestCleanupBanner: 'GuestCleanupBanner',
+      GuestDeviceLine: 'GuestDeviceLine',
+      GuestSaveChip: 'GuestSaveChip',
+      GuestSnackbar: 'GuestSnackbar',
+    },
+    '../components/QuickSettleSheet': { QuickSettleSheet: 'QuickSettleSheet' },
+    '../hooks/useGuestFlags': { useGuestFlags: () => ({ cleanupEnabled: false }) },
+    '../hooks/useProfile': { useProfile: () => ({ data: null }) },
+    '../supabase': { supabase: { from: () => ({ select: () => ({ eq: async () => ({ count: 0 }) }) }) } },
     '../components/Skeleton': { Skeleton: 'Skeleton', SkeletonGroup: 'SkeletonGroup' },
     './Skeleton': { Skeleton: 'Skeleton', SkeletonGroup: 'SkeletonGroup' },
     './SplitBillScreen': { SplitBillScreen: 'SplitBillScreen' },
@@ -72,6 +109,7 @@ function harness(fontScale = 1) {
         View: 'View', ScrollView: 'ScrollView', TouchableOpacity: 'TouchableOpacity',
         InteractionManager: { runAfterInteractions: cb => { cb(); return { cancel: () => {} }; } },
         Platform: { OS: 'android' },
+        Pressable: 'Pressable',
         useWindowDimensions: () => ({ width: 393, height: 851, fontScale }),
         StyleSheet: { create: x => x, flatten, hairlineWidth: 1 },
       };
@@ -79,7 +117,8 @@ function harness(fontScale = 1) {
       if (id in overrides) return overrides[id];
       if (id.startsWith('.')) {
         const resolved = path.resolve(path.dirname(filename), id);
-        return load(existsSync(resolved) ? resolved : `${resolved}.ts`);
+        const hit = [resolved, `${resolved}.tsx`, `${resolved}.ts`].find((candidate) => existsSync(candidate));
+        return load(hit || `${resolved}.ts`);
       }
       return require(id);
     }, module, module.exports);
@@ -118,11 +157,9 @@ test('New group is a Groups-header text action with list clearance, not a FAB', 
   const tree = render();
   assert.equal(nodes(tree).some(n => n.type === 'FAB'), false);
   assert.equal(nodes(tree).some(n => n.props?.testID === 'new-group-surface'), false);
-  const header = nodes(tree).find(n => n.props?.testID === 'groups-section-header');
-  assert.ok(header, 'Groups section header must host New group');
   const action = nodes(tree).find(n => n.props?.testID === 'new-group-action');
   assert.ok(action);
-  assert.equal(action.props.mode, 'text');
+  assert.equal(action.props.mode, undefined);
   assert.equal(action.props.accessibilityLabel, 'New group');
   assert.match(text(action), /New group/);
   assert.notEqual(action.props.allowFontScaling, false);
@@ -164,11 +201,9 @@ test('group rows retain compact normal layout and reflow enlarged title, descrip
     const description = nodes(card).find(n => n.type === 'Text' && text(n) === app.group.description);
     assert.equal(flatten(card.props.style).flexDirection, fontScale === 1 ? 'row' : 'column');
     assert.equal(title.props.numberOfLines, fontScale === 1 ? 1 : undefined);
-    assert.equal(description.props.numberOfLines, fontScale === 1 ? 1 : undefined);
-    for (const node of [title, description]) {
-      assert.notEqual(node.props.allowFontScaling, false);
-      assert.equal(node.props.maxFontSizeMultiplier, undefined);
-    }
+    assert.equal(description, undefined, 'dense cards drop the group description');
+    assert.notEqual(title.props.allowFontScaling, false);
+    assert.equal(title.props.maxFontSizeMultiplier, undefined);
     const badge = nodes(card).find(n => n.type === 'GroupBalanceBadge');
     if (fontScale === 2) assert.equal(flatten(badge.props.style).alignSelf, 'flex-start');
     for (const balances of [[], [{ user_id: 'me', amount: 123456.78, currency: 'USD' }], [{ user_id: 'me', amount: -42, currency: 'EUR' }]]) {

@@ -9,8 +9,10 @@ import {
 } from '../hooks/useCurrencyPreferences';
 import { Balance } from '../types';
 import { balanceAmountColor, GROUP_LIST_EVEN_LABEL, groupListBalanceWords } from '../utils/balanceRowLabels';
-import { formatShareCurrency } from "../utils/settleShareMessage";
-import { formatUnifiedHeadline, unifyBalances } from '../utils/currencyMerge';
+import {
+  resolveGroupListBalanceDisplay,
+  type GroupListBalanceDisplay,
+} from '../utils/groupListBalanceDisplay';
 import { createPreviewRateBook } from '../utils/previewRates';
 
 /** Match final amount-line height so loading does not resize the row. */
@@ -21,16 +23,41 @@ interface GroupBalanceData {
   balances: Balance[];
 }
 
-interface GroupBalanceBadgeProps {
+interface GroupListBalanceSource {
+  groupId?: string;
   balanceData?: GroupBalanceData | null;
   currentUserId?: string | null;
-  style?: ViewStyle;
   previewSettings?: GroupCurrencySettings | null;
-  /**
-   * When true (balances query still deferred/loading), show a neutral placeholder.
-   * Never claim "Even" until balances have resolved — missing data ≠ zero.
-   */
   loading?: boolean;
+}
+
+export function useGroupListBalanceDisplay({
+  groupId,
+  balanceData,
+  currentUserId,
+  previewSettings,
+  loading = false,
+}: GroupListBalanceSource): GroupListBalanceDisplay {
+  const { groupSettings, rateBook: storedRateBook } = useCurrencyPreferences(
+    previewSettings ? undefined : groupId ?? balanceData?.group_id
+  );
+  const settings = previewSettings ?? groupSettings;
+  const rateBook = previewSettings
+    ? createPreviewRateBook(previewSettings.customRates)
+    : storedRateBook;
+
+  return resolveGroupListBalanceDisplay({
+    loading,
+    balances: balanceData?.balances,
+    currentUserId,
+    unifyEnabled: settings?.enabled === true && !!settings?.settlementCurrency,
+    settlementCurrency: settings?.settlementCurrency,
+    rateBook,
+  });
+}
+
+interface GroupBalanceBadgeProps extends GroupListBalanceSource {
+  style?: ViewStyle;
 }
 
 export const GroupBalanceBadge: React.FC<GroupBalanceBadgeProps> = ({ 
@@ -39,114 +66,47 @@ export const GroupBalanceBadge: React.FC<GroupBalanceBadgeProps> = ({
   style,
   previewSettings,
   loading = false,
+  groupId,
 }) => {
   const theme = useTheme();
-  const { groupSettings, rateBook: storedRateBook } = useCurrencyPreferences(
-    previewSettings ? undefined : balanceData?.group_id
-  );
-  const settings = previewSettings ?? groupSettings;
-  const rateBook = previewSettings
-    ? createPreviewRateBook(previewSettings.customRates)
-    : storedRateBook;
+  const display = useGroupListBalanceDisplay({
+    groupId,
+    balanceData,
+    currentUserId,
+    previewSettings,
+    loading,
+  });
 
-  const renderEven = () => (
-    <View
-      style={[styles.balanceStatus, style]}
-      testID="group-balance-even"
-      accessibilityLabel={GROUP_LIST_EVEN_LABEL}
-    >
-      <Text style={[styles.balanceText, { color: theme.colors.onSurfaceVariant }]}>
-        {GROUP_LIST_EVEN_LABEL}
-      </Text>
-    </View>
-  );
-
-  const renderLoading = () => (
-    <SkeletonGroup
-      style={[styles.balanceStatus, style]}
-      testID="group-balance-loading"
-    >
-      <View style={styles.amountSkeletonSlot}>
-        <Skeleton width="92%" height={AMOUNT_TEXT_HEIGHT} borderRadius={4} />
-      </View>
-    </SkeletonGroup>
-  );
-
-  // Cold Home paint: list rows appear before deferred all-balances finishes.
-  // Missing/undefined balanceData must not read as Even until the query resolves.
-  if (loading) {
-    return renderLoading();
-  }
-
-  // Robust null checks — only after balances have resolved
-  if (!balanceData || !balanceData.balances || balanceData.balances.length === 0) {
-    return renderEven();
-  }
-
-  // Filter balances
-  let displayBalances = balanceData.balances;
-  
-  if (currentUserId) {
-    // If we have a current user, only show their personal balance in this group
-    displayBalances = balanceData.balances.filter(b => b.user_id === currentUserId);
-  }
-
-  // Filter out zero residues
-  const nonZeroBalances = displayBalances.filter(b => Math.abs(b.amount) >= 0.01);
-
-  if (nonZeroBalances.length === 0) {
-    return renderEven();
-  }
-
-  // Sum balances by currency (important if user has multiple residues, e.g. from invited state vs user state)
-  const netBalancesMap = nonZeroBalances.reduce((acc, b) => {
-    acc[b.currency] = (acc[b.currency] || 0) + b.amount;
-    return acc;
-  }, {} as Record<string, number>);
-
-  const netBalances = Object.entries(netBalancesMap)
-    .map(([currency, amount]) => ({ currency, amount }))
-    .filter(b => Math.abs(b.amount) >= 0.01);
-
-  if (netBalances.length === 0) {
-    return renderEven();
-  }
-
-  if (settings?.enabled && settings.settlementCurrency) {
-    const unified = unifyBalances(nonZeroBalances, settings.settlementCurrency, rateBook);
-    const leftover = unified.leftover.filter((part) => Math.abs(part.original) >= 0.01);
-    if (Math.abs(unified.amount) < 0.01 && leftover.length === 0) {
-      return renderEven();
-    }
-
-    const signedAmount = Math.abs(unified.amount) >= 0.01
-      ? unified.amount
-      : leftover.every((part) => part.original > 0)
-        ? 1
-        : -1;
-    const textColor = balanceAmountColor(signedAmount, theme.colors, { dark: theme.dark });
-    const headline = formatUnifiedHeadline(unified);
+  if (display.kind === "loading") {
     return (
-      <View style={[styles.balanceStatus, style]} testID="group-balance-amount">
-        <Text
-          style={[styles.balanceText, { color: textColor, fontWeight: '700' }]}
-          numberOfLines={2}
-        >
-          {groupListBalanceWords(signedAmount, headline)}
+      <SkeletonGroup
+        style={[styles.balanceStatus, style]}
+        testID="group-balance-loading"
+      >
+        <View style={styles.amountSkeletonSlot}>
+          <Skeleton width="92%" height={AMOUNT_TEXT_HEIGHT} borderRadius={4} />
+        </View>
+      </SkeletonGroup>
+    );
+  }
+
+  if (display.kind === "even") {
+    return (
+      <View
+        style={[styles.balanceStatus, style]}
+        testID="group-balance-even"
+        accessibilityLabel={GROUP_LIST_EVEN_LABEL}
+      >
+        <Text style={[styles.balanceText, { color: theme.colors.onSurfaceVariant }]}>
+          {GROUP_LIST_EVEN_LABEL}
         </Text>
       </View>
     );
   }
 
-  // Sort by absolute amount to show the most significant balance first
-  netBalances.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
-
-  const mainBalance = netBalances[0];
-  const isMultiCurrency = netBalances.length > 1;
-  const textColor = balanceAmountColor(mainBalance.amount, theme.colors, { dark: theme.dark });
-  const absolute = formatShareCurrency(Math.abs(mainBalance.amount), mainBalance.currency);
-  const label = groupListBalanceWords(mainBalance.amount, absolute)
-    + (isMultiCurrency ? ' (+)' : '');
+  const textColor = balanceAmountColor(display.signedAmount, theme.colors, { dark: theme.dark });
+  const label = groupListBalanceWords(display.signedAmount, display.headline)
+    + (display.multiCurrency ? ' (+)' : '');
 
   return (
     <View style={[styles.balanceStatus, style]} testID="group-balance-amount">
@@ -159,6 +119,16 @@ export const GroupBalanceBadge: React.FC<GroupBalanceBadgeProps> = ({
     </View>
   );
 };
+
+export function GroupListBalanceBits({
+  children,
+  ...source
+}: GroupListBalanceSource & {
+  children: (display: GroupListBalanceDisplay) => React.ReactNode;
+}) {
+  const display = useGroupListBalanceDisplay(source);
+  return <>{children(display)}</>;
+}
 
 const styles = StyleSheet.create({
   balanceStatus: {

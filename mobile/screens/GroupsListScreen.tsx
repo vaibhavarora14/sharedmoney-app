@@ -15,7 +15,10 @@ import {
   GuestSaveChip,
   GuestSnackbar,
 } from "../components/guest/GuestChrome";
+import { DenseListCard } from "../components/DenseListCard";
 import { GroupBalanceBadge } from "../components/GroupBalanceBadge";
+import { GroupDenseCard } from "../components/GroupDenseCard";
+import { PersonAvatar } from "../components/PersonAvatar";
 import { NotificationBell } from "../components/NotificationBell";
 import { useAuth } from "../contexts/AuthContext";
 import { useGuestFlags } from "../hooks/useGuestFlags";
@@ -46,8 +49,11 @@ import { ANALYTICS_EVENTS } from "../utils/posthogEvents";
 import { getSeenGroupIds, markGroupSeen } from "../utils/seenGroups";
 import { rememberAllBalances } from "../utils/groupOpenCache";
 import { partitionGroupsBySection } from "../utils/groupListSections";
+import { partitionActiveGroupsBySettlement } from "../utils/groupListBalanceDisplay";
+import { fallbackDensePerson } from "../utils/denseListPeople";
+import { DENSE_AVATAR_SIZE, DENSE_CARD_GAP } from "../utils/denseListTokens";
 import { recordSentryListCounts } from "../utils/sentryTelemetry";
-import { groupListBalanceWords } from "../utils/balanceRowLabels";
+import { balanceAmountColor, groupListBalanceWords } from "../utils/balanceRowLabels";
 import { countGroupsWithViewerBalance, homePosition, viewerOverallBalances, type HomePosition } from "../utils/homePosition";
 import { groupRecencyLine } from "../utils/groupRecency";
 import { groupsListStatusLine } from "../utils/groupsListStatus";
@@ -60,7 +66,7 @@ import {
   type RecentBillSplit,
 } from "../utils/recentBillSplits";
 import { QuickSettleSheet, type QuickSettleSource } from "../components/QuickSettleSheet";
-import { buildDirectHomeRows, directPeopleForHome } from "../utils/quickSettle";
+import { buildDirectHomeRows, directPeopleForHome, type DirectBalanceTone } from "../utils/quickSettle";
 import { CreateGroupScreen } from "./CreateGroupScreen";
 import { SplitBillScreen } from "./SplitBillScreen";
 
@@ -95,6 +101,23 @@ function spokenGroupBalance(
     formatShareCurrency(Math.abs(main.amount), main.currency),
   );
   return material.length > 1 ? `${words} (+)` : words;
+}
+
+function directRowSubline(tone: DirectBalanceTone): "You're owed" | "You owe" | "Settled" | "Mixed" {
+  switch (tone) {
+    case "owed":
+      return "You're owed";
+    case "owe":
+      return "You owe";
+    case "even":
+      return "Settled";
+    case "mixed":
+      return "Mixed";
+    default: {
+      const _never: never = tone;
+      return _never;
+    }
+  }
 }
 
 export function HomePositionView({ position }: { position: HomePosition }) {
@@ -198,6 +221,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
   const [recentBills, setRecentBills] = useState<RecentBillSplit[]>([]);
   const [formerGroupsExpanded, setFormerGroupsExpanded] = useState<boolean>(false);
   const [archivedGroupsExpanded, setArchivedGroupsExpanded] = useState<boolean>(false);
+  const [settledGroupsExpanded, setSettledGroupsExpanded] = useState<boolean>(false);
   const [seenGroupIds, setSeenGroupIds] = useState<Set<string> | null>(null);
   const theme = useTheme();
   const { fontScale } = useWindowDimensions();
@@ -349,6 +373,12 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
   const standardGroups = groups.filter((group) => group.kind !== "direct");
   const { activeGroups, archivedGroups, formerGroups } =
     partitionGroupsBySection(standardGroups);
+  const { openGroups, settledGroups } = partitionActiveGroupsBySettlement(
+    activeGroups,
+    balancesData?.group_balances,
+    user?.id,
+    balancesReady,
+  );
   const directRows = buildDirectHomeRows({
     groups,
     groupBalances: balancesData?.group_balances ?? [],
@@ -426,10 +456,7 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
     return () => clearTimeout(timer);
   }, [isInitialLoading]);
 
-  // Helper function to render a group item.
-  // nested=true: Archived/Former children — indented hairline rows (not active cards).
-  const renderGroupItem = (group: Group, options?: { nested?: boolean }) => {
-    const nested = Boolean(options?.nested);
+  const renderDenseGroupCard = (group: Group) => {
     const isNew =
       seenGroupIds !== null &&
       !seenGroupIds.has(group.id) &&
@@ -438,111 +465,64 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
     const unreadActivityCount = notificationsEnabled
       ? notifications.data?.unread_by_group[group.id] ?? 0
       : 0;
-    const hasUnreadActivity = unreadActivityCount > 0;
+    const groupBalance = balancesData?.group_balances?.find((entry) => entry.group_id === group.id);
+    return (
+      <GroupDenseCard
+        key={group.id}
+        group={group}
+        currentUserId={user?.id}
+        balances={groupBalance?.balances}
+        loading={!balancesReady}
+        isNew={isNew}
+        unreadActivityCount={unreadActivityCount}
+        expandedText={expandedText}
+        onPress={() => handleGroupPress(group)}
+        accessibilityExtra={`${group.archived_at ? ", archived" : ""}${group.user_status === "left" ? ", former member" : ""}`}
+      />
+    );
+  };
+
+  // nested=true: Archived/Former children — compact divider rows (not active cards).
+  const renderGroupItem = (group: Group, options?: { nested?: boolean }) => {
+    const nested = Boolean(options?.nested);
+    if (!nested) return renderDenseGroupCard(group);
+
     const recency = groupRecencyLine(group, new Date());
     const groupBalance = balancesData?.group_balances?.find((entry) => entry.group_id === group.id);
     const spokenAmount = spokenGroupBalance(groupBalance?.balances, user?.id, balancesReady);
-
-    const row = (
-      <TouchableOpacity
-        testID={`group-card-${group.id}`}
-        style={[
-          nested ? styles.nestedGroupTouchable : styles.groupTouchable,
-          expandedText && styles.groupTouchableExpanded,
-        ]}
-        onPress={() => handleGroupPress(group)}
-        activeOpacity={0.7}
-        accessibilityLabel={`${group.name}${recency ? `, ${recency}` : ""}${spokenAmount ? `, ${spokenAmount}` : ""}${isNew ? ", new group" : ""}${hasUnreadActivity ? `, ${unreadActivityCount} unread ${unreadActivityCount === 1 ? "notification" : "notifications"}` : ""}${group.archived_at ? ", archived" : ""}${group.user_status === "left" ? ", former member" : ""}`}
-      >
-        <View style={[styles.groupMainContent, expandedText && styles.groupMainContentExpanded]}>
-          <View style={styles.groupInfo}>
-            <View style={styles.groupNameRow}>
-              <Text
-                variant="titleMedium"
-                style={[
-                  nested ? styles.nestedGroupName : styles.groupName,
-                  {
-                    color: nested
-                      ? theme.colors.onSurfaceVariant
-                      : theme.colors.onSurface,
-                  },
-                  !nested &&
-                    group.user_status === "left" && {
-                      color: theme.colors.onSurfaceVariant,
-                    },
-                ]}
-                numberOfLines={expandedText ? undefined : 1}
-              >
-                {group.name}
-              </Text>
-              {isNew && (
-                <Text
-                  variant="labelSmall"
-                  style={[styles.newBadgeText, { color: theme.colors.primary }]}
-                  testID={`new-badge-${group.id}`}
-                >
-                  NEW
-                </Text>
-              )}
-              {hasUnreadActivity ? (
-                <View
-                  style={[styles.activityDot, { backgroundColor: theme.colors.primary }]}
-                  testID={`notification-dot-${group.id}`}
-                  accessibilityElementsHidden
-                />
-              ) : null}
-            </View>
-            {recency ? (
-              <Text
-                variant="bodySmall"
-                testID={`group-recency-${group.id}`}
-                style={[
-                  styles.groupSubtitle,
-                  { color: theme.colors.onSurfaceVariant },
-                ]}
-                numberOfLines={1}
-                ellipsizeMode="tail"
-              >
-                {recency}
-              </Text>
-            ) : null}
-          </View>
-        </View>
-
-        {/* Balance status — color + label, no badge soup; never optimistic Even */}
-        <GroupBalanceBadge
-          style={expandedText ? styles.balanceBadgeExpanded : undefined}
-          balanceData={balancesData?.group_balances?.find(gb => gb.group_id === group.id)}
-          currentUserId={user?.id}
-          loading={!balancesReady}
-        />
-      </TouchableOpacity>
-    );
-
-    if (nested) {
-      return (
-        <View
-          key={group.id}
-          style={[
-            styles.nestedGroupRow,
-            { borderBottomColor: theme.colors.outlineVariant },
-          ]}
-          testID={`nested-group-row-${group.id}`}
-        >
-          {row}
-        </View>
-      );
-    }
-
     return (
       <View
         key={group.id}
         style={[
-          styles.groupItem,
+          styles.nestedGroupRow,
           { borderBottomColor: theme.colors.outlineVariant },
         ]}
+        testID={`nested-group-row-${group.id}`}
       >
-        {row}
+        <TouchableOpacity
+          testID={`group-card-${group.id}`}
+          style={styles.nestedGroupTouchable}
+          onPress={() => handleGroupPress(group)}
+          activeOpacity={0.7}
+          accessibilityLabel={`${group.name}${recency ? `, ${recency}` : ""}${spokenAmount ? `, ${spokenAmount}` : ""}${group.archived_at ? ", archived" : ""}${group.user_status === "left" ? ", former member" : ""}`}
+        >
+          <View style={styles.groupMainContent}>
+            <View style={styles.groupInfo}>
+              <Text
+                variant="titleMedium"
+                style={[styles.nestedGroupName, { color: theme.colors.onSurfaceVariant }]}
+                numberOfLines={1}
+              >
+                {group.name}
+              </Text>
+            </View>
+          </View>
+          <GroupBalanceBadge
+            balanceData={groupBalance}
+            currentUserId={user?.id}
+            loading={!balancesReady}
+          />
+        </TouchableOpacity>
       </View>
     );
   };
@@ -703,51 +683,75 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                 Settle up with someone
               </Button>
 
-              {activeGroups.map((group) => renderGroupItem(group))}
+              <View style={styles.denseList}>
+                {openGroups.map((group) => renderDenseGroupCard(group))}
 
-              {directRows.map((row) => {
-                const words = row.tone === "mixed" || row.amount == null || !row.currency
-                  ? "Mixed"
-                  : groupListBalanceWords(
-                    row.tone === "owe" ? -Math.abs(row.amount) : row.amount,
-                    formatShareCurrency(Math.abs(row.amount), row.currency),
+                {directRows.map((row) => {
+                  const signed = row.tone === "owe"
+                    ? -Math.abs(row.amount ?? 0)
+                    : row.tone === "owed"
+                      ? Math.abs(row.amount ?? 0)
+                      : 0;
+                  const words = row.tone === "mixed" || row.amount == null || !row.currency
+                    ? "Mixed"
+                    : groupListBalanceWords(
+                      signed,
+                      formatShareCurrency(Math.abs(row.amount), row.currency),
+                    );
+                  const subline = directRowSubline(row.tone);
+                  const group = row.kind === "person"
+                    ? groups.find((item) => item.id === row.groupIds[0])
+                    : undefined;
+                  const amountColor = balanceAmountColor(signed, theme.colors, { dark: theme.dark });
+                  const person = fallbackDensePerson(
+                    row.groupIds[0] || row.title,
+                    row.name || row.title,
                   );
-                const group = row.kind === "person"
-                  ? groups.find((item) => item.id === row.groupIds[0])
-                  : undefined;
-                const amountColor = row.tone === "owed"
-                  ? theme.colors.tertiary
-                  : row.tone === "owe"
-                    ? theme.colors.error
-                    : theme.colors.onSurfaceVariant;
-                return (
-                  <TouchableOpacity
-                    key={row.kind === "grouped" ? "direct-grouped" : row.groupIds[0]}
-                    testID={row.kind === "grouped" ? "direct-grouped-row" : `direct-row-${row.groupIds[0]}`}
-                    style={styles.groupTouchable}
-                    onPress={() => {
-                      if (group) handleGroupPress(group);
-                      else openQuickSettle("home_header");
-                    }}
-                    accessibilityRole="button"
-                    accessibilityLabel={`${row.title}${row.subtitle ? `, ${row.subtitle}` : ""}, ${words}`}
-                  >
-                    <View style={styles.groupMainContent}>
+                  return (
+                    <DenseListCard
+                      key={row.kind === "grouped" ? "direct-grouped" : row.groupIds[0]}
+                      testID={row.kind === "grouped" ? "direct-grouped-row" : `direct-row-${row.groupIds[0]}`}
+                      onPress={() => {
+                        if (group) handleGroupPress(group);
+                        else openQuickSettle("home_header");
+                      }}
+                      accessibilityLabel={`${row.title}${row.subtitle ? `, ${row.subtitle}` : ""}, ${words}`}
+                    >
+                      <PersonAvatar
+                        name={person.name}
+                        personKey={person.key}
+                        size={DENSE_AVATAR_SIZE}
+                      />
                       <View style={styles.groupInfo}>
                         <Text variant="titleMedium" style={[styles.groupName, { color: theme.colors.onSurface }]} numberOfLines={1}>
                           {row.title}
                         </Text>
-                        {row.subtitle ? (
-                          <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                            {row.subtitle}
-                          </Text>
-                        ) : null}
+                        <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}>
+                          {row.subtitle || subline}
+                        </Text>
                       </View>
-                      <Text variant="bodyMedium" style={{ color: amountColor, fontWeight: "700" }}>{words}</Text>
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
+                      <Text variant="titleSmall" style={{ color: amountColor, fontWeight: "700" }}>{words}</Text>
+                    </DenseListCard>
+                  );
+                })}
+              </View>
+
+              {settledGroups.length > 0 ? (
+                <Text
+                  onPress={() => setSettledGroupsExpanded(!settledGroupsExpanded)}
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: settledGroupsExpanded }}
+                  testID="settled-groups-accordion"
+                  style={[styles.footerText, { color: theme.colors.onSurfaceVariant, marginTop: 8 }]}
+                >
+                  {`Settled · ${settledGroups.length}`}
+                </Text>
+              ) : null}
+              {settledGroupsExpanded ? (
+                <View style={styles.denseList}>
+                  {settledGroups.map((group) => renderDenseGroupCard(group))}
+                </View>
+              ) : null}
 
               {oneTimeSummary ? (
                 <TouchableOpacity
@@ -1004,12 +1008,16 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     borderRadius: 20,
   },
+  denseList: {
+    gap: DENSE_CARD_GAP,
+    marginTop: 8,
+  },
   emptyCreateGroup: {
     alignSelf: "stretch",
     maxWidth: 320,
   },
   groupItem: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderRadius: 14,
     overflow: "hidden",
   },
   groupTouchable: {

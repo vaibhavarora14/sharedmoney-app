@@ -1,12 +1,19 @@
 import React from "react";
-import { Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
+import { Pressable, useWindowDimensions, View } from "react-native";
 import {
   ActivityIndicator,
   Button,
   Text,
   useTheme,
 } from "react-native-paper";
+import { AvatarStack } from "./AvatarStack";
+import { DenseListCard } from "./DenseListCard";
 import { Skeleton, SkeletonGroup } from "./Skeleton";
+import {
+  densePeopleForExpense,
+  densePeopleForPayment,
+} from "../utils/denseListPeople";
+import { DENSE_STACK_AVATAR_SIZE } from "../utils/denseListTokens";
 import { useAuth } from "../contexts/AuthContext";
 import { Participant, Settlement, Transaction } from "../types";
 import { balanceAmountColor } from "../utils/balanceRowLabels";
@@ -91,11 +98,6 @@ export const LedgerRow: React.FC<LedgerRowProps> = ({
       members,
     });
 
-  const hairline = {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: theme.colors.outlineVariant,
-  };
-
   if (item.kind === "payment") {
     const settlement = item.settlement;
     const currency = settlement.currency || getDefaultCurrency();
@@ -110,21 +112,26 @@ export const LedgerRow: React.FC<LedgerRowProps> = ({
     const title = paymentRowTitle(fromName, toName);
     const amountText = paymentAmountText(settlement.amount, currency);
     const canEdit = !!onEditPayment;
+    const people = densePeopleForPayment({
+      fromName,
+      toName,
+      fromParticipantId: settlement.from_participant_id,
+      fromUserId: settlement.from_user_id,
+      toParticipantId: settlement.to_participant_id,
+      toUserId: settlement.to_user_id,
+      participants,
+      members,
+    });
 
     return (
-      <Pressable
-        onPress={() => (onOpenPayment ? onOpenPayment(settlement) : onEditPayment?.(settlement))}
-        disabled={!canEdit && !onOpenPayment}
-        accessibilityRole="button"
-        accessibilityLabel={`${title}, ${amountText}`}
-        testID={`ledger-payment-${settlement.id}`}
-        style={({ pressed }) => [
-          styles.pressable,
-          hairline,
-          pressed && canEdit && { backgroundColor: theme.colors.surfaceVariant },
-        ]}
-      >
-        <View style={styles.row}>
+      <View style={styles.cardWrap}>
+        <DenseListCard
+          onPress={() => (onOpenPayment ? onOpenPayment(settlement) : onEditPayment?.(settlement))}
+          disabled={!canEdit && !onOpenPayment}
+          accessibilityLabel={`${title}, ${amountText}`}
+          testID={`ledger-payment-${settlement.id}`}
+        >
+          <AvatarStack people={people} size={DENSE_STACK_AVATAR_SIZE} />
           <Text
             variant="titleMedium"
             numberOfLines={1}
@@ -139,13 +146,12 @@ export const LedgerRow: React.FC<LedgerRowProps> = ({
               fontWeight: "600",
               color: theme.colors.onSurface,
               flexShrink: 0,
-              marginLeft: 12,
             }}
           >
             {amountText}
           </Text>
-        </View>
-      </Pressable>
+        </DenseListCard>
+      </View>
     );
   }
 
@@ -170,6 +176,14 @@ export const LedgerRow: React.FC<LedgerRowProps> = ({
   const impactColor = model.impactMuted || model.net == null
     ? theme.colors.onSurfaceVariant
     : balanceAmountColor(model.net, theme.colors, { dark: theme.dark });
+  const people = densePeopleForExpense({
+    payerName,
+    paidByParticipantId: transaction.paid_by_participant_id,
+    paidByUserId: transaction.paid_by,
+    splits: transaction.splits,
+    participants,
+    members,
+  });
 
   return (
     <View
@@ -178,7 +192,7 @@ export const LedgerRow: React.FC<LedgerRowProps> = ({
           ? (event) => onHighlightedLayout?.(event.nativeEvent.layout.y)
           : undefined
       }
-      style={hairline}
+      style={styles.cardWrap}
     >
       <View
         pointerEvents="none"
@@ -192,7 +206,7 @@ export const LedgerRow: React.FC<LedgerRowProps> = ({
           },
         ]}
       />
-      <Pressable
+      <DenseListCard
         onPress={() =>
           openTransactionWithHighlightConsumption(
             highlightedTransactionId,
@@ -200,53 +214,46 @@ export const LedgerRow: React.FC<LedgerRowProps> = ({
             () => (onOpenExpense ? onOpenExpense(transaction) : onEditExpense(transaction)),
           )
         }
-        accessibilityRole="button"
         accessibilityLabel={`${title}. ${model.payerLine}. ${model.impactText}${isHighlighted ? ". Highlighted from notification" : ""}`}
         testID={`ledger-expense-${transaction.id}`}
-        style={({ pressed }) => [
-          styles.pressable,
-          pressed && { backgroundColor: theme.colors.surfaceVariant },
-        ]}
       >
-        <View style={styles.row}>
-          <View style={styles.content}>
+        <AvatarStack people={people} size={DENSE_STACK_AVATAR_SIZE} />
+        <View style={styles.content}>
+          <Text
+            variant="titleMedium"
+            numberOfLines={1}
+            style={[styles.title, { color: theme.colors.onSurface }]}
+          >
+            {title}
+          </Text>
+          {model.payerLine ? (
             <Text
-              variant="titleMedium"
+              variant="bodySmall"
               numberOfLines={1}
-              style={[styles.title, { color: theme.colors.onSurface }]}
+              testID={`ledger-payer-${transaction.id}`}
+              style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}
             >
-              {title}
-            </Text>
-            {model.payerLine ? (
-              <Text
-                variant="bodySmall"
-                numberOfLines={1}
-                testID={`ledger-payer-${transaction.id}`}
-                style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}
-              >
-                {model.payerLine}
-              </Text>
-            ) : null}
-          </View>
-          {model.impactText ? (
-            <Text
-              variant="titleSmall"
-              numberOfLines={2}
-              testID={`ledger-impact-${transaction.id}`}
-              style={{
-                fontWeight: "600",
-                color: impactColor,
-                flexShrink: 1,
-                maxWidth: "48%",
-                marginLeft: 12,
-                textAlign: "right",
-              }}
-            >
-              {model.impactText}
+              {model.payerLine}
             </Text>
           ) : null}
         </View>
-      </Pressable>
+        {model.impactText ? (
+          <Text
+            variant="titleSmall"
+            numberOfLines={2}
+            testID={`ledger-impact-${transaction.id}`}
+            style={{
+              fontWeight: "600",
+              color: impactColor,
+              flexShrink: 1,
+              maxWidth: "42%",
+              textAlign: "right",
+            }}
+          >
+            {model.impactText}
+          </Text>
+        ) : null}
+      </DenseListCard>
     </View>
   );
 };

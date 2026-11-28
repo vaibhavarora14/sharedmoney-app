@@ -134,6 +134,10 @@ import { NotificationsScreen } from "./screens/NotificationsScreen";
 import { CurrencyMergePreviewScreen } from "./screens/CurrencyMergePreviewScreen";
 import { HomePolishPreviewScreen } from "./screens/HomePolishPreviewScreen";
 import {
+  DenseCardsPreviewScreen,
+  readDenseCardsFrame,
+} from "./screens/DenseCardsPreviewScreen";
+import {
   BalanceBreakdownPreviewScreen,
   readBalanceBreakdownShot,
 } from "./screens/BalanceBreakdownPreviewScreen";
@@ -1448,6 +1452,7 @@ function AppContent() {
   const showPeopleSettlementsPreview = previewParam === "people-settlements";
   const showTodayRefinedPreview = previewParam === "today-refined";
   const showHomePolishPreview = previewParam === "home-polish";
+  const showDenseCardsPreview = previewParam === "dense-cards";
   const showBalanceBreakdownPreview = previewParam === "balance-breakdown";
 
   if (showCurrencyMergePreview) {
@@ -1482,6 +1487,17 @@ function AppContent() {
       <>
         <HomePolishPreviewScreen />
         <StatusBar style="dark" />
+      </>
+    );
+  }
+
+  if (showDenseCardsPreview) {
+    const href = Platform.OS === "web" && typeof window !== "undefined" ? window.location.href : "";
+    const dark = /(?:colorScheme|theme)=dark/i.test(href);
+    return (
+      <>
+        <DenseCardsPreviewScreen frame={readDenseCardsFrame(href)} />
+        <StatusBar style={dark ? "light" : "dark"} />
       </>
     );
   }

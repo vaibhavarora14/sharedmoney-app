@@ -2,17 +2,17 @@ import React from "react";
 import { View } from "react-native";
 import {
   ActivityIndicator,
-  Avatar,
-  Divider,
   IconButton,
   Menu,
-  Surface,
   Text,
   useTheme,
 } from "react-native-paper";
 import { Participant } from "../types";
 import { formatDate } from "../utils/date";
+import { DENSE_CARD_GAP } from "../utils/denseListTokens";
 import { canRemovePerson, memberRowShowsMenu } from "../utils/peoplePicker";
+import { DenseListCard } from "./DenseListCard";
+import { PersonAvatar } from "./PersonAvatar";
 import { styles } from "./MembersList.styles";
 
 interface MembersListProps {
@@ -111,22 +111,9 @@ export const MembersList: React.FC<MembersListProps> = ({
     );
   }
 
-  const getInitials = (name: string) => {
-    if (name.includes(" ")) {
-      const names = name.trim().split(" ");
-      if (names.length >= 2) {
-        return `${names[0][0]}${names[names.length - 1][0]}`.toUpperCase();
-      }
-    }
-    return name.substring(0, 2).toUpperCase();
-  };
-
   return (
-    <Surface
-      elevation={0}
-      style={{ backgroundColor: theme.colors.surface, borderRadius: 12 }}
-    >
-      {rows.map((row, index) => {
+    <View style={{ gap: DENSE_CARD_GAP }}>
+      {rows.map((row) => {
         const {
           person,
           personName,
@@ -142,30 +129,21 @@ export const MembersList: React.FC<MembersListProps> = ({
         } = row;
 
         return (
-          <React.Fragment key={person.id}>
+          <DenseListCard
+            key={person.id}
+            style={isRemoving ? styles.memberCardRemoving : undefined}
+          >
             <View
               style={[
                 styles.memberContent,
-                isRemoving && styles.memberCardRemoving,
-                { paddingHorizontal: 16, paddingVertical: 12 },
+                { opacity: isWorking ? 0.6 : 1, flex: 1 },
               ]}
             >
-              <Avatar.Text
-                size={40}
-                label={getInitials(personName)}
-                style={{
-                  backgroundColor: isActive
-                    ? theme.colors.primaryContainer
-                    : theme.colors.surfaceVariant,
-                  marginRight: 16,
-                  opacity: isWorking ? 0.6 : 1,
-                  flexShrink: 0,
-                }}
-                color={
-                  isActive
-                    ? theme.colors.onPrimaryContainer
-                    : theme.colors.onSurfaceVariant
-                }
+              <PersonAvatar
+                name={personName}
+                uri={person.avatar_url}
+                personKey={person.id}
+                style={{ marginRight: 4, opacity: isActive ? 1 : 0.7 }}
               />
               <View style={styles.memberLeft}>
                 <View style={{ flexDirection: "row", alignItems: "center" }}>
@@ -174,7 +152,6 @@ export const MembersList: React.FC<MembersListProps> = ({
                     style={[
                       styles.memberName,
                       isRemoving && { opacity: 0.6 },
-                      {},
                     ]}
                   >
                     {personName}{isCurrentUser ? " (You)" : ""}
@@ -271,10 +248,9 @@ export const MembersList: React.FC<MembersListProps> = ({
                 ) : null}
               </View>
             </View>
-            {index < rows.length - 1 && <Divider />}
-          </React.Fragment>
+          </DenseListCard>
         );
       })}
-    </Surface>
+    </View>
   );
 };

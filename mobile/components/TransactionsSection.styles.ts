@@ -1,4 +1,5 @@
 import { StyleSheet } from "react-native";
+import { DENSE_CARD_GAP, DENSE_CARD_RADIUS } from "../utils/denseListTokens";
 
 
 export const styles = StyleSheet.create({
@@ -6,7 +7,12 @@ export const styles = StyleSheet.create({
     paddingTop: 8,
   },
   list: {
-    gap: 4, // Tighter rows; whitespace comes from row padding, not card chrome
+    gap: DENSE_CARD_GAP,
+  },
+  cardWrap: {
+    marginHorizontal: 16,
+    marginBottom: DENSE_CARD_GAP,
+    position: "relative",
   },
   card: {
     borderRadius: 0,
@@ -15,7 +21,7 @@ export const styles = StyleSheet.create({
   },
   highlightOverlay: {
     ...StyleSheet.absoluteFill,
-    borderRadius: 8,
+    borderRadius: DENSE_CARD_RADIUS,
     borderWidth: 2,
   },
   pressable: {

@@ -3,14 +3,15 @@ import { View } from "react-native";
 import {
     ActivityIndicator,
     Avatar,
-    Divider,
     IconButton,
-    Surface,
     Text,
     useTheme,
 } from "react-native-paper";
 import { GroupInvitation } from "../types";
 import { formatDate } from "../utils/date";
+import { DENSE_CARD_GAP } from "../utils/denseListTokens";
+import { DenseListCard } from "./DenseListCard";
+import { PersonAvatar } from "./PersonAvatar";
 import { styles } from "./InvitationsList.styles";
 
 interface InvitationsListProps {
@@ -54,11 +55,11 @@ export const InvitationsList: React.FC<InvitationsListProps> = ({
   };
 
   return (
-    <Surface elevation={0} style={{ backgroundColor: theme.colors.surface, borderRadius: 12, marginTop: 8 }}>
-      <Text variant="titleSmall" style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4, color: theme.colors.onSurfaceVariant }}>
+    <View style={{ gap: DENSE_CARD_GAP, marginTop: 8 }}>
+      <Text variant="titleSmall" style={{ paddingHorizontal: 4, color: theme.colors.onSurfaceVariant }}>
         Pending Invitations
       </Text>
-      {invitations.map((invitation, index) => {
+      {invitations.map((invitation) => {
         const isCancelling = cancellingInvitationId === invitation.id;
         const expiresDate = new Date(invitation.expires_at);
         const isExpired = expiresDate < new Date();
@@ -76,21 +77,19 @@ export const InvitationsList: React.FC<InvitationsListProps> = ({
           : theme.colors.onPrimaryContainer;
 
         return (
-          <React.Fragment key={invitation.id}>
-            <View
-              style={[
-                styles.memberContent,
-                isCancelling && styles.memberCardRemoving,
-                isExpired && { opacity: 0.6 },
-                { paddingHorizontal: 16, paddingVertical: 12 }
-              ]}
-            >
+          <DenseListCard
+            key={invitation.id}
+            style={[
+              isCancelling && styles.memberCardRemoving,
+              isExpired ? { opacity: 0.6 } : null,
+            ]}
+          >
+            <View style={styles.memberContent}>
               {mark.kind === "initials" ? (
-                <Avatar.Text
-                  size={40}
-                  label={mark.label}
+                <PersonAvatar
+                  name={invitation.email || mark.label}
+                  personKey={invitation.id}
                   style={avatarStyle}
-                  color={foreground}
                 />
               ) : (
                 <Avatar.Icon
@@ -155,10 +154,9 @@ export const InvitationsList: React.FC<InvitationsListProps> = ({
                 {canManageInvites && reserveMenuColumn ? <View style={styles.actionSlot} /> : null}
               </View>
             </View>
-            {index < invitations.length - 1 && <Divider />}
-          </React.Fragment>
+          </DenseListCard>
         );
       })}
-    </Surface>
+    </View>
   );
 };

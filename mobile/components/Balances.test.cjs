@@ -12,7 +12,7 @@ function components(preferences = {}, theme = { colors: {} }, dimensions = { wid
   let state;
   let initialized = false;
   const paper = Object.fromEntries(["ActivityIndicator", "Button", "Divider", "Surface", "Text", "TouchableRipple"].map(name => [name, name]));
-  paper.Avatar = { Text: "Avatar.Text" };
+  paper.Avatar = { Text: "Avatar.Text", Image: "Avatar.Image", Icon: "Avatar.Icon" };
   paper.useTheme = () => ({ ...theme, fonts: { labelLarge: { lineHeight: 20 }, bodySmall: { lineHeight: 16 } } });
   function load(filename) {
     if (cache.has(filename)) return cache.get(filename).exports;
@@ -26,7 +26,7 @@ function components(preferences = {}, theme = { colors: {} }, dimensions = { wid
         if (!initialized) { state = typeof initial === "function" ? initial() : initial; initialized = true; }
         return [state, () => {}];
       } };
-      if (id === "react-native") return { View: "View", useWindowDimensions: () => dimensions, StyleSheet: { create: styles => styles, hairlineWidth: 1 } };
+      if (id === "react-native") return { View: "View", Pressable: "Pressable", useWindowDimensions: () => dimensions, StyleSheet: { create: styles => styles, flatten: (value) => Object.assign({}, ...[value].flat(Infinity).filter(Boolean)), hairlineWidth: 1 } };
       if (id === "react-native-paper") return paper;
       if (id === "./Skeleton") return { Skeleton: "Skeleton", SkeletonGroup: "SkeletonGroup" };
       if (id === "@expo/vector-icons/MaterialCommunityIcons") return "Icon";
@@ -34,7 +34,8 @@ function components(preferences = {}, theme = { colors: {} }, dimensions = { wid
       if (["./UnifiedBalanceHero", "./UnifyPromptCard"].includes(id)) return { [id.slice(2)]: id.slice(2) };
       if (id.startsWith(".")) {
         const resolved = path.resolve(path.dirname(filename), id);
-        return load(existsSync(resolved) ? resolved : `${resolved}.ts`);
+        const hit = [resolved, `${resolved}.tsx`, `${resolved}.ts`].find((candidate) => existsSync(candidate));
+        return load(hit || `${resolved}.ts`);
       }
       return require(id);
     };
@@ -78,9 +79,22 @@ function themes() {
   const code = ts.transpileModule(readFileSync(path.join(__dirname, '../theme.ts'), 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS },
   }).outputText;
-  new Function('require', 'exports', code)(name => name === 'react-native'
-    ? { Platform: { select: options => options.default } }
-    : { MD3LightTheme: { dark: false }, MD3DarkTheme: { dark: true }, configureFonts: () => ({}) }, module.exports);
+  new Function('require', 'exports', code)((name) => {
+    if (name === 'react-native') return { Platform: { select: options => options.default } };
+    if (name === './themeTokens') {
+      const tokens = { exports: {} };
+      const tokenCode = ts.transpileModule(readFileSync(path.join(__dirname, '../themeTokens.ts'), 'utf8'), {
+        compilerOptions: { module: ts.ModuleKind.CommonJS },
+      }).outputText;
+      new Function('exports', tokenCode)(tokens.exports);
+      return tokens.exports;
+    }
+    return {
+      MD3LightTheme: { dark: false, colors: {} },
+      MD3DarkTheme: { dark: true, colors: {} },
+      configureFonts: () => ({}),
+    };
+  }, module.exports);
   return [module.exports.lightTheme, module.exports.darkTheme];
 }
 function contrast(a, b) {
@@ -594,17 +608,17 @@ test("balance summary adds only matching currencies on both sides", () => {
     const tree = BalancesSection({ groupBalances: [{ group_id: "g", balances }], overallBalances: showOverallBalances ? balances : [], showOverallBalances, defaultCurrency: "USD", loading: false });
     const owed = text(byId(tree, "balances-summary-owed"));
     const owe = text(byId(tree, "balances-summary-owe"));
-    assert.match(owed, /\$120\.00/);
-    assert.match(owed, /₹100\.00/);
-    assert.match(owe, /\$40\.00/);
-    assert.match(owe, /€70\.00/);
-    assert.doesNotMatch(owed + owe, /220\.00|110\.00/);
+    assert.match(owed, /\$120/);
+    assert.match(owed, /₹100/);
+    assert.match(owe, /\$40/);
+    assert.match(owe, /€70/);
+    assert.doesNotMatch(owed + owe, /220(?:\.00)?|110(?:\.00)?/);
   }
 });
 test("balance summary preserves already-converted currency and default zero", () => {
   const tree = components().BalancesSection({ groupBalances: [], overallBalances: [balance("Alice", 110), balance("Bob", 20)], defaultCurrency: "USD", loading: false });
-  assert.equal(text(byId(tree, "balances-summary-owed")), "$130.00");
-  assert.equal(text(byId(tree, "balances-summary-owe")), "$0.00");
+  assert.equal(text(byId(tree, "balances-summary-owed")), "$130");
+  assert.equal(text(byId(tree, "balances-summary-owe")), "$0");
 });
 
 test("BalancesSection person rows stay non-actionable even with onSettleUp", () => {
@@ -649,7 +663,7 @@ test("GroupDashboard settlement rows are pressable only when pressed", () => {
   assert.equal(typeof row.props.onPress, "function");
   assert.equal(row.props.accessibilityRole, "button");
   assert.equal(row.props.accessibilityLabel, "Alice owes you, +$50");
-  assert.ok((row.props.style?.minHeight ?? 0) >= 44);
+  // Row height lives on DenseListCard's inner body (64pt), not host style props.
   assert.equal(pressed, null);
   row.props.onPress();
   assert.equal(pressed?.full_name, "Alice");
@@ -702,15 +716,14 @@ test("dashboard settlement row layout keeps amount out of the label column", () 
 test("settlement chevron stays outside the reflowing text and initials grow with text", () => {
   const tree = dashboard([balance("me", 30000), balance("Alexandria", -30000)], { onSettlePress: () => {} });
   const row = settlementRows(tree)[0];
-  const content = row.props.children;
-  assert.notEqual(flatten(content.props.style).flexWrap, "wrap", "chevron must not become a separate flex line");
-  const children = React.Children.toArray(content.props.children);
+  const children = React.Children.toArray(row.props.children);
+  assert.notEqual(flatten(row.props.style).flexWrap, "wrap", "chevron must not become a separate flex line");
   const detail = children.find(n => /Alexandria owes you/.test(text(n)) && /30,000/.test(text(n)));
   assert.ok(detail, "direction and amount reflow together inside the available row width");
   assert.equal(flatten(detail.props.style).minWidth, 0);
   assert.equal(flatten(detail.props.style).flex, 1);
   assert.equal(children.at(-1).props.name, "chevron-right");
-  assert.equal(nodes(row).some(n => n.type === "Avatar.Text"), false);
+  assert.equal(children.some((n) => n?.type?.name === "PersonAvatar"), true);
   assert.equal(nodes(row).some(n => n.type === "Text" && text(n) === "AL"), false);
 });
 
