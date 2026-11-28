@@ -15,6 +15,7 @@ import {
   GuestSaveChip,
   GuestSnackbar,
 } from "../components/guest/GuestChrome";
+import { DenseAvatarSlot } from "../components/AvatarStack";
 import { DenseListCard } from "../components/DenseListCard";
 import { GroupBalanceBadge } from "../components/GroupBalanceBadge";
 import { GroupDenseCard } from "../components/GroupDenseCard";
@@ -52,7 +53,17 @@ import { rememberAllBalances } from "../utils/groupOpenCache";
 import { partitionGroupsBySection } from "../utils/groupListSections";
 import { partitionActiveGroupsBySettlement } from "../utils/groupListBalanceDisplay";
 import { fallbackDensePerson } from "../utils/denseListPeople";
-import { DENSE_AVATAR_SIZE, DENSE_CARD_GAP } from "../utils/denseListTokens";
+import {
+  DENSE_AVATAR_SIZE,
+  DENSE_CARD_GAP,
+  DENSE_HOME_HEADER_BOTTOM,
+  DENSE_HOME_HEADER_LINE_GAP,
+  DENSE_SECTION_HEADER_PADDING_BOTTOM,
+  DENSE_SECTION_HEADER_PADDING_TOP,
+  DENSE_SUBLINE_LINE_HEIGHT,
+  DENSE_TITLE_LINE_HEIGHT,
+  DENSE_TITLE_SUBLINE_GAP,
+} from "../utils/denseListTokens";
 import { recordSentryListCounts } from "../utils/sentryTelemetry";
 import { balanceAmountColor, groupListBalanceWords } from "../utils/balanceRowLabels";
 import { countGroupsWithViewerBalance, homeBothPartsMutedLine, homeDirectionParts, homePosition, viewerOverallBalances, type HomePosition } from "../utils/homePosition";
@@ -726,16 +737,25 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                       }}
                       accessibilityLabel={`${row.title}${row.subtitle ? `, ${row.subtitle}` : ""}, ${words}`}
                     >
-                      <PersonAvatar
-                        name={person.name}
-                        personKey={person.key}
-                        size={DENSE_AVATAR_SIZE}
-                      />
+                      <DenseAvatarSlot size={DENSE_AVATAR_SIZE}>
+                        <PersonAvatar
+                          name={person.name}
+                          personKey={person.key}
+                          size={DENSE_AVATAR_SIZE}
+                        />
+                      </DenseAvatarSlot>
                       <View style={styles.groupInfo}>
                         <Text variant="titleMedium" style={[styles.groupName, { color: theme.colors.onSurface }]} numberOfLines={1}>
                           {row.title}
                         </Text>
-                        <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}>
+                        <Text
+                          variant="bodySmall"
+                          style={{
+                            color: theme.colors.onSurfaceVariant,
+                            marginTop: DENSE_TITLE_SUBLINE_GAP,
+                            lineHeight: DENSE_SUBLINE_LINE_HEIGHT,
+                          }}
+                        >
                           {row.subtitle || subline}
                         </Text>
                       </View>
@@ -750,7 +770,10 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                   count={settledGroups.length}
                   expanded={settledGroupsExpanded}
                   onPress={() => setSettledGroupsExpanded(!settledGroupsExpanded)}
-                  style={{ marginTop: 8 }}
+                  style={{
+                    marginTop: DENSE_SECTION_HEADER_PADDING_TOP,
+                    marginBottom: DENSE_SECTION_HEADER_PADDING_BOTTOM,
+                  }}
                 />
               ) : null}
               {settledGroupsExpanded ? (
@@ -949,8 +972,8 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   positionBlock: {
-    gap: 2,
-    marginBottom: 12,
+    gap: DENSE_HOME_HEADER_LINE_GAP,
+    marginBottom: DENSE_HOME_HEADER_BOTTOM,
   },
   positionNumber: {
     fontSize: 40,
@@ -1010,13 +1033,13 @@ const styles = StyleSheet.create({
   },
   settlePill: {
     alignSelf: "flex-start",
-    marginTop: 14,
-    marginBottom: 6,
+    marginTop: 0,
+    marginBottom: DENSE_CARD_GAP,
     borderRadius: 20,
   },
   denseList: {
     gap: DENSE_CARD_GAP,
-    marginTop: 8,
+    marginTop: 0,
   },
   emptyCreateGroup: {
     alignSelf: "stretch",
@@ -1047,6 +1070,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     flexShrink: 1,
     letterSpacing: -0.2,
+    lineHeight: DENSE_TITLE_LINE_HEIGHT,
   },
   newBadgeText: {
     fontWeight: "700",
@@ -1058,7 +1082,8 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   groupSubtitle: {
-    marginTop: 2,
+    marginTop: DENSE_TITLE_SUBLINE_GAP,
+    lineHeight: DENSE_SUBLINE_LINE_HEIGHT,
   },
   groupMainContent: {
     flexDirection: "row",

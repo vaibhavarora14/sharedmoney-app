@@ -10,7 +10,11 @@ import { LedgerDateLabel, LedgerRow } from "../components/TransactionsSection";
 import { WEB_MAX_WIDTH } from "../constants/layout";
 import { useThemePreference } from "../contexts/ThemePreferenceContext";
 import type { Balance, Group, Participant, Settlement, Transaction } from "../types";
-import { DENSE_CARD_GAP } from "../utils/denseListTokens";
+import {
+  DENSE_CARD_GAP,
+  DENSE_SECTION_HEADER_PADDING_BOTTOM,
+  DENSE_SECTION_HEADER_PADDING_TOP,
+} from "../utils/denseListTokens";
 import { readDenseCardsFrame, type DenseCardsFrame } from "../utils/denseCardsShots";
 import {
   homeBothPartsMutedLine,
@@ -268,8 +272,8 @@ function GroupFrame() {
         style={{
           color: theme.colors.onSurfaceVariant,
           paddingHorizontal: 16,
-          marginTop: 20,
-          marginBottom: 8,
+          marginTop: DENSE_SECTION_HEADER_PADDING_TOP,
+          marginBottom: DENSE_SECTION_HEADER_PADDING_BOTTOM,
           fontWeight: "600",
           letterSpacing: 0.5,
         }}
@@ -334,6 +338,7 @@ const styles = StyleSheet.create({
   },
   fold: {
     paddingHorizontal: 16,
-    marginTop: 4,
+    marginTop: DENSE_SECTION_HEADER_PADDING_TOP,
+    marginBottom: DENSE_SECTION_HEADER_PADDING_BOTTOM,
   },
 });

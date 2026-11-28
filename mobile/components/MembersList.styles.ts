@@ -21,7 +21,7 @@ export const styles = StyleSheet.create({
     justifyContent: "center",
   },
   memberName: {
-    marginBottom: 2,
+    marginBottom: 4,
   },
   removeMemberButton: {
     margin: 0,

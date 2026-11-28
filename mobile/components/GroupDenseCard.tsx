@@ -9,14 +9,16 @@ import {
 } from "../utils/denseListPeople";
 import {
   DENSE_AVATAR_SIZE,
+  DENSE_SUBLINE_LINE_HEIGHT,
+  DENSE_TITLE_LINE_HEIGHT,
+  DENSE_TITLE_SUBLINE_GAP,
   DENSE_TX_STACK_MAX,
-  denseStackReservedWidth,
 } from "../utils/denseListTokens";
 import {
   groupListDenseAmountText,
   groupListDenseSubline,
 } from "../utils/groupListBalanceDisplay";
-import { AvatarStack } from "./AvatarStack";
+import { AvatarStack, DenseAvatarSlot } from "./AvatarStack";
 import { DenseListCard } from "./DenseListCard";
 import { GroupListBalanceBits } from "./GroupBalanceBadge";
 import { Skeleton } from "./Skeleton";
@@ -71,14 +73,15 @@ export const GroupDenseCard: React.FC<GroupDenseCardProps> = ({
             accessibilityLabel={`${group.name}${subline ? `, ${subline}` : ""}${amountText ? `, ${amountText}` : ""}${isNew ? ", new group" : ""}${hasUnreadActivity ? `, ${unreadActivityCount} unread ${unreadActivityCount === 1 ? "notification" : "notifications"}` : ""}${accessibilityExtra}`}
             style={expandedText ? styles.expandedCard : undefined}
           >
-            <View style={{ width: denseStackReservedWidth(DENSE_AVATAR_SIZE), flexShrink: 0 }}>
+            <DenseAvatarSlot size={DENSE_AVATAR_SIZE}>
               <AvatarStack people={stack} size={DENSE_AVATAR_SIZE} max={DENSE_TX_STACK_MAX} />
-            </View>
+            </DenseAvatarSlot>
             <View style={styles.info}>
               <View style={styles.titleRow}>
                 <Text
                   variant="titleMedium"
-                  numberOfLines={expandedText ? undefined : 1}
+                  numberOfLines={expandedText ? undefined : 2}
+                  ellipsizeMode="tail"
                   style={[styles.title, { color: theme.colors.onSurface }]}
                 >
                   {group.name}
@@ -105,7 +108,11 @@ export const GroupDenseCard: React.FC<GroupDenseCardProps> = ({
                   variant="bodySmall"
                   numberOfLines={1}
                   testID={`group-subline-${group.id}`}
-                  style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}
+                  style={{
+                    color: theme.colors.onSurfaceVariant,
+                    marginTop: DENSE_TITLE_SUBLINE_GAP,
+                    lineHeight: DENSE_SUBLINE_LINE_HEIGHT,
+                  }}
                 >
                   {subline}
                 </Text>
@@ -146,6 +153,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     flexShrink: 1,
     letterSpacing: -0.2,
+    lineHeight: DENSE_TITLE_LINE_HEIGHT,
   },
   newBadge: {
     fontWeight: "700",
@@ -157,10 +165,10 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   amountSlot: {
+    flexGrow: 0,
     flexShrink: 0,
     alignItems: "flex-end",
     justifyContent: "center",
-    minWidth: 72,
   },
   expandedCard: {
     alignSelf: "stretch",

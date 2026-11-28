@@ -8,6 +8,7 @@ import {
   DENSE_STACK_OVERLAP,
   DENSE_STACK_RING,
   denseCardSurface,
+  denseStackReservedWidth,
 } from "../utils/denseListTokens";
 import { PersonAvatar } from "./PersonAvatar";
 
@@ -15,6 +16,28 @@ interface AvatarStackProps {
   people: DensePerson[];
   size?: number;
   max?: number;
+}
+
+/** Fixed column so 1-face, 2-face, and 2+chip rows start the title at the same x. */
+export function DenseAvatarSlot({
+  children,
+  size = DENSE_STACK_AVATAR_SIZE,
+}: {
+  children: React.ReactNode;
+  size?: number;
+}) {
+  return (
+    <View
+      style={{
+        width: denseStackReservedWidth(size),
+        height: size,
+        flexShrink: 0,
+        justifyContent: "center",
+      }}
+    >
+      {children}
+    </View>
+  );
 }
 
 export const AvatarStack: React.FC<AvatarStackProps> = ({

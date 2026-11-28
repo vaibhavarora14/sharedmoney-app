@@ -12,6 +12,9 @@ import { Participant } from "../types";
 import { formatDate } from "../utils/date";
 import {
   DENSE_AVATAR_SIZE,
+  DENSE_AVATAR_TITLE_GAP,
+  DENSE_CARD_PADDING_H,
+  DENSE_CARD_PADDING_V,
   DENSE_CARD_RADIUS,
   DENSE_ROW_MIN_HEIGHT,
   denseCardSurface,
@@ -147,7 +150,7 @@ export const MembersList: React.FC<MembersListProps> = ({
                   cardStyles.hairline,
                   {
                     backgroundColor: theme.colors.outlineVariant,
-                    marginLeft: 12 + DENSE_AVATAR_SIZE + 12,
+                    marginLeft: DENSE_CARD_PADDING_H + DENSE_AVATAR_SIZE + DENSE_AVATAR_TITLE_GAP,
                   },
                 ]}
               />
@@ -282,11 +285,11 @@ const cardStyles = StyleSheet.create({
   },
   row: {
     minHeight: DENSE_ROW_MIN_HEIGHT,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: DENSE_CARD_PADDING_H,
+    paddingVertical: DENSE_CARD_PADDING_V,
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: DENSE_AVATAR_TITLE_GAP,
   },
   hairline: {
     height: StyleSheet.hairlineWidth,

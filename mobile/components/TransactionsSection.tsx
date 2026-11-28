@@ -6,14 +6,19 @@ import {
   Text,
   useTheme,
 } from "react-native-paper";
-import { AvatarStack } from "./AvatarStack";
+import { AvatarStack, DenseAvatarSlot } from "./AvatarStack";
 import { DenseListCard } from "./DenseListCard";
 import { Skeleton, SkeletonGroup } from "./Skeleton";
 import {
   densePeopleForExpense,
   densePeopleForPayment,
 } from "../utils/denseListPeople";
-import { DENSE_STACK_AVATAR_SIZE, DENSE_TX_STACK_MAX } from "../utils/denseListTokens";
+import {
+  DENSE_SECTION_HEADER_PADDING_BOTTOM,
+  DENSE_SECTION_HEADER_PADDING_TOP,
+  DENSE_STACK_AVATAR_SIZE,
+  DENSE_TX_STACK_MAX,
+} from "../utils/denseListTokens";
 import { useAuth } from "../contexts/AuthContext";
 import { Participant, Settlement, Transaction } from "../types";
 import { balanceAmountColor } from "../utils/balanceRowLabels";
@@ -62,8 +67,8 @@ export function LedgerDateLabel({ label }: { label: string }) {
         textTransform: "uppercase",
         fontWeight: "600",
         paddingHorizontal: 16,
-        paddingTop: 14,
-        paddingBottom: 2,
+        paddingTop: DENSE_SECTION_HEADER_PADDING_TOP,
+        paddingBottom: DENSE_SECTION_HEADER_PADDING_BOTTOM,
       }}
     >
       {label}
@@ -131,24 +136,29 @@ export const LedgerRow: React.FC<LedgerRowProps> = ({
           accessibilityLabel={`${title}, ${amountText}`}
           testID={`ledger-payment-${settlement.id}`}
         >
-          <AvatarStack people={people} size={DENSE_STACK_AVATAR_SIZE} max={DENSE_TX_STACK_MAX} />
+          <DenseAvatarSlot size={DENSE_STACK_AVATAR_SIZE}>
+            <AvatarStack people={people} size={DENSE_STACK_AVATAR_SIZE} max={DENSE_TX_STACK_MAX} />
+          </DenseAvatarSlot>
           <View style={styles.content}>
             <Text
               variant="titleMedium"
-              numberOfLines={1}
+              numberOfLines={2}
+              ellipsizeMode="tail"
               style={[styles.title, { color: theme.colors.onSurface }]}
             >
               {title}
             </Text>
           </View>
-          <Text
-            variant="titleMedium"
-            numberOfLines={1}
-            testID={`ledger-payment-amount-${settlement.id}`}
-            style={[styles.amountValue, { color: theme.colors.onSurface }]}
-          >
-            {amountText}
-          </Text>
+          <View style={styles.amountCol}>
+            <Text
+              variant="titleMedium"
+              numberOfLines={1}
+              testID={`ledger-payment-amount-${settlement.id}`}
+              style={[styles.amountValue, { color: theme.colors.onSurface }]}
+            >
+              {amountText}
+            </Text>
+          </View>
         </DenseListCard>
       </View>
     );
@@ -216,11 +226,13 @@ export const LedgerRow: React.FC<LedgerRowProps> = ({
         accessibilityLabel={`${title}. ${model.payerLine}. ${model.impactText}${isHighlighted ? ". Highlighted from notification" : ""}`}
         testID={`ledger-expense-${transaction.id}`}
       >
-        <AvatarStack people={people} size={DENSE_STACK_AVATAR_SIZE} max={DENSE_TX_STACK_MAX} />
+        <DenseAvatarSlot size={DENSE_STACK_AVATAR_SIZE}>
+          <AvatarStack people={people} size={DENSE_STACK_AVATAR_SIZE} max={DENSE_TX_STACK_MAX} />
+        </DenseAvatarSlot>
         <View style={styles.content}>
           <Text
             variant="titleMedium"
-            numberOfLines={1}
+            numberOfLines={2}
             ellipsizeMode="tail"
             style={[styles.title, { color: theme.colors.onSurface }]}
           >
