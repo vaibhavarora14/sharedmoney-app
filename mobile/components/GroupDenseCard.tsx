@@ -9,6 +9,9 @@ import {
 } from "../utils/denseListPeople";
 import {
   DENSE_AVATAR_SIZE,
+  DENSE_SUBLINE_LINE_HEIGHT,
+  DENSE_TITLE_LINE_HEIGHT,
+  DENSE_TITLE_SUBLINE_GAP,
   DENSE_TX_STACK_MAX,
   denseStackReservedWidth,
 } from "../utils/denseListTokens";
@@ -105,7 +108,11 @@ export const GroupDenseCard: React.FC<GroupDenseCardProps> = ({
                   variant="bodySmall"
                   numberOfLines={1}
                   testID={`group-subline-${group.id}`}
-                  style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}
+                  style={{
+                    color: theme.colors.onSurfaceVariant,
+                    marginTop: DENSE_TITLE_SUBLINE_GAP,
+                    lineHeight: DENSE_SUBLINE_LINE_HEIGHT,
+                  }}
                 >
                   {subline}
                 </Text>
@@ -146,6 +153,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     flexShrink: 1,
     letterSpacing: -0.2,
+    lineHeight: DENSE_TITLE_LINE_HEIGHT,
   },
   newBadge: {
     fontWeight: "700",

@@ -1,5 +1,11 @@
 import { StyleSheet } from "react-native";
-import { DENSE_CARD_GAP, DENSE_CARD_RADIUS } from "../utils/denseListTokens";
+import {
+  DENSE_CARD_GAP,
+  DENSE_CARD_RADIUS,
+  DENSE_SUBLINE_LINE_HEIGHT,
+  DENSE_TITLE_LINE_HEIGHT,
+  DENSE_TITLE_SUBLINE_GAP,
+} from "../utils/denseListTokens";
 
 
 export const styles = StyleSheet.create({
@@ -77,14 +83,16 @@ export const styles = StyleSheet.create({
   },
   title: {
     fontWeight: "700",
+    lineHeight: DENSE_TITLE_LINE_HEIGHT,
   },
   titleSlot: {
     flexGrow: 1,
     minWidth: 0,
   },
   subline: {
-    marginTop: 2,
+    marginTop: DENSE_TITLE_SUBLINE_GAP,
     minWidth: 0,
+    lineHeight: DENSE_SUBLINE_LINE_HEIGHT,
   },
   amountCol: {
     flexShrink: 0,

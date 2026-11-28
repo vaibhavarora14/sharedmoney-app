@@ -1,13 +1,23 @@
 /**
- * Dense list cards (#549 slice a): compact rows, soft/elevated surfaces, no heavy dividers.
+ * Dense list cards (#549): roomier rows, soft/elevated surfaces, no heavy dividers.
  */
-export const DENSE_ROW_MIN_HEIGHT = 64;
-export const DENSE_CARD_GAP = 8;
+export const DENSE_ROW_MIN_HEIGHT = 76;
+export const DENSE_CARD_GAP = 12;
 export const DENSE_CARD_RADIUS = 14;
-export const DENSE_AVATAR_SIZE = 40;
-export const DENSE_STACK_AVATAR_SIZE = 32;
-export const DENSE_STACK_OVERLAP = 8;
+export const DENSE_CARD_PADDING_H = 16;
+export const DENSE_CARD_PADDING_V = 14;
+export const DENSE_AVATAR_SIZE = 36;
+export const DENSE_STACK_AVATAR_SIZE = 36;
+export const DENSE_STACK_OVERLAP = 4;
 export const DENSE_STACK_RING = 2;
+export const DENSE_AVATAR_TITLE_GAP = 12;
+export const DENSE_TITLE_SUBLINE_GAP = 4;
+export const DENSE_TITLE_LINE_HEIGHT = 24;
+export const DENSE_SUBLINE_LINE_HEIGHT = 20;
+export const DENSE_SECTION_HEADER_PADDING_TOP = 24;
+export const DENSE_SECTION_HEADER_PADDING_BOTTOM = 8;
+export const DENSE_HOME_HEADER_LINE_GAP = 8;
+export const DENSE_HOME_HEADER_BOTTOM = 20;
 export const DENSE_STACK_MAX = 3;
 /** Home and ledger stacks cap at 2 faces plus a count chip. */
 export const DENSE_TX_STACK_MAX = 2;

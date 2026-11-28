@@ -8,6 +8,9 @@ import {
 } from "react-native";
 import { Surface, useTheme } from "react-native-paper";
 import {
+  DENSE_AVATAR_TITLE_GAP,
+  DENSE_CARD_PADDING_H,
+  DENSE_CARD_PADDING_V,
   DENSE_CARD_RADIUS,
   DENSE_ROW_MIN_HEIGHT,
   denseCardSurface,
@@ -82,10 +85,10 @@ const styles = StyleSheet.create({
   },
   body: {
     minHeight: DENSE_ROW_MIN_HEIGHT,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: DENSE_CARD_PADDING_H,
+    paddingVertical: DENSE_CARD_PADDING_V,
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: DENSE_AVATAR_TITLE_GAP,
   },
 });

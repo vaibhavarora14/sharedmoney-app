@@ -13,7 +13,12 @@ import {
   densePeopleForExpense,
   densePeopleForPayment,
 } from "../utils/denseListPeople";
-import { DENSE_STACK_AVATAR_SIZE, DENSE_TX_STACK_MAX } from "../utils/denseListTokens";
+import {
+  DENSE_SECTION_HEADER_PADDING_BOTTOM,
+  DENSE_SECTION_HEADER_PADDING_TOP,
+  DENSE_STACK_AVATAR_SIZE,
+  DENSE_TX_STACK_MAX,
+} from "../utils/denseListTokens";
 import { useAuth } from "../contexts/AuthContext";
 import { Participant, Settlement, Transaction } from "../types";
 import { balanceAmountColor } from "../utils/balanceRowLabels";
@@ -62,8 +67,8 @@ export function LedgerDateLabel({ label }: { label: string }) {
         textTransform: "uppercase",
         fontWeight: "600",
         paddingHorizontal: 16,
-        paddingTop: 14,
-        paddingBottom: 2,
+        paddingTop: DENSE_SECTION_HEADER_PADDING_TOP,
+        paddingBottom: DENSE_SECTION_HEADER_PADDING_BOTTOM,
       }}
     >
       {label}

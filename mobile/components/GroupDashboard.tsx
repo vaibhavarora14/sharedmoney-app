@@ -9,7 +9,11 @@ import {
 import { DenseListCard } from "./DenseListCard";
 import { PersonAvatar } from "./PersonAvatar";
 import { balanceAmountColor } from "../utils/balanceRowLabels";
-import { DENSE_CARD_GAP } from "../utils/denseListTokens";
+import {
+  DENSE_CARD_GAP,
+  DENSE_HOME_HEADER_LINE_GAP,
+  DENSE_TITLE_SUBLINE_GAP,
+} from "../utils/denseListTokens";
 import { resolveGroupDashboardSlots } from "../utils/groupDashboardReservation";
 import { resolveGroupPosition } from "../utils/groupPosition";
 import { Balance, GroupStatsResponse, Participant } from "../types";
@@ -432,7 +436,7 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
                         color: theme.colors.onSurfaceVariant,
                         fontSize: 13,
                         lineHeight: 16,
-                        marginTop: 2,
+                        marginTop: DENSE_TITLE_SUBLINE_GAP,
                       }}
                     >
                       {presenceCaption}
@@ -611,7 +615,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 4,
     paddingBottom: 4,
-    gap: 8,
+    gap: DENSE_CARD_GAP,
   },
   unifiedSubhead: {
     flexDirection: "row",
@@ -620,7 +624,7 @@ const styles = StyleSheet.create({
     marginBottom: -4,
   },
   positionBlock: {
-    gap: 2,
+    gap: DENSE_HOME_HEADER_LINE_GAP,
   },
   positionNumber: {
     fontSize: 40,
