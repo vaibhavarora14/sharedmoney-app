@@ -1,4 +1,5 @@
 import type { InfiniteData } from "@tanstack/react-query";
+import { queryKeys } from "../hooks/queryKeys";
 import type { Transaction } from "../types";
 
 export interface TransactionsPageResponse {
@@ -133,5 +134,43 @@ export function replaceOptimisticTransactionInFeed(
   // Drop the temp row if the server payload had no usable id.
   return mapInfiniteTransactions(data, (tx) =>
     tx.id === optimisticId ? null : tx
+  );
+}
+
+/** Write the post-upload receipt list onto the matching feed row. */
+export function applyTransactionReceiptsToFeed(
+  data: InfiniteData<TransactionsPageResponse> | undefined,
+  transactionId: number,
+  receipts: NonNullable<Transaction["receipts"]>,
+): InfiniteData<TransactionsPageResponse> | undefined {
+  return mapInfiniteTransactions(data, (tx) => (
+    tx.id === transactionId ? { ...tx, receipts } : tx
+  ));
+}
+
+export type ExpenseReceiptCacheClient = {
+  cancelQueries: (opts: { queryKey: readonly unknown[] }) => Promise<unknown>;
+  setQueryData: (
+    queryKey: readonly unknown[],
+    updater: (
+      old: InfiniteData<TransactionsPageResponse> | undefined,
+    ) => InfiniteData<TransactionsPageResponse> | undefined,
+  ) => unknown;
+};
+
+/**
+ * Drop in-flight feed refetches (which can still be the pre-upload snapshot)
+ * then patch the returned receipts so the expense shows them without a refresh.
+ */
+export async function commitExpenseReceiptsToCache(
+  client: ExpenseReceiptCacheClient,
+  groupId: string,
+  transactionId: number,
+  receipts: NonNullable<Transaction["receipts"]>,
+): Promise<void> {
+  const feedKey = queryKeys.transactionsFeed(groupId);
+  await client.cancelQueries({ queryKey: feedKey });
+  client.setQueryData(feedKey, (old) =>
+    applyTransactionReceiptsToFeed(old, transactionId, receipts)
   );
 }

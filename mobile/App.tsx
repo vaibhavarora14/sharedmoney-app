@@ -1226,8 +1226,8 @@ function AppContent() {
     setEditingTransaction(null);
   };
 
-  const createTx = useCreateTransaction(onTransactionSuccess);
-  const updateTx = useUpdateTransaction(onTransactionSuccess);
+  const createTx = useCreateTransaction();
+  const updateTx = useUpdateTransaction();
   const deleteTx = useDeleteTransaction(onTransactionSuccess);
 
   // Reset navigation on logout, and on a login that did not open Profile.
