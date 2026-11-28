@@ -84,6 +84,7 @@ export const styles = StyleSheet.create({
   title: {
     fontWeight: "700",
     lineHeight: DENSE_TITLE_LINE_HEIGHT,
+    flexShrink: 1,
   },
   titleSlot: {
     flexGrow: 1,
@@ -95,6 +96,7 @@ export const styles = StyleSheet.create({
     lineHeight: DENSE_SUBLINE_LINE_HEIGHT,
   },
   amountCol: {
+    flexGrow: 0,
     flexShrink: 0,
     alignItems: "flex-end",
     justifyContent: "center",

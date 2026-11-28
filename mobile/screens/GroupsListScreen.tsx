@@ -15,6 +15,7 @@ import {
   GuestSaveChip,
   GuestSnackbar,
 } from "../components/guest/GuestChrome";
+import { DenseAvatarSlot } from "../components/AvatarStack";
 import { DenseListCard } from "../components/DenseListCard";
 import { GroupBalanceBadge } from "../components/GroupBalanceBadge";
 import { GroupDenseCard } from "../components/GroupDenseCard";
@@ -736,11 +737,13 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
                       }}
                       accessibilityLabel={`${row.title}${row.subtitle ? `, ${row.subtitle}` : ""}, ${words}`}
                     >
-                      <PersonAvatar
-                        name={person.name}
-                        personKey={person.key}
-                        size={DENSE_AVATAR_SIZE}
-                      />
+                      <DenseAvatarSlot size={DENSE_AVATAR_SIZE}>
+                        <PersonAvatar
+                          name={person.name}
+                          personKey={person.key}
+                          size={DENSE_AVATAR_SIZE}
+                        />
+                      </DenseAvatarSlot>
                       <View style={styles.groupInfo}>
                         <Text variant="titleMedium" style={[styles.groupName, { color: theme.colors.onSurface }]} numberOfLines={1}>
                           {row.title}

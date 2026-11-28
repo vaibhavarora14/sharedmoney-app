@@ -48,6 +48,8 @@ Deno.test("transaction stacks cap at two faces plus a count chip", () => {
   const reserved = denseStackReservedWidth(DENSE_AVATAR_SIZE);
   const step = DENSE_AVATAR_SIZE - DENSE_STACK_OVERLAP;
   assertEquals(reserved, DENSE_AVATAR_SIZE + DENSE_TX_STACK_MAX * step);
+  const twoFaceWidth = DENSE_AVATAR_SIZE + step;
+  assertEquals(reserved > twoFaceWidth, true);
 });
 
 Deno.test("dark avatars keep a per-person tint, not one shared blue", () => {
