@@ -726,6 +726,26 @@ test("settlement chevron stays outside the reflowing text and initials grow with
   assert.equal(nodes(row).some(n => n.type === "Text" && text(n) === "AL"), false);
 });
 
+test("settlement row avatar uses the full name so initials match members", () => {
+  const tree = dashboard(
+    [
+      { participant_id: "p-you", user_id: "me", full_name: "You", amount: 2250, currency: "INR" },
+      { participant_id: "p-asha", user_id: "u-asha", full_name: "Asha Rao", amount: -2250, currency: "INR" },
+    ],
+    {
+      participants: [
+        { id: "p-you", user_id: "me", type: "member", full_name: "You" },
+        { id: "p-asha", user_id: "u-asha", type: "member", full_name: "Asha Rao" },
+      ],
+      defaultCurrency: "INR",
+    },
+  );
+  const row = settlementRows(tree)[0];
+  const avatar = nodes(row).find((n) => n?.type?.name === "PersonAvatar");
+  assert.equal(avatar.props.name, "Asha Rao");
+  assert.equal(text(nodes(row).find((n) => n.props?.testID === "settlement-row-name")), "Asha");
+});
+
 test("spending cards stay off the default group page", () => {
   for (const fontScale of [1, 2]) {
     const tree = components({}, { colors: {} }, { width: 402, fontScale }).GroupDashboard({

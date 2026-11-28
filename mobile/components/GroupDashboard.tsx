@@ -32,6 +32,7 @@ import {
 import {
   findParticipantForBalance,
   resolveSettlementPresence,
+  settlementCounterpartyDisplayName,
   settlementCounterpartyShortName,
   settlementPresenceCaption,
   type SettlementPresence,
@@ -361,6 +362,7 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
       const counterpartyAvatar = balance.avatar_url
         || findParticipantForBalance(balance, participants)?.avatar_url
         || null;
+      const avatarName = settlementCounterpartyDisplayName(balance, participants);
       return (
         <DenseListCard
           key={`${rowKey}-${currency}-${index}`}
@@ -371,7 +373,7 @@ export const GroupDashboard: React.FC<GroupDashboardProps> = ({
           accessibilityHint={a11yHint}
         >
               <PersonAvatar
-                name={name}
+                name={avatarName}
                 uri={counterpartyAvatar}
                 personKey={rowKey}
               />
