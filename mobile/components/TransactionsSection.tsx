@@ -13,7 +13,7 @@ import {
   densePeopleForExpense,
   densePeopleForPayment,
 } from "../utils/denseListPeople";
-import { DENSE_STACK_AVATAR_SIZE } from "../utils/denseListTokens";
+import { DENSE_STACK_AVATAR_SIZE, DENSE_TX_STACK_MAX } from "../utils/denseListTokens";
 import { useAuth } from "../contexts/AuthContext";
 import { Participant, Settlement, Transaction } from "../types";
 import { balanceAmountColor } from "../utils/balanceRowLabels";
@@ -131,22 +131,21 @@ export const LedgerRow: React.FC<LedgerRowProps> = ({
           accessibilityLabel={`${title}, ${amountText}`}
           testID={`ledger-payment-${settlement.id}`}
         >
-          <AvatarStack people={people} size={DENSE_STACK_AVATAR_SIZE} />
+          <AvatarStack people={people} size={DENSE_STACK_AVATAR_SIZE} max={DENSE_TX_STACK_MAX} />
+          <View style={styles.content}>
+            <Text
+              variant="titleMedium"
+              numberOfLines={1}
+              style={[styles.title, { color: theme.colors.onSurface }]}
+            >
+              {title}
+            </Text>
+          </View>
           <Text
             variant="titleMedium"
             numberOfLines={1}
-            style={[styles.title, { color: theme.colors.onSurface }]}
-          >
-            {title}
-          </Text>
-          <Text
-            variant="titleMedium"
             testID={`ledger-payment-amount-${settlement.id}`}
-            style={{
-              fontWeight: "600",
-              color: theme.colors.onSurface,
-              flexShrink: 0,
-            }}
+            style={[styles.amountValue, { color: theme.colors.onSurface }]}
           >
             {amountText}
           </Text>
@@ -217,11 +216,12 @@ export const LedgerRow: React.FC<LedgerRowProps> = ({
         accessibilityLabel={`${title}. ${model.payerLine}. ${model.impactText}${isHighlighted ? ". Highlighted from notification" : ""}`}
         testID={`ledger-expense-${transaction.id}`}
       >
-        <AvatarStack people={people} size={DENSE_STACK_AVATAR_SIZE} />
+        <AvatarStack people={people} size={DENSE_STACK_AVATAR_SIZE} max={DENSE_TX_STACK_MAX} />
         <View style={styles.content}>
           <Text
             variant="titleMedium"
             numberOfLines={1}
+            ellipsizeMode="tail"
             style={[styles.title, { color: theme.colors.onSurface }]}
           >
             {title}
@@ -230,28 +230,39 @@ export const LedgerRow: React.FC<LedgerRowProps> = ({
             <Text
               variant="bodySmall"
               numberOfLines={1}
+              ellipsizeMode="tail"
               testID={`ledger-payer-${transaction.id}`}
-              style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}
+              style={[styles.subline, { color: theme.colors.onSurfaceVariant }]}
             >
               {model.payerLine}
             </Text>
           ) : null}
         </View>
-        {model.impactText ? (
-          <Text
-            variant="titleSmall"
-            numberOfLines={2}
-            testID={`ledger-impact-${transaction.id}`}
-            style={{
-              fontWeight: "600",
-              color: impactColor,
-              flexShrink: 1,
-              maxWidth: "42%",
-              textAlign: "right",
-            }}
-          >
-            {model.impactText}
-          </Text>
+        {model.impactAmountText || model.impactDirectionText ? (
+          <View style={styles.amountCol} testID={`ledger-impact-${transaction.id}`}>
+            {model.impactAmountText ? (
+              <Text
+                variant="titleSmall"
+                numberOfLines={1}
+                style={{ color: impactColor, fontWeight: "700", textAlign: "right" }}
+              >
+                {model.impactAmountText}
+              </Text>
+            ) : null}
+            {model.impactDirectionText ? (
+              <Text
+                variant="bodySmall"
+                numberOfLines={1}
+                style={{
+                  color: theme.colors.onSurfaceVariant,
+                  textAlign: "right",
+                  marginTop: model.impactAmountText ? 2 : 0,
+                }}
+              >
+                {model.impactDirectionText}
+              </Text>
+            ) : null}
+          </View>
         ) : null}
       </DenseListCard>
     </View>
@@ -269,7 +280,7 @@ export function LedgerSkeleton() {
           <View style={styles.row}>
             <View style={styles.content}>
               <View style={[styles.headerRow, { height: theme.fonts.titleMedium.lineHeight * fontScale }]}>
-                <View style={styles.title}><Skeleton width="80%" height={16} /></View>
+                <View style={styles.titleSlot}><Skeleton width="80%" height={16} /></View>
                 <Skeleton width={80} height={16} />
               </View>
               <View style={[styles.subRow, { height: Math.max(18, theme.fonts.bodySmall.lineHeight * fontScale) }]}>

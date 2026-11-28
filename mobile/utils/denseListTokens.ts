@@ -6,8 +6,11 @@ export const DENSE_CARD_GAP = 8;
 export const DENSE_CARD_RADIUS = 14;
 export const DENSE_AVATAR_SIZE = 40;
 export const DENSE_STACK_AVATAR_SIZE = 32;
-export const DENSE_STACK_OVERLAP = 10;
+export const DENSE_STACK_OVERLAP = 8;
+export const DENSE_STACK_RING = 2;
 export const DENSE_STACK_MAX = 3;
+/** Ledger rows keep a 2-avatar stack so titles keep a full line. */
+export const DENSE_TX_STACK_MAX = 2;
 
 export const AVATAR_TONES = [
   "#DCE6FF",
@@ -17,7 +20,30 @@ export const AVATAR_TONES = [
   "#FFF3D6",
 ] as const;
 
+export const AVATAR_TONES_DARK = [
+  "#3D4F73",
+  "#6B4450",
+  "#2F5A4C",
+  "#564272",
+  "#6B5A32",
+] as const;
+
 export const AVATAR_TONE_INK = "#17202A";
+export const AVATAR_TONE_INK_DARK = "#F2F4F7";
+
+export function avatarToneFill(dark: boolean, index: number): string {
+  const tones = dark ? AVATAR_TONES_DARK : AVATAR_TONES;
+  return tones[index] ?? tones[0];
+}
+
+export function avatarToneInk(dark: boolean): string {
+  return dark ? AVATAR_TONE_INK_DARK : AVATAR_TONE_INK;
+}
+
+/** Two letters inside the rendered circle (pass the avatar's own size). */
+export function avatarInitialsFontSize(size: number): number {
+  return Math.max(9, Math.round(size * 0.3));
+}
 
 export function denseCardSurface(theme: {
   dark: boolean;

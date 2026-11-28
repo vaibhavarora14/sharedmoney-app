@@ -24,6 +24,8 @@ Deno.test("expense impact is words for the viewer's share, and whole amounts dro
   });
   assertEquals(lent.payerLine, "You paid ₹2,100");
   assertEquals(lent.impactText, "You're owed ₹1,400");
+  assertEquals(lent.impactAmountText, "₹1,400");
+  assertEquals(lent.impactDirectionText, "You're owed");
   assertEquals(lent.impactText.includes(".00"), false);
   assertEquals(lent.impactMuted, false);
   assertEquals(lent.involvesViewer, true);
@@ -41,6 +43,8 @@ Deno.test("expense impact is words for the viewer's share, and whole amounts dro
   });
   assertEquals(borrowed.payerLine, "Rahul paid ₹4,800");
   assertEquals(borrowed.impactText, "You owe ₹1,200");
+  assertEquals(borrowed.impactAmountText, "₹1,200");
+  assertEquals(borrowed.impactDirectionText, "You owe");
   assertEquals(borrowed.net, -1200);
 
   const fractional = buildExpenseRowModel({
@@ -67,6 +71,8 @@ Deno.test("a viewer who did not pay and is not in the split sees not in split", 
     viewer,
   });
   assertEquals(row.impactText, NOT_IN_SPLIT_LABEL);
+  assertEquals(row.impactAmountText, "");
+  assertEquals(row.impactDirectionText, NOT_IN_SPLIT_LABEL);
   assertEquals(row.impactMuted, true);
   assertEquals(row.involvesViewer, false);
   assertEquals(row.net, null);

@@ -6,6 +6,8 @@ import {
   DENSE_STACK_AVATAR_SIZE,
   DENSE_STACK_MAX,
   DENSE_STACK_OVERLAP,
+  DENSE_STACK_RING,
+  denseCardSurface,
 } from "../utils/denseListTokens";
 import { PersonAvatar } from "./PersonAvatar";
 
@@ -21,11 +23,14 @@ export const AvatarStack: React.FC<AvatarStackProps> = ({
   max = DENSE_STACK_MAX,
 }) => {
   const theme = useTheme();
+  const ringColor = denseCardSurface(theme).backgroundColor;
   const visible = people.slice(0, max);
   const extra = people.length - visible.length;
-  const width = visible.length === 0
-    ? size
-    : size + (visible.length - 1) * (size - DENSE_STACK_OVERLAP) + (extra > 0 ? size - DENSE_STACK_OVERLAP : 0);
+  const extraSlot = extra > 0 ? 1 : 0;
+  const count = visible.length + extraSlot;
+  const step = size - DENSE_STACK_OVERLAP;
+  const width = count <= 1 ? size : size + (count - 1) * step;
+  const inner = size - 2 * DENSE_STACK_RING;
 
   return (
     <View
@@ -39,9 +44,13 @@ export const AvatarStack: React.FC<AvatarStackProps> = ({
           style={[
             styles.slot,
             {
-              left: index * (size - DENSE_STACK_OVERLAP),
+              left: index * step,
               zIndex: index + 1,
-              borderColor: theme.colors.surface,
+              width: size,
+              height: size,
+              borderRadius: size / 2,
+              backgroundColor: ringColor,
+              padding: DENSE_STACK_RING,
             },
           ]}
         >
@@ -49,7 +58,7 @@ export const AvatarStack: React.FC<AvatarStackProps> = ({
             name={person.name}
             uri={person.avatarUrl}
             personKey={person.key}
-            size={size}
+            size={inner}
           />
         </View>
       ))}
@@ -59,22 +68,33 @@ export const AvatarStack: React.FC<AvatarStackProps> = ({
             styles.slot,
             styles.extra,
             {
-              left: visible.length * (size - DENSE_STACK_OVERLAP),
+              left: visible.length * step,
               zIndex: visible.length + 1,
               width: size,
               height: size,
               borderRadius: size / 2,
-              backgroundColor: theme.colors.surfaceVariant,
-              borderColor: theme.colors.surface,
+              backgroundColor: ringColor,
+              padding: DENSE_STACK_RING,
             },
           ]}
         >
-          <Text
-            variant="labelSmall"
-            style={{ color: theme.colors.onSurfaceVariant, fontWeight: "700" }}
+          <View
+            style={{
+              width: inner,
+              height: inner,
+              borderRadius: inner / 2,
+              backgroundColor: theme.colors.surfaceVariant,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
           >
-            {`+${extra}`}
-          </Text>
+            <Text
+              variant="labelSmall"
+              style={{ color: theme.colors.onSurfaceVariant, fontWeight: "700" }}
+            >
+              {`+${extra}`}
+            </Text>
+          </View>
         </View>
       ) : null}
     </View>
@@ -89,8 +109,6 @@ const styles = StyleSheet.create({
   slot: {
     position: "absolute",
     top: 0,
-    borderWidth: 2,
-    borderRadius: 999,
   },
   extra: {
     alignItems: "center",

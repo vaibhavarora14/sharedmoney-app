@@ -64,6 +64,7 @@ export const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+    minWidth: 0,
     justifyContent: 'center',
     display: 'flex',
     flexDirection: 'column',
@@ -75,10 +76,24 @@ export const styles = StyleSheet.create({
     width: '100%',
   },
   title: {
+    fontWeight: "700",
+  },
+  titleSlot: {
     flexGrow: 1,
-    flexShrink: 1,
-    marginRight: 8,
-    fontWeight: '600', // MD3 Title Medium is 500/Medium or 600/SemiBold
+    minWidth: 0,
+  },
+  subline: {
+    marginTop: 2,
+    minWidth: 0,
+  },
+  amountCol: {
+    flexShrink: 0,
+    alignItems: "flex-end",
+    justifyContent: "center",
+  },
+  amountValue: {
+    fontWeight: "600",
+    flexShrink: 0,
   },
   subRow: {
     flexDirection: "row",

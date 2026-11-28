@@ -1,10 +1,11 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { Platform, ScrollView, StyleSheet, View } from "react-native";
 import { Appbar, Text, useTheme } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { GroupDashboard } from "../components/GroupDashboard";
 import { GroupDenseCard } from "../components/GroupDenseCard";
 import { MembersList } from "../components/MembersList";
+import { SettledFoldRow } from "../components/SettledFoldRow";
 import { LedgerDateLabel, LedgerRow } from "../components/TransactionsSection";
 import { WEB_MAX_WIDTH } from "../constants/layout";
 import { useThemePreference } from "../contexts/ThemePreferenceContext";
@@ -183,6 +184,7 @@ export function DenseCardsPreviewScreen({ frame }: { frame: DenseCardsFrame }) {
 
 function HomeFrame() {
   const theme = useTheme();
+  const [settledOpen, setSettledOpen] = useState(false);
   const open = HOME_GROUPS.filter((row) => row.group.id !== "g-settled");
   const settled = HOME_GROUPS.filter((row) => row.group.id === "g-settled");
   return (
@@ -204,12 +206,26 @@ function HomeFrame() {
           />
         ))}
       </View>
-      <Text
-        testID="settled-groups-accordion"
-        style={{ color: theme.colors.onSurfaceVariant, marginTop: 12, fontWeight: "500" }}
-      >
-        {`Settled · ${settled.length}`}
-      </Text>
+      <SettledFoldRow
+        count={settled.length}
+        expanded={settledOpen}
+        onPress={() => setSettledOpen((open) => !open)}
+        style={styles.fold}
+      />
+      {settledOpen ? (
+        <View style={styles.denseList}>
+          {settled.map((row) => (
+            <GroupDenseCard
+              key={row.group.id}
+              group={row.group}
+              currentUserId={VIEWER}
+              balances={row.balances}
+              loading={false}
+              onPress={() => {}}
+            />
+          ))}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -300,5 +316,9 @@ const styles = StyleSheet.create({
   denseList: {
     gap: DENSE_CARD_GAP,
     paddingHorizontal: 16,
+  },
+  fold: {
+    paddingHorizontal: 16,
+    marginTop: 4,
   },
 });

@@ -18,6 +18,7 @@ import {
 import { DenseListCard } from "../components/DenseListCard";
 import { GroupBalanceBadge } from "../components/GroupBalanceBadge";
 import { GroupDenseCard } from "../components/GroupDenseCard";
+import { SettledFoldRow } from "../components/SettledFoldRow";
 import { PersonAvatar } from "../components/PersonAvatar";
 import { NotificationBell } from "../components/NotificationBell";
 import { useAuth } from "../contexts/AuthContext";
@@ -737,15 +738,12 @@ export const GroupsListScreen: React.FC<GroupsListScreenProps> = ({
               </View>
 
               {settledGroups.length > 0 ? (
-                <Text
+                <SettledFoldRow
+                  count={settledGroups.length}
+                  expanded={settledGroupsExpanded}
                   onPress={() => setSettledGroupsExpanded(!settledGroupsExpanded)}
-                  accessibilityRole="button"
-                  accessibilityState={{ expanded: settledGroupsExpanded }}
-                  testID="settled-groups-accordion"
-                  style={[styles.footerText, { color: theme.colors.onSurfaceVariant, marginTop: 8 }]}
-                >
-                  {`Settled · ${settledGroups.length}`}
-                </Text>
+                  style={{ marginTop: 8 }}
+                />
               ) : null}
               {settledGroupsExpanded ? (
                 <View style={styles.denseList}>
